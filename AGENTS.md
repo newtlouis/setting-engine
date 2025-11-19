@@ -1,18 +1,470 @@
 # Instagram Lead Engine - Agent Documentation
 
-Complete reference for all 5 independent agents in the Instagram Lead Engine system.
+**For OpenCode AI Assistant**: This document explains the architecture, coding patterns, and conventions used in this project to help you understand and contribute effectively.
 
 ---
 
 ## Table of Contents
 
-1. [Collector Agent](#1-collector-agent)
-2. [Prospector Agent](#2-prospector-agent)
-3. [Lead Analyzer Agent](#3-lead-analyzer-agent)
-4. [DM Responder Agent](#4-dm-responder-agent)
-5. [Message Generator Agent](#5-message-generator-agent)
-6. [Data Contracts](#data-contracts)
-7. [Integration Guide](#integration-guide)
+1. [Project Overview](#project-overview)
+2. [Architecture & Design Patterns](#architecture--design-patterns)
+3. [Coding Conventions](#coding-conventions)
+4. [Agent Structure](#agent-structure)
+5. [How to Add a New Agent](#how-to-add-a-new-agent)
+6. [Individual Agents](#individual-agents)
+7. [Data Contracts](#data-contracts)
+8. [Integration Guide](#integration-guide)
+
+---
+
+## Project Overview
+
+The Instagram Lead Engine is a **modular multi-agent system** for ethical Instagram lead generation. Each agent is:
+
+- **Completely independent**: No inter-agent dependencies
+- **Self-contained**: Own CLI, tests, and documentation
+- **Composable**: Can be used standalone or as part of a pipeline
+- **Production-ready**: Error handling, validation, and safety features
+
+### Tech Stack
+
+- **Runtime**: Node.js 18+
+- **Module System**: ESM (ES Modules) - `import/export` syntax
+- **CLI Framework**: Commander.js for argument parsing
+- **Browser Automation**: Playwright (Collector agent only)
+- **Data Formats**: CSV for tabular data, JSON for structured data
+- **Testing**: Node.js native test runner or Jest
+
+### Key Design Decisions
+
+1. **Why ESM?** Modern JavaScript, better tree-shaking, native browser compatibility
+2. **Why independent agents?** Allows selling/deploying individually, easier maintenance
+3. **Why CSV for collection?** Universal format, easy to inspect/import
+4. **Why JSON for analysis?** Rich structured data, easy to parse programmatically
+5. **Why no database?** Simplicity, portability, no deployment dependencies
+
+---
+
+## Architecture & Design Patterns
+
+### 1. Agent Independence Pattern
+
+Each agent follows this structure:
+
+```
+agents/[agent-name]/
+├── bin/
+│   └── run.js          # CLI entry point
+├── src/
+│   ├── index.js        # Main agent logic
+│   ├── config.js       # Configuration constants
+│   └── utils.js        # Helper functions
+├── tests/
+│   └── [agent].test.js # Unit tests
+├── samples/            # Example input/output files
+├── .env.example        # Environment variables template
+├── manifest.json       # Agent metadata
+├── package.json        # Dependencies
+└── README.md           # Agent-specific documentation
+```
+
+### 2. Data Flow Pattern
+
+Agents communicate **only through files** (never through APIs or shared state):
+
+```
+Input File → Agent Process → Output File → Next Agent
+```
+
+Example:
+```
+comments.csv → [Prospector] → leads.json → [Lead Analyzer] → messages.json
+```
+
+### 3. Error Handling Pattern
+
+All agents follow consistent error handling:
+
+```javascript
+// Exit codes
+process.exit(0);  // Success
+process.exit(1);  // User error (bad params, missing files)
+process.exit(2);  // System error (network, parsing)
+
+// Error logging
+console.error('ERROR:', message);  // To stderr
+console.log('INFO:', message);     // To stdout
+```
+
+### 4. Configuration Pattern
+
+Configuration is loaded in this priority order:
+
+1. CLI arguments (highest priority)
+2. Environment variables (.env)
+3. Defaults from config.js
+
+```javascript
+// Example
+const maxPosts = 
+  args.maxPosts ||           // CLI arg
+  process.env.MAX_POSTS ||   // .env
+  CONFIG.DEFAULT_MAX_POSTS;  // Default
+```
+
+### 5. Validation Pattern
+
+Input validation happens at entry points:
+
+```javascript
+import { validators } from '../../shared/validators.js';
+
+// Validate before processing
+validators.validatePostUrl(url);
+validators.validateUsername(username);
+```
+
+Shared validators are in `shared/validators.js` to ensure consistency.
+
+---
+
+## Coding Conventions
+
+### JavaScript Style
+
+**Module System**:
+- ✅ Use ESM: `import/export`
+- ❌ Don't use CommonJS: `require/module.exports`
+
+**Async Pattern**:
+- ✅ Use `async/await`
+- ❌ Don't use callbacks or raw Promises
+
+**Function Style**:
+- ✅ Named functions for better stack traces
+- ✅ Arrow functions for short callbacks
+- ❌ Don't use anonymous `function() {}` syntax
+
+```javascript
+// ✅ Good
+export async function generateResponse({ conversationHistory }) {
+  const result = await processData();
+  return result;
+}
+
+// ❌ Bad
+exports.generateResponse = function(params, callback) {
+  processData().then(result => callback(null, result));
+}
+```
+
+### Naming Conventions
+
+**Variables & Functions**: camelCase
+```javascript
+const maxComments = 100;
+function extractPainPoints() {}
+```
+
+**Constants**: UPPER_SNAKE_CASE
+```javascript
+const MAX_RETRIES = 3;
+const API_ENDPOINT = 'https://api.example.com';
+```
+
+**Classes**: PascalCase
+```javascript
+class StateMachine {}
+```
+
+**Files**: kebab-case.js
+```
+scrape-post.js
+state-machine.js
+utils.js
+```
+
+**Exported Objects**: PascalCase for singletons
+```javascript
+export const CONFIG = { ... };
+export const WARMTH = { ... };
+```
+
+### Code Structure
+
+**Imports Order**:
+```javascript
+// 1. Node built-ins
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// 2. External dependencies
+import { chromium } from 'playwright';
+import { Command } from 'commander';
+
+// 3. Internal modules
+import { CONFIG } from './config.js';
+import { sanitize } from './utils.js';
+
+// 4. Shared modules
+import { validators } from '../../shared/validators.js';
+```
+
+**Function Organization**:
+```javascript
+// 1. Main exported functions
+export async function mainFunction() {}
+
+// 2. Helper functions (not exported)
+function helperFunction() {}
+function anotherHelper() {}
+
+// 3. Utility functions at bottom
+function sortByDate() {}
+function formatOutput() {}
+```
+
+### Comments & Documentation
+
+**Use JSDoc for public functions**:
+```javascript
+/**
+ * Generate response for a conversation
+ * 
+ * @param {Object} params
+ * @param {Array} params.conversationHistory - Array of {role, text} objects
+ * @param {Object} params.leadContext - Optional lead data from prospector
+ * @returns {Promise<Object>} Response object with next_message, stage, reasoning
+ */
+export async function generateResponse({ conversationHistory, leadContext }) {
+  // Implementation
+}
+```
+
+**Inline comments for complex logic**:
+```javascript
+// FIX NOTE: Instagram may change selectors - see prompts/selector_notes.md
+const SELECTORS = {
+  POST_LINK: 'article a[href*="/p/"]'
+};
+
+// Wait random delay to avoid rate limits (3-7 seconds)
+await page.waitForTimeout(randomDelay());
+```
+
+### File Handling
+
+**Use async file operations**:
+```javascript
+import { readFile, writeFile } from 'fs/promises';
+
+// ✅ Good
+const data = await readFile('file.json', 'utf-8');
+
+// ❌ Bad
+const data = readFileSync('file.json', 'utf-8');
+```
+
+**Always handle errors**:
+```javascript
+try {
+  const data = await readFile('file.json', 'utf-8');
+  return JSON.parse(data);
+} catch (error) {
+  if (error.code === 'ENOENT') {
+    console.error('ERROR: File not found:', error.path);
+    process.exit(1);
+  }
+  throw error;
+}
+```
+
+---
+
+## Agent Structure
+
+### Standard Agent Template
+
+Every agent should follow this template:
+
+**bin/run.js** - CLI entry point:
+```javascript
+#!/usr/bin/env node
+
+import { Command } from 'commander';
+import { runAgent } from '../src/index.js';
+
+const program = new Command();
+
+program
+  .name('agent-name')
+  .description('Agent description')
+  .option('-i, --input <file>', 'Input file path')
+  .option('-o, --output <file>', 'Output file path')
+  .parse();
+
+try {
+  await runAgent(program.opts());
+  process.exit(0);
+} catch (error) {
+  console.error('ERROR:', error.message);
+  process.exit(1);
+}
+```
+
+**src/index.js** - Main logic:
+```javascript
+import { CONFIG } from './config.js';
+import { validateInput } from './utils.js';
+
+export async function runAgent(options) {
+  // 1. Validate input
+  validateInput(options);
+  
+  // 2. Load data
+  const data = await loadData(options.input);
+  
+  // 3. Process
+  const results = await process(data);
+  
+  // 4. Save output
+  await saveOutput(results, options.output);
+  
+  return results;
+}
+
+async function loadData(inputPath) { /* ... */ }
+async function process(data) { /* ... */ }
+async function saveOutput(results, outputPath) { /* ... */ }
+```
+
+**src/config.js** - Configuration:
+```javascript
+export const CONFIG = {
+  DEFAULT_INPUT: './input/data.json',
+  DEFAULT_OUTPUT: './output/results.json',
+  MAX_RETRIES: 3,
+  TIMEOUT: 30000
+};
+```
+
+**src/utils.js** - Utilities:
+```javascript
+import { validators } from '../../shared/validators.js';
+
+export function validateInput(options) {
+  if (!options.input) {
+    throw new Error('Input file required');
+  }
+}
+
+export function sanitizeOutput(data) {
+  // Remove sensitive data, format output
+  return data;
+}
+```
+
+---
+
+## How to Add a New Agent
+
+Follow these steps to create a new agent:
+
+### 1. Create Directory Structure
+
+```bash
+mkdir -p agents/new-agent/{bin,src,tests,samples}
+cd agents/new-agent
+```
+
+### 2. Initialize Package
+
+```bash
+npm init -y
+```
+
+Edit `package.json`:
+```json
+{
+  "name": "@instagram-lead-engine/new-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "new-agent": "./bin/run.js"
+  },
+  "scripts": {
+    "start": "node bin/run.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "commander": "^11.0.0"
+  }
+}
+```
+
+### 3. Create manifest.json
+
+```json
+{
+  "name": "New Agent",
+  "version": "1.0.0",
+  "description": "Brief description",
+  "author": "Your Name",
+  "input": {
+    "type": "json|csv",
+    "schema": "schemas/input.schema.json"
+  },
+  "output": {
+    "type": "json|csv",
+    "schema": "schemas/output.schema.json"
+  }
+}
+```
+
+### 4. Create Core Files
+
+Follow the [Agent Template](#standard-agent-template) above.
+
+### 5. Create Tests
+
+```javascript
+// tests/new-agent.test.js
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { runAgent } from '../src/index.js';
+
+test('should process valid input', async () => {
+  const result = await runAgent({ input: 'samples/valid.json' });
+  assert.ok(result);
+});
+```
+
+### 6. Add Sample Files
+
+Create example input/output in `samples/`:
+- `input_example.json`
+- `output_example.json`
+
+### 7. Write Documentation
+
+Create `README.md` with:
+- Purpose
+- Installation
+- Usage examples
+- Input/output formats
+- Configuration options
+
+### 8. Update Root Documentation
+
+Add agent to:
+- Main `README.md`
+- This `AGENTS.md` file
+- `PROJECT_FILES.md`
+
+---
+
+## Individual Agents
 
 ---
 
