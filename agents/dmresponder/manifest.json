@@ -1,0 +1,59 @@
+{
+  "name": "instagram-dmresponder-agent",
+  "version": "1.0.0",
+  "description": "Instagram Lead Engine - DM Responder Agent: Context-aware conversation management and follow-up generation",
+  "type": "conversation-ai",
+  "inputs": {
+    "conversation_history": {
+      "type": "json",
+      "description": "Array of conversation messages with roles (user/assistant)",
+      "required": true,
+      "format": "conversation_history.json"
+    },
+    "lead_context": {
+      "type": "json",
+      "description": "Lead information from prospector (optional, enhances responses)",
+      "required": false,
+      "format": "lead_context.json"
+    },
+    "business_context": {
+      "type": "json",
+      "description": "Your business/service details for personalization",
+      "required": false
+    }
+  },
+  "outputs": {
+    "response": {
+      "type": "json",
+      "description": "Generated response with conversation state",
+      "format": "response.json"
+    }
+  },
+  "conversation_stages": [
+    "initial_rapport",
+    "empathy_building",
+    "qualification",
+    "objection_handling",
+    "value_demonstration",
+    "call_to_action",
+    "scheduling",
+    "closed_won",
+    "closed_lost"
+  ],
+  "message_types": [
+    "empathy",
+    "qualification",
+    "rapport",
+    "objection_response",
+    "value_prop",
+    "call_to_action",
+    "scheduling"
+  ],
+  "warnings": [
+    "This agent generates SUGGESTIONS for human review",
+    "NEVER send messages without human approval",
+    "Always review and personalize AI-generated responses",
+    "Ensure compliance with Instagram messaging policies",
+    "Only use AFTER prospect has replied to your manual first message"
+  ]
+}

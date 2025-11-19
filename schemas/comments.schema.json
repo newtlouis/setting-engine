@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://instagram-lead-engine.com/schemas/comments.json",
+  "title": "Comments",
+  "description": "Schema for Instagram comments scraped by Collector Agent",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "post_url",
+      "username",
+      "profile_url",
+      "comment_text",
+      "comment_date",
+      "followers_estimate"
+    ],
+    "properties": {
+      "post_url": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://www\\.instagram\\.com/(p|reel)/[^/]+/?$",
+        "description": "URL of the post this comment belongs to"
+      },
+      "username": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9._]+$",
+        "description": "Instagram username of commenter (without @)"
+      },
+      "profile_url": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://www\\.instagram\\.com/[^/]+/?$",
+        "description": "URL to commenter's profile"
+      },
+      "comment_text": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Full text of the comment"
+      },
+      "comment_date": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 date when comment was posted"
+      },
+      "followers_estimate": {
+        "type": "string",
+        "description": "Estimated follower count (empty if not scraped)"
+      }
+    }
+  }
+}

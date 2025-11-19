@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://instagram-lead-engine.com/schemas/posts.json",
+  "title": "Posts",
+  "description": "Schema for Instagram posts collected by Collector Agent",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "source_type",
+      "source_name",
+      "post_url",
+      "post_date",
+      "likes",
+      "comments_count",
+      "caption_excerpt"
+    ],
+    "properties": {
+      "source_type": {
+        "type": "string",
+        "enum": ["hashtag", "profile"],
+        "description": "Whether post was discovered from hashtag or profile"
+      },
+      "source_name": {
+        "type": "string",
+        "description": "Name of the hashtag (without #) or profile username"
+      },
+      "post_url": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://www\\.instagram\\.com/(p|reel)/[^/]+/?$",
+        "description": "Full URL to the Instagram post"
+      },
+      "post_date": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 date when post was created"
+      },
+      "likes": {
+        "type": "string",
+        "description": "Number of likes (may be formatted like '1,234' or empty)"
+      },
+      "comments_count": {
+        "type": "string",
+        "description": "Number of comments (may be empty if not yet scraped)"
+      },
+      "caption_excerpt": {
+        "type": "string",
+        "description": "First 100 characters of post caption"
+      }
+    }
+  }
+}

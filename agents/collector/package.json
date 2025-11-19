@@ -1,0 +1,33 @@
+{
+  "name": "instagram-collector-agent",
+  "version": "1.0.0",
+  "description": "Instagram Collector Agent - Discovery and Scraping",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "collector": "./bin/run.js"
+  },
+  "scripts": {
+    "start": "node bin/run.js",
+    "test": "node --test tests/*.test.js",
+    "dev": "node --watch bin/run.js"
+  },
+  "keywords": [
+    "instagram",
+    "scraper",
+    "lead-generation",
+    "playwright"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "commander": "^11.1.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

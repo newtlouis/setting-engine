@@ -1,0 +1,32 @@
+{
+  "name": "instagram-dmresponder-agent",
+  "version": "1.0.0",
+  "description": "DM Responder Agent - Conversation AI for Instagram Lead Engine",
+  "type": "module",
+  "main": "src/engine.js",
+  "bin": {
+    "dmresponder": "./bin/run.js"
+  },
+  "scripts": {
+    "start": "node bin/run.js",
+    "test": "node --test tests/*.test.js",
+    "dev": "node --watch bin/run.js"
+  },
+  "keywords": [
+    "instagram",
+    "dm",
+    "conversation",
+    "ai",
+    "lead-generation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
