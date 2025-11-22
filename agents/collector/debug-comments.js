@@ -1,20 +1,21 @@
 /**
- * Debug script to inspect Instagram comment structure
+ * Debug script to inspect Instagram comment structure - ENHANCED VERSION
  * 
  * Usage: node debug-comments.js <post-url>
  */
 
 import { chromium } from 'playwright';
 import { createInterface } from 'readline';
+import { writeFileSync } from 'fs';
 
 const postUrl = process.argv[2] || 'https://www.instagram.com/p/DP82LJBCAzq/';
 
-console.log('🔍 Inspecting Instagram post structure...');
+console.log('🔍 ENHANCED Instagram Structure Inspector');
 console.log(`📱 Post: ${postUrl}\n`);
 
 const browser = await chromium.launch({
   headless: false,
-  slowMo: 500
+  slowMo: 300
 });
 
 const context = await browser.newContext({
@@ -25,7 +26,8 @@ const context = await browser.newContext({
 const page = await context.newPage();
 
 console.log('⏳ Waiting for manual login...');
-console.log('Please login and navigate to the post, then press Enter here...\n');
+console.log('Please login, navigate to the post, and SCROLL to see comments');
+console.log('Then press Enter here...\n');
 
 await page.goto('https://www.instagram.com/accounts/login/', {
   waitUntil: 'domcontentloaded',
@@ -38,13 +40,13 @@ await new Promise((resolve) => {
     input: process.stdin,
     output: process.stdout
   });
-  rl.question('', () => {
+  rl.question('Press Enter when ready: ', () => {
     rl.close();
     resolve();
   });
 });
 
-console.log('\n✅ Continuing...\n');
+console.log('\n✅ Starting analysis...\n');
 
 // Navigate to post
 await page.goto(postUrl, {
@@ -54,22 +56,41 @@ await page.goto(postUrl, {
 
 await page.waitForTimeout(3000);
 
-// Scroll to comments
+// Aggressive scrolling to load comments
+console.log('📜 Scrolling to load comments...');
+for (let i = 0; i < 5; i++) {
+  await page.evaluate(() => {
+    window.scrollBy({ top: 300, behavior: 'smooth' });
+  });
+  await page.waitForTimeout(1000);
+}
+
+// Try to click "View more comments" buttons
+console.log('🔘 Clicking "View more" buttons...');
 await page.evaluate(() => {
-  window.scrollBy({ top: 500, behavior: 'smooth' });
+  const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+  buttons.forEach(btn => {
+    const text = btn.textContent.toLowerCase();
+    if (text.includes('view') || text.includes('more') || text.includes('comment') || text.includes('repl')) {
+      try { btn.click(); } catch(e) {}
+    }
+  });
 });
 await page.waitForTimeout(2000);
 
-console.log('📊 Analyzing page structure...\n');
+console.log('📊 Running deep analysis...\n');
 
-// Try to find comment-like elements
+// ENHANCED: Deep analysis with DOM tree inspection
 const analysis = await page.evaluate(() => {
   const results = {
     selectors: {},
-    structure: {}
+    structure: {},
+    commentCandidates: [],
+    domTree: {},
+    scripts: []
   };
 
-  // Test various selectors
+  // Test comprehensive selectors
   const selectorsToTry = [
     'article ul li[role="menuitem"]',
     'article ul li',
@@ -80,99 +101,222 @@ const analysis = await page.evaluate(() => {
     'ul li span',
     'article section',
     'article > div > div',
-    'div[style*="flex"]'
+    'div[style*="flex"]',
+    // NEW: More specific comment selectors
+    'article ul[style*="padding"] > div > li',
+    'article ul[style*="padding"] li',
+    'ul[role="list"] li',
+    'div[role="presentation"] ul li',
+    'li[class*="comment"]',
+    'div[class*="comment"]',
+    '[data-comment-id]',
+    '[data-testid*="comment"]'
   ];
 
   selectorsToTry.forEach(selector => {
-    const elements = document.querySelectorAll(selector);
-    results.selectors[selector] = {
-      count: elements.length,
-      sample: elements.length > 0 ? elements[0].textContent.substring(0, 100) : null
-    };
+    try {
+      const elements = document.querySelectorAll(selector);
+      results.selectors[selector] = {
+        count: elements.length,
+        samples: Array.from(elements).slice(0, 3).map(el => ({
+          text: el.textContent.substring(0, 100),
+          classes: el.className,
+          hasLink: !!el.querySelector('a'),
+          innerHTML: el.innerHTML.substring(0, 200)
+        }))
+      };
+    } catch(e) {
+      results.selectors[selector] = { error: e.message };
+    }
   });
 
-  // Find all elements with significant text in article
+  // Find article element and analyze its structure
   const article = document.querySelector('article');
   if (article) {
-    const allElements = article.querySelectorAll('*');
-    const textElements = Array.from(allElements)
-      .filter(el => {
-        const text = el.textContent.trim();
-        return text.length > 10 && text.length < 500 && 
-               !el.querySelector('*')?.textContent?.includes(text);
-      })
-      .slice(0, 20);
+    // Get all UL elements in article
+    const uls = article.querySelectorAll('ul');
+    results.structure.ulElements = Array.from(uls).map((ul, idx) => {
+      const liCount = ul.querySelectorAll('li').length;
+      const hasLinks = ul.querySelectorAll('a').length;
+      const style = ul.getAttribute('style') || '';
+      return {
+        index: idx,
+        liCount: liCount,
+        linkCount: hasLinks,
+        style: style.substring(0, 100),
+        firstLiText: ul.querySelector('li')?.textContent.substring(0, 100) || 'N/A',
+        classes: ul.className
+      };
+    });
 
-    results.structure.textElements = textElements.map(el => ({
-      tag: el.tagName.toLowerCase(),
-      role: el.getAttribute('role'),
-      class: el.className,
-      text: el.textContent.substring(0, 80),
-      parent: el.parentElement?.tagName.toLowerCase(),
-      hasLink: !!el.querySelector('a')
-    }));
+    // NEW: Find elements that look like username + comment pairs
+    const allDivs = article.querySelectorAll('div');
+    results.commentCandidates = Array.from(allDivs)
+      .filter(div => {
+        const links = div.querySelectorAll('a');
+        const hasProfileLink = Array.from(links).some(a => {
+          const href = a.getAttribute('href') || '';
+          return href.startsWith('/') && !href.includes('/p/') && href.length < 50;
+        });
+        const text = div.textContent.trim();
+        return hasProfileLink && text.length > 20 && text.length < 1000;
+      })
+      .slice(0, 10)
+      .map(div => {
+        const link = Array.from(div.querySelectorAll('a')).find(a => {
+          const href = a.getAttribute('href') || '';
+          return href.startsWith('/') && !href.includes('/p/');
+        });
+        
+        return {
+          username: link?.textContent || 'N/A',
+          profileHref: link?.getAttribute('href') || 'N/A',
+          fullText: div.textContent.substring(0, 200),
+          tag: div.tagName.toLowerCase(),
+          classes: div.className,
+          parent: div.parentElement?.tagName.toLowerCase(),
+          hasTime: !!div.querySelector('time'),
+          childCount: div.children.length
+        };
+      });
   }
 
-  // Look for username patterns
-  const links = Array.from(document.querySelectorAll('article a[href*="/"]'));
-  results.structure.userLinks = links.slice(0, 10).map(a => ({
-    href: a.href,
-    text: a.textContent,
-    parent: a.parentElement?.tagName.toLowerCase()
+  // NEW: Detect script tags with data
+  const scriptTags = document.querySelectorAll('script[type="application/json"]');
+  results.scripts = Array.from(scriptTags).slice(0, 3).map(script => ({
+    id: script.id,
+    length: script.textContent.length,
+    preview: script.textContent.substring(0, 100)
   }));
+
+  // Look for username links
+  const links = Array.from(document.querySelectorAll('article a[href*="/"]'))
+    .filter(a => {
+      const href = a.getAttribute('href') || '';
+      return href.startsWith('/') && !href.includes('/p/') && !href.includes('/reel/');
+    });
+  
+  results.structure.userLinks = links.slice(0, 15).map((a, idx) => {
+    const parent = a.parentElement;
+    const grandparent = parent?.parentElement;
+    
+    return {
+      index: idx,
+      href: a.getAttribute('href'),
+      text: a.textContent,
+      parentTag: parent?.tagName.toLowerCase(),
+      parentClass: parent?.className.substring(0, 50),
+      grandparentTag: grandparent?.tagName.toLowerCase(),
+      nearbyText: parent?.textContent.substring(0, 150)
+    };
+  });
 
   return results;
 });
 
-console.log('═'.repeat(60));
-console.log('SELECTOR TEST RESULTS');
-console.log('═'.repeat(60));
+// Save full analysis to JSON file
+const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+const outputFile = `./debug-output-${timestamp}.json`;
+writeFileSync(outputFile, JSON.stringify(analysis, null, 2));
+console.log(`💾 Full analysis saved to: ${outputFile}\n`);
+
+console.log('═'.repeat(80));
+console.log('🎯 SELECTOR TEST RESULTS');
+console.log('═'.repeat(80));
 
 Object.entries(analysis.selectors).forEach(([selector, data]) => {
-  if (data.count > 0) {
+  if (data.error) {
+    console.log(`\n⚠️  ${selector} - ERROR: ${data.error}`);
+  } else if (data.count > 0) {
     console.log(`\n✅ ${selector}`);
     console.log(`   Count: ${data.count}`);
-    console.log(`   Sample: "${data.sample}"`);
+    if (data.samples && data.samples.length > 0) {
+      data.samples.forEach((sample, i) => {
+        console.log(`   Sample ${i + 1}:`);
+        console.log(`      Text: "${sample.text}"`);
+        console.log(`      Has link: ${sample.hasLink}`);
+        console.log(`      Classes: ${sample.classes.substring(0, 60)}`);
+      });
+    }
   } else {
     console.log(`\n❌ ${selector} - No elements found`);
   }
 });
 
-console.log('\n' + '═'.repeat(60));
-console.log('TEXT ELEMENTS IN ARTICLE');
-console.log('═'.repeat(60));
+console.log('\n' + '═'.repeat(80));
+console.log('🗂️  UL ELEMENTS IN ARTICLE');
+console.log('═'.repeat(80));
 
-if (analysis.structure.textElements && analysis.structure.textElements.length > 0) {
-  analysis.structure.textElements.forEach((elem, i) => {
-    console.log(`\n[${i + 1}] <${elem.tag}> ${elem.role ? `role="${elem.role}"` : ''}`);
-    console.log(`    Parent: ${elem.parent}`);
-    console.log(`    Has link: ${elem.hasLink}`);
-    console.log(`    Text: "${elem.text}"`);
+if (analysis.structure.ulElements && analysis.structure.ulElements.length > 0) {
+  analysis.structure.ulElements.forEach(ul => {
+    console.log(`\n[UL ${ul.index}]`);
+    console.log(`   LI count: ${ul.liCount}`);
+    console.log(`   Link count: ${ul.linkCount}`);
+    console.log(`   Style: ${ul.style || 'none'}`);
+    console.log(`   Classes: ${ul.classes || 'none'}`);
+    console.log(`   First LI text: "${ul.firstLiText}"`);
   });
 } else {
-  console.log('No text elements found');
+  console.log('No UL elements found in article');
 }
 
-console.log('\n' + '═'.repeat(60));
-console.log('USER LINKS');
-console.log('═'.repeat(60));
+console.log('\n' + '═'.repeat(80));
+console.log('💬 COMMENT CANDIDATES (Username + Text pairs)');
+console.log('═'.repeat(80));
+
+if (analysis.commentCandidates && analysis.commentCandidates.length > 0) {
+  analysis.commentCandidates.forEach((candidate, i) => {
+    console.log(`\n[${i + 1}] ${candidate.username} (@${candidate.profileHref})`);
+    console.log(`    Tag: <${candidate.tag}> (${candidate.childCount} children)`);
+    console.log(`    Parent: ${candidate.parent}`);
+    console.log(`    Has time: ${candidate.hasTime}`);
+    console.log(`    Classes: ${candidate.classes.substring(0, 60)}`);
+    console.log(`    Full text: "${candidate.fullText}"`);
+  });
+} else {
+  console.log('⚠️  No comment candidates found!');
+  console.log('Try scrolling more or checking if comments are visible.');
+}
+
+console.log('\n' + '═'.repeat(80));
+console.log('🔗 USER PROFILE LINKS');
+console.log('═'.repeat(80));
 
 if (analysis.structure.userLinks && analysis.structure.userLinks.length > 0) {
   analysis.structure.userLinks.forEach((link, i) => {
-    console.log(`\n[${i + 1}] ${link.href}`);
-    console.log(`    Text: "${link.text}"`);
-    console.log(`    Parent: ${link.parent}`);
+    console.log(`\n[${i + 1}] ${link.text} → ${link.href}`);
+    console.log(`    Context: ${link.parentTag} > ${link.grandparentTag}`);
+    console.log(`    Parent class: ${link.parentClass}`);
+    console.log(`    Nearby: "${link.nearbyText}"`);
   });
 }
 
-console.log('\n' + '═'.repeat(60));
-console.log('\n💡 RECOMMENDATIONS:');
-console.log('Look for selectors with multiple elements that contain comment-like text.');
-console.log('The parent tags and structure will help identify the right selector.\n');
+console.log('\n' + '═'.repeat(80));
+console.log('📜 SCRIPT TAGS WITH DATA');
+console.log('═'.repeat(80));
 
-console.log('Browser will stay open for manual inspection.');
-console.log('Check DevTools to inspect comment elements directly.');
-console.log('Press Ctrl+C to exit.\n');
+if (analysis.scripts && analysis.scripts.length > 0) {
+  analysis.scripts.forEach((script, i) => {
+    console.log(`\n[${i + 1}] Script ${script.id || 'no-id'}`);
+    console.log(`    Length: ${script.length} chars`);
+    console.log(`    Preview: ${script.preview}...`);
+  });
+}
+
+console.log('\n' + '═'.repeat(80));
+console.log('💡 ANALYSIS COMPLETE');
+console.log('═'.repeat(80));
+console.log(`\n📊 Summary:`);
+console.log(`   - Comment candidates found: ${analysis.commentCandidates?.length || 0}`);
+console.log(`   - User links found: ${analysis.structure.userLinks?.length || 0}`);
+console.log(`   - UL elements: ${analysis.structure.ulElements?.length || 0}`);
+console.log(`   - Full report: ${outputFile}`);
+
+console.log('\n🌐 Browser will stay open for manual inspection.');
+console.log('   → Open DevTools (F12)');
+console.log('   → Inspect comment elements');
+console.log('   → Compare with analysis above');
+console.log('\n   Press Ctrl+C when done.\n');
 
 // Keep browser open
 await new Promise(() => {});
