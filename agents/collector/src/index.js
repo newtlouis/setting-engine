@@ -52,7 +52,8 @@ export async function runCollector(config) {
     // Step 1: Manual Login
     console.log('📱 Opening Instagram...');
     await page.goto('https://www.instagram.com/accounts/login/', {
-      waitUntil: 'networkidle'
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
     });
 
     console.log('\n⏸️  Please log in manually in the browser window.');

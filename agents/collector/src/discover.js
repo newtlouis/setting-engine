@@ -25,8 +25,8 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
     const url = `https://www.instagram.com/explore/tags/${encodeURIComponent(cleanTag)}/`;
 
     try {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      await delay(2000 + Math.random() * 2000);
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await delay(3000 + Math.random() * 3000);
 
       // Check for challenge
       if (await detectChallenge(page)) {
@@ -36,7 +36,7 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
 
       // Wait for posts grid to load
       // FIX NOTE: Update selector if Instagram changes their post grid structure
-      await page.waitForSelector('article a[href*="/p/"]', { timeout: 10000 }).catch(() => null);
+      await page.waitForSelector('article a[href*="/p/"]', { timeout: CONFIG.SELECTOR_TIMEOUT || 15000 }).catch(() => null);
 
       const posts = [];
       let scrollAttempts = 0;
@@ -111,8 +111,8 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
     const url = `https://www.instagram.com/${username}/`;
 
     try {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      await delay(2000 + Math.random() * 2000);
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await delay(3000 + Math.random() * 3000);
 
       // Check for challenge
       if (await detectChallenge(page)) {
@@ -122,7 +122,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
 
       // Wait for posts grid
       // FIX NOTE: Selector 'article a[href*="/p/"]' targets profile post grid - update if layout changes
-      await page.waitForSelector('article a[href*="/p/"]', { timeout: 10000 }).catch(() => null);
+      await page.waitForSelector('article a[href*="/p/"]', { timeout: CONFIG.SELECTOR_TIMEOUT || 15000 }).catch(() => null);
 
       const posts = [];
       let scrollAttempts = 0;

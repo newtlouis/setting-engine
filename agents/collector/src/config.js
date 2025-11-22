@@ -4,9 +4,13 @@
 
 export const CONFIG = {
   // Delays (in milliseconds)
-  MIN_DELAY: 3000,
-  MAX_DELAY: 7000,
-  SLOW_MO: 100,
+  MIN_DELAY: 4000,
+  MAX_DELAY: 8000,
+  SLOW_MO: 150,
+  
+  // Timeouts (in milliseconds)
+  PAGE_LOAD_TIMEOUT: 60000,
+  SELECTOR_TIMEOUT: 15000,
 
   // User Agent (updated periodically to match real browsers)
   USER_AGENT: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
