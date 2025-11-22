@@ -16,8 +16,8 @@ import { CONFIG } from './config.js';
  * @returns {Promise<Array>} Array of comment objects
  */
 export async function scrapePostComments(page, postUrl, maxComments) {
-  await page.goto(postUrl, { waitUntil: 'networkidle', timeout: 30000 });
-  await delay(2000 + Math.random() * 2000);
+  await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await delay(3000 + Math.random() * 3000);
 
   // Check for challenge
   if (await detectChallenge(page)) {
@@ -35,6 +35,9 @@ export async function scrapePostComments(page, postUrl, maxComments) {
   };
 
   try {
+    // Wait for post content to load
+    await page.waitForSelector('article', { timeout: 10000 }).catch(() => null);
+    
     // Extract post caption
     // FIX NOTE: Caption selector may change - look for <h1> in article or meta tags
     const caption = await page.$eval(
@@ -69,6 +72,12 @@ export async function scrapePostComments(page, postUrl, maxComments) {
     // Extract all visible comments
     // FIX NOTE: Comment structure selector - update if Instagram changes comment HTML layout
     const commentElements = await page.$$('article ul li[role="menuitem"]');
+    
+    if (commentElements.length === 0) {
+      // Try alternative selectors
+      const altComments = await page.$$('ul ul li').catch(() => []);
+      commentElements.push(...altComments);
+    }
 
     for (let i = 0; i < Math.min(commentElements.length, maxComments); i++) {
       const elem = commentElements[i];
