@@ -6,8 +6,8 @@
 
 import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
-// Try V2 scraper with generic pattern matching
-import { scrapePostComments } from './scrape_post_v2.js';
+// Try V3 scraper with ultra-generic brute force
+import { scrapePostComments } from './scrape_post_v3.js';
 import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
