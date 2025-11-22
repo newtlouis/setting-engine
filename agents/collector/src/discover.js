@@ -34,21 +34,54 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
         continue;
       }
 
-      // Wait for posts grid to load
+      // Wait for posts grid to load - try multiple selectors
       // FIX NOTE: Update selector if Instagram changes their post grid structure
-      await page.waitForSelector('article a[href*="/p/"]', { timeout: CONFIG.SELECTOR_TIMEOUT || 15000 }).catch(() => null);
+      const selectors = [
+        'article a[href*="/p/"]',
+        'a[href*="/p/"]',
+        'a[href*="/reel/"]',
+        'div[role="button"] a'
+      ];
+      
+      let selectorFound = false;
+      for (const selector of selectors) {
+        const found = await page.waitForSelector(selector, { timeout: 5000 }).catch(() => null);
+        if (found) {
+          selectorFound = true;
+          console.log(`      ✓ Using selector: ${selector}`);
+          break;
+        }
+      }
+      
+      if (!selectorFound) {
+        console.log(`      ⚠️  No posts found with standard selectors, trying alternative extraction...`);
+      }
 
       const posts = [];
       let scrollAttempts = 0;
       const maxScrolls = Math.ceil(maxPosts / 9); // Instagram shows ~9 posts per viewport
+      let previousCount = 0;
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
-        // Extract post links from current viewport
+        // Extract post links from current viewport - try multiple methods
         // FIX NOTE: Selector 'article a[href*="/p/"]' targets post links - update if layout changes
-        const postLinks = await page.$$eval(
-          'article a[href*="/p/"], article a[href*="/reel/"]',
-          (links) => links.map(a => a.href)
-        );
+        let postLinks = await page.$$eval(
+          'a[href*="/p/"], a[href*="/reel/"]',
+          (links) => links.map(a => a.href).filter(href => href.includes('/p/') || href.includes('/reel/'))
+        ).catch(() => []);
+        
+        // If no posts found, try a more aggressive selector
+        if (postLinks.length === 0) {
+          postLinks = await page.evaluate(() => {
+            const allLinks = Array.from(document.querySelectorAll('a'));
+            return allLinks
+              .map(a => a.href)
+              .filter(href => href.includes('/p/') || href.includes('/reel/'))
+              .filter(href => href.includes('instagram.com'));
+          }).catch(() => []);
+        }
+        
+        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${postLinks.length} post links in viewport (total: ${posts.length})`);
 
         // Deduplicate
         for (const link of postLinks) {
@@ -65,9 +98,21 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
           }
         }
 
-        // Scroll down
-        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-        await delay(1500 + Math.random() * 1500);
+        // Break if no new posts found after scrolling
+        if (posts.length === previousCount && scrollAttempts > 1) {
+          console.log(`      ⚠️  No new posts found after scroll, stopping`);
+          break;
+        }
+        previousCount = posts.length;
+
+        // Scroll down slowly to trigger lazy loading
+        await page.evaluate(() => {
+          window.scrollBy({
+            top: window.innerHeight * 0.8,
+            behavior: 'smooth'
+          });
+        });
+        await delay(3000 + Math.random() * 2000);
         scrollAttempts++;
       }
 
@@ -75,7 +120,7 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
       const limitedPosts = posts.slice(0, maxPosts);
       allPosts.push(...limitedPosts);
 
-      console.log(`      → Found ${limitedPosts.length} posts`);
+      console.log(`      → Total found: ${limitedPosts.length} posts`);
 
       // Delay between hashtags
       await delay(CONFIG.MIN_DELAY + Math.random() * CONFIG.MAX_DELAY);
@@ -120,21 +165,51 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
         continue;
       }
 
-      // Wait for posts grid
-      // FIX NOTE: Selector 'article a[href*="/p/"]' targets profile post grid - update if layout changes
-      await page.waitForSelector('article a[href*="/p/"]', { timeout: CONFIG.SELECTOR_TIMEOUT || 15000 }).catch(() => null);
+      // Wait for posts grid - try multiple selectors
+      const selectors = [
+        'article a[href*="/p/"]',
+        'a[href*="/p/"]',
+        'a[href*="/reel/"]'
+      ];
+      
+      let selectorFound = false;
+      for (const selector of selectors) {
+        const found = await page.waitForSelector(selector, { timeout: 5000 }).catch(() => null);
+        if (found) {
+          selectorFound = true;
+          console.log(`      ✓ Using selector: ${selector}`);
+          break;
+        }
+      }
+      
+      if (!selectorFound) {
+        console.log(`      ⚠️  No posts found with standard selectors`);
+      }
 
       const posts = [];
       let scrollAttempts = 0;
       const maxScrolls = Math.ceil(maxPosts / 12); // Profiles show ~12 posts per viewport
+      let previousCount = 0;
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
-        // Extract post links
-        // FIX NOTE: Update selectors if Instagram changes post URL patterns
-        const postLinks = await page.$$eval(
-          'article a[href*="/p/"], article a[href*="/reel/"]',
+        // Extract post links - try multiple methods
+        let postLinks = await page.$$eval(
+          'a[href*="/p/"], a[href*="/reel/"]',
           (links) => links.map(a => a.href)
-        );
+        ).catch(() => []);
+        
+        // If no posts found, try more aggressive
+        if (postLinks.length === 0) {
+          postLinks = await page.evaluate(() => {
+            const allLinks = Array.from(document.querySelectorAll('a'));
+            return allLinks
+              .map(a => a.href)
+              .filter(href => href.includes('/p/') || href.includes('/reel/'))
+              .filter(href => href.includes('instagram.com'));
+          }).catch(() => []);
+        }
+        
+        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${postLinks.length} post links (total: ${posts.length})`);
 
         // Deduplicate
         for (const link of postLinks) {
@@ -151,9 +226,21 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
           }
         }
 
+        // Break if no new posts
+        if (posts.length === previousCount && scrollAttempts > 1) {
+          console.log(`      ⚠️  No new posts found, stopping`);
+          break;
+        }
+        previousCount = posts.length;
+
         // Scroll down
-        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-        await delay(1500 + Math.random() * 1500);
+        await page.evaluate(() => {
+          window.scrollBy({
+            top: window.innerHeight * 0.8,
+            behavior: 'smooth'
+          });
+        });
+        await delay(3000 + Math.random() * 2000);
         scrollAttempts++;
       }
 
@@ -161,7 +248,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
       const limitedPosts = posts.slice(0, maxPosts);
       allPosts.push(...limitedPosts);
 
-      console.log(`      → Found ${limitedPosts.length} posts`);
+      console.log(`      → Total found: ${limitedPosts.length} posts`);
 
       // Delay between profiles
       await delay(CONFIG.MIN_DELAY + Math.random() * CONFIG.MAX_DELAY);
