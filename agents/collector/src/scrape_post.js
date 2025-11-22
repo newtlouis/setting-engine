@@ -54,6 +54,18 @@ export async function scrapePostComments(page, postUrl, maxComments) {
     ).catch(() => '');
     postContext.likes = likesText;
 
+    // Wait for comments section to load
+    await delay(2000);
+    
+    // Scroll to comments section
+    await page.evaluate(() => {
+      const article = document.querySelector('article');
+      if (article) {
+        article.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    await delay(1000);
+
     // Load more comments by clicking "View more comments" if available
     let loadMoreAttempts = 0;
     const maxLoadAttempts = Math.ceil(maxComments / 20); // Instagram loads ~20 comments at a time
@@ -69,39 +81,79 @@ export async function scrapePostComments(page, postUrl, maxComments) {
       loadMoreAttempts++;
     }
 
-    // Extract all visible comments
+    // Extract all visible comments - try multiple selectors
     // FIX NOTE: Comment structure selector - update if Instagram changes comment HTML layout
-    const commentElements = await page.$$('article ul li[role="menuitem"]');
+    let commentElements = await page.$$('article ul li[role="menuitem"]');
     
     if (commentElements.length === 0) {
-      // Try alternative selectors
-      const altComments = await page.$$('ul ul li').catch(() => []);
-      commentElements.push(...altComments);
+      // Try alternative selector 1: any li in article
+      commentElements = await page.$$('article ul li');
     }
+    
+    if (commentElements.length === 0) {
+      // Try alternative selector 2: divs with comment-like structure
+      commentElements = await page.$$('article div[role="button"]').then(elems => 
+        elems.filter(async (elem) => {
+          const text = await elem.textContent();
+          return text && text.length > 5;
+        })
+      );
+    }
+    
+    // Debug: log what we found
+    console.log(`      → Found ${commentElements.length} comment elements`);
 
     for (let i = 0; i < Math.min(commentElements.length, maxComments); i++) {
       const elem = commentElements[i];
 
       try {
-        const username = await elem.$eval(
+        // Extract username - try multiple methods
+        let username = await elem.$eval(
           'a[role="link"]', 
           el => el.textContent
-        ).catch(() => 'unknown');
+        ).catch(() => null);
+        
+        if (!username) {
+          username = await elem.evaluate(el => {
+            const link = el.querySelector('a');
+            return link ? link.textContent : null;
+          }).catch(() => 'unknown');
+        }
 
-        const profileUrl = await elem.$eval(
+        // Extract profile URL
+        let profileUrl = await elem.$eval(
           'a[role="link"]',
           el => el.href
-        ).catch(() => '');
+        ).catch(() => null);
+        
+        if (!profileUrl) {
+          profileUrl = await elem.evaluate(el => {
+            const link = el.querySelector('a');
+            return link ? link.href : '';
+          }).catch(() => '');
+        }
 
-        const commentText = await elem.$eval(
-          'span',
-          el => {
-            // Get the span that contains the actual comment text
-            const spans = [...el.parentElement.querySelectorAll('span')];
-            return spans.find(s => s.textContent.length > 0)?.textContent || '';
-          }
-        ).catch(() => '');
+        // Extract comment text - try multiple methods
+        let commentText = await elem.evaluate(el => {
+          // Method 1: Look for all spans and find the longest one (likely the comment)
+          const spans = Array.from(el.querySelectorAll('span'));
+          const textSpans = spans
+            .map(s => s.textContent.trim())
+            .filter(t => t.length > 0)
+            .sort((a, b) => b.length - a.length);
+          return textSpans[0] || '';
+        }).catch(() => '');
+        
+        // Method 2: If still no text, get all text content and filter out username
+        if (!commentText || commentText.length < 2) {
+          commentText = await elem.evaluate((el, user) => {
+            const fullText = el.textContent.trim();
+            // Remove username from text if present
+            return fullText.replace(user, '').trim();
+          }, username).catch(() => '');
+        }
 
+        // Extract date
         const commentDate = await elem.$eval(
           'time',
           el => el.getAttribute('datetime')
@@ -110,10 +162,11 @@ export async function scrapePostComments(page, postUrl, maxComments) {
         // Estimate followers (not available in comments, leave empty for now)
         const followersEstimate = '';
 
-        if (commentText.trim()) {
+        // Only add if we have meaningful data
+        if (commentText && commentText.trim().length > 2 && username && username !== 'unknown') {
           comments.push({
             post_url: postUrl,
-            username,
+            username: username.trim(),
             profile_url: profileUrl,
             comment_text: commentText.trim(),
             comment_date: commentDate,
@@ -125,6 +178,13 @@ export async function scrapePostComments(page, postUrl, maxComments) {
         // Skip malformed comment elements
         continue;
       }
+    }
+    
+    // Debug: show sample of what we collected
+    if (comments.length > 0) {
+      console.log(`      → Sample comment: "${comments[0].comment_text.substring(0, 50)}..." by @${comments[0].username}`);
+    } else {
+      console.log(`      ⚠️  No comments extracted - selectors may need updating`);
     }
 
     // Save context JSON for this post
