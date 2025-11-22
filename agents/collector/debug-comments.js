@@ -5,6 +5,7 @@
  */
 
 import { chromium } from 'playwright';
+import { createInterface } from 'readline';
 
 const postUrl = process.argv[2] || 'https://www.instagram.com/p/DP82LJBCAzq/';
 
@@ -33,8 +34,7 @@ await page.goto('https://www.instagram.com/accounts/login/', {
 
 // Wait for user input
 await new Promise((resolve) => {
-  const readline = require('readline');
-  const rl = readline.createInterface({
+  const rl = createInterface({
     input: process.stdin,
     output: process.stdout
   });
