@@ -305,6 +305,13 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
           const timeElement = div.querySelector('time[datetime]');
           const commentDate = timeElement ? timeElement.getAttribute('datetime') : '';
 
+          // SKIP comments without timestamp (usually replies/responses from post author)
+          // Real user comments ALWAYS have a timestamp
+          if (!commentDate || commentDate === '') {
+            result.debug.skippedNoTimestamp = (result.debug.skippedNoTimestamp || 0) + 1;
+            return;
+          }
+
           // Build full profile URL
           const profileUrl = `https://www.instagram.com${profileHref}`;
 
@@ -333,7 +340,8 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
     }
     console.log(`      → Found ${extraction.debug.profileLinksFound} profile links`);
     console.log(`      → Skipped ${extraction.debug.skippedAsPostAuthor} excluded user comments`);
-    console.log(`      → Skipped ${extraction.debug.skippedAsAuthorOrUI} (first 2: UI elements)`);
+    console.log(`      → Skipped ${extraction.debug.skippedAsAuthorOrUI} (first 5: UI elements)`);
+    console.log(`      → Skipped ${extraction.debug.skippedNoTimestamp || 0} without timestamp (replies)`);
     console.log(`      → Found ${extraction.debug.commentCandidatesFound} comment candidates`);
     console.log(`      → Extracted ${extraction.debug.validComments} raw comments`);
 
