@@ -6,8 +6,7 @@
 
 import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
-// Try V8 scraper - DIV-only structure (Instagram Nov 2025)
-import { scrapePostComments } from './scrape_post_v8.js';
+import { scrapePostComments } from './scrape_post.js';
 import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';

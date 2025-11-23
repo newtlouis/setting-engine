@@ -1,25 +1,28 @@
 /**
- * Post Scraper Module
+ * Post Scraper Module V8 - DIV-ONLY Structure (Nov 2025)
  * 
- * Scrapes comments and metadata from individual Instagram posts.
+ * Instagram NO LONGER uses UL/LI for comments!
+ * New structure: nested DIVs with:
+ * - <a href="/username"> for profile
+ * - <span dir="auto"> for comment text
+ * - <time datetime="..."> for timestamp
  */
 
 import { delay, detectChallenge, saveContextJSON } from './utils.js';
 import { CONFIG } from './config.js';
 
 /**
- * Scrape comments from a single post
+ * Scrape comments using DIV-only structure (no UL/LI)
  * 
  * @param {Page} page - Playwright page object
- * @param {string} postUrl - URL of the Instagram post
- * @param {number} maxComments - Maximum number of comments to scrape
- * @returns {Promise<Array>} Array of comment objects
+ * @param {string} postUrl - URL of the post
+ * @param {number} maxComments - Maximum comments to extract
+ * @param {string[]} excludeUsernames - Additional usernames to exclude (optional)
  */
-export async function scrapePostComments(page, postUrl, maxComments) {
+export async function scrapePostComments(page, postUrl, maxComments, excludeUsernames = []) {
   await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await delay(3000 + Math.random() * 3000);
 
-  // Check for challenge
   if (await detectChallenge(page)) {
     throw new Error('Challenge detected while loading post');
   }
@@ -35,164 +38,355 @@ export async function scrapePostComments(page, postUrl, maxComments) {
   };
 
   try {
-    // Wait for post content to load
-    await page.waitForSelector('article', { timeout: 10000 }).catch(() => null);
+    console.log(`      → Waiting for page to load...`);
+    await delay(4000);
     
-    // Extract post caption
-    // FIX NOTE: Caption selector may change - look for <h1> in article or meta tags
-    const caption = await page.$eval(
-      'article h1',
-      el => el.textContent
-    ).catch(() => '');
-    postContext.caption = caption;
+    // Aggressive scrolling to load comments
+    console.log(`      → Scrolling to load comments...`);
+    for (let i = 0; i < 15; i++) {
+      await page.evaluate(() => {
+        window.scrollBy({ top: 400, behavior: 'smooth' });
+      });
+      await delay(1000);
+    }
 
-    // Extract likes count
-    // FIX NOTE: Likes format varies (text like "1,234 likes") - selector may need update
-    const likesText = await page.$eval(
-      'section a[href$="/liked_by/"] span, section span:has-text("likes")',
-      el => el.textContent
-    ).catch(() => '');
-    postContext.likes = likesText;
-
-    // Wait for comments section to load
-    await delay(2000);
-    
-    // Scroll to comments section
-    await page.evaluate(() => {
-      const article = document.querySelector('article');
-      if (article) {
-        article.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-    await delay(1000);
-
-    // Load more comments by clicking "View more comments" if available
-    let loadMoreAttempts = 0;
-    const maxLoadAttempts = Math.ceil(maxComments / 20); // Instagram loads ~20 comments at a time
-
-    while (loadMoreAttempts < maxLoadAttempts) {
-      // FIX NOTE: "View more comments" button text or structure may change
-      const loadMoreButton = await page.$('button:has-text("View more comments"), button:has-text("more comments")').catch(() => null);
+    // Click "View more comments" / "View replies" buttons
+    console.log(`      → Clicking load-more buttons...`);
+    const clicked = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+      let count = 0;
       
-      if (!loadMoreButton) break;
-
-      await loadMoreButton.click().catch(() => {});
-      await delay(1500 + Math.random() * 1000);
-      loadMoreAttempts++;
-    }
-
-    // Extract all visible comments - try multiple selectors
-    // FIX NOTE: Comment structure selector - update if Instagram changes comment HTML layout
-    let commentElements = await page.$$('article ul li[role="menuitem"]');
-    
-    if (commentElements.length === 0) {
-      // Try alternative selector 1: any li in article
-      commentElements = await page.$$('article ul li');
-    }
-    
-    if (commentElements.length === 0) {
-      // Try alternative selector 2: divs with comment-like structure
-      commentElements = await page.$$('article div[role="button"]').then(elems => 
-        elems.filter(async (elem) => {
-          const text = await elem.textContent();
-          return text && text.length > 5;
-        })
-      );
-    }
-    
-    // Debug: log what we found
-    console.log(`      → Found ${commentElements.length} comment elements`);
-
-    for (let i = 0; i < Math.min(commentElements.length, maxComments); i++) {
-      const elem = commentElements[i];
-
-      try {
-        // Extract username - try multiple methods
-        let username = await elem.$eval(
-          'a[role="link"]', 
-          el => el.textContent
-        ).catch(() => null);
-        
-        if (!username) {
-          username = await elem.evaluate(el => {
-            const link = el.querySelector('a');
-            return link ? link.textContent : null;
-          }).catch(() => 'unknown');
+      for (const btn of buttons) {
+        const text = btn.textContent.toLowerCase();
+        if (text.includes('view') || 
+            text.includes('more') || 
+            text.includes('comment') ||
+            text.includes('repl') ||
+            text.includes('voir') ||
+            text.includes('afficher')) {
+          try {
+            btn.click();
+            count++;
+            if (count >= 12) break;
+          } catch (e) {}
         }
+      }
+      return count;
+    });
+    
+    console.log(`      → Clicked ${clicked} buttons`);
+    if (clicked > 0) await delay(3000);
 
-        // Extract profile URL
-        let profileUrl = await elem.$eval(
-          'a[role="link"]',
-          el => el.href
-        ).catch(() => null);
+    // STEP 0: Detect post author from page BEFORE extracting comments
+    const postAuthor = await page.evaluate(() => {
+      // Strategy: The author is the username that appears MOST FREQUENTLY
+      // in the first 10 profile links (excluding @mentions in caption)
+      
+      const allLinks = document.querySelectorAll('a[href^="/"]');
+      const usernameCount = {};
+      let linksChecked = 0;
+      
+      // Count frequency of each username in first 15 links
+      for (const link of allLinks) {
+        if (linksChecked >= 15) break;
         
-        if (!profileUrl) {
-          profileUrl = await elem.evaluate(el => {
-            const link = el.querySelector('a');
-            return link ? link.href : '';
-          }).catch(() => '');
-        }
-
-        // Extract comment text - try multiple methods
-        let commentText = await elem.evaluate(el => {
-          // Method 1: Look for all spans and find the longest one (likely the comment)
-          const spans = Array.from(el.querySelectorAll('span'));
-          const textSpans = spans
-            .map(s => s.textContent.trim())
-            .filter(t => t.length > 0)
-            .sort((a, b) => b.length - a.length);
-          return textSpans[0] || '';
-        }).catch(() => '');
+        const href = link.getAttribute('href') || '';
         
-        // Method 2: If still no text, get all text content and filter out username
-        if (!commentText || commentText.length < 2) {
-          commentText = await elem.evaluate((el, user) => {
-            const fullText = el.textContent.trim();
-            // Remove username from text if present
-            return fullText.replace(user, '').trim();
-          }, username).catch(() => '');
+        // Skip location links
+        if (href.includes('/explore/locations/')) {
+          continue;
         }
+        
+        const match = href.match(/^\/([a-zA-Z0-9._]+)\/?$/);
+        
+        if (match && match[1] !== 'p' && match[1] !== 'reel' && match[1] !== 'explore') {
+          const username = match[1];
+          usernameCount[username] = (usernameCount[username] || 0) + 1;
+          linksChecked++;
+        }
+      }
+      
+      // Find the username with highest frequency
+      let maxCount = 0;
+      let authorUsername = null;
+      
+      for (const [username, count] of Object.entries(usernameCount)) {
+        if (count > maxCount) {
+          maxCount = count;
+          authorUsername = username;
+        }
+      }
+      
+      // Debug: show frequency
+      console.log('Username frequency in first 15 links:', usernameCount);
+      console.log('Detected author:', authorUsername, 'with', maxCount, 'occurrences');
+      
+      return authorUsername;
+    });
+    
+    console.log(`      → Pre-detected post author: @${postAuthor || 'unknown'}`);
 
-        // Extract date
-        const commentDate = await elem.$eval(
-          'time',
-          el => el.getAttribute('datetime')
-        ).catch(() => '');
+    // Extract comments using DIV-based structure analysis
+    const extraction = await page.evaluate(({ currentPostUrl, additionalExclusions, detectedAuthor }) => {
+      const result = {
+        comments: [],
+        debug: {
+          totalDivs: 0,
+          profileLinksFound: 0,
+          commentCandidatesFound: 0,
+          validComments: 0,
+          skippedAsAuthorOrUI: 0,
+          skippedAsPostAuthor: 0,
+          postAuthor: detectedAuthor
+        }
+      };
 
-        // Estimate followers (not available in comments, leave empty for now)
-        const followersEstimate = '';
+      // Use the pre-detected author
+      const postAuthor = detectedAuthor;
+      let authorDetected = !!postAuthor;
 
-        // Only add if we have meaningful data
-        if (commentText && commentText.trim().length > 2 && username && username !== 'unknown') {
-          comments.push({
-            post_url: postUrl,
-            username: username.trim(),
+      // Strategy: Find all DIVs that contain:
+      // 1. A profile link <a href="/username">
+      // 2. A text span (comment)
+      // 3. Optionally a timestamp <time>
+      
+      const allDivs = document.querySelectorAll('div');
+      result.debug.totalDivs = allDivs.length;
+      
+      // Track first 2 comments to skip them (author + "For You" UI)
+      let commentCount = 0;
+
+      allDivs.forEach(div => {
+        try {
+          // Look for profile link in this div
+          const profileLinks = div.querySelectorAll('a[href^="/"]');
+          let username = null;
+          let profileHref = null;
+
+          for (const link of profileLinks) {
+            const href = link.getAttribute('href') || '';
+            
+            // Skip location links
+            if (href.includes('/explore/locations/')) {
+              continue;
+            }
+            
+            // Profile pattern: /username (not /p/, /reel/, /c/, etc.)
+            if (href.match(/^\/[a-zA-Z0-9._]+\/?$/) && !href.includes('/p/') && !href.includes('/reel/')) {
+              
+              // STRATEGY 1: Look for username in SIBLING spans (after the link)
+              // This catches cases where @tagged is in the link, but author is in span
+              const parentDiv = link.parentElement;
+              if (parentDiv) {
+                const siblingSpans = parentDiv.querySelectorAll('span._ap3a, span[dir="auto"]');
+                for (const span of siblingSpans) {
+                  const spanText = span.textContent.trim();
+                  const cleanText = spanText.replace(/^@+/, '');
+                  
+                  // If this looks like a username (not the link text)
+                  if (cleanText.length >= 2 && 
+                      cleanText.length <= 30 && 
+                      !cleanText.includes(' ') &&
+                      !cleanText.match(/^\d+$/) &&
+                      cleanText !== link.textContent.trim()) {
+                    
+                    username = cleanText;
+                    // Use this username's profile URL (construct it)
+                    profileHref = `/${cleanText}`;
+                    result.debug.profileLinksFound++;
+                    result.debug.usernameFromSpan = true;
+                    break;
+                  }
+                }
+              }
+              
+              // STRATEGY 2: If no sibling span, use the link itself
+              if (!username) {
+                const linkText = link.textContent.trim();
+                const span = link.querySelector('span._ap3a, span[dir="auto"]');
+                const spanText = span ? span.textContent.trim() : '';
+                
+                const candidateUsername = spanText || linkText;
+                const cleanUsername = candidateUsername.replace(/^@+/, '');
+                
+                if (cleanUsername.length >= 2 && 
+                    cleanUsername.length <= 30 && 
+                    !cleanUsername.includes(' ') &&
+                    !cleanUsername.match(/^\d+$/)) {
+                  
+                  username = cleanUsername;
+                  profileHref = href;
+                  result.debug.profileLinksFound++;
+                }
+              }
+              
+              if (username) break;
+            }
+          }
+
+          if (!username) return;
+
+          // Now look for comment text in SIBLING or CHILD spans
+          // The comment text is usually in a span[dir="auto"] AFTER the username
+          const spans = div.querySelectorAll('span[dir="auto"]');
+          let commentText = null;
+
+          for (const span of spans) {
+            let text = span.textContent.trim();
+            
+            // Skip if it's the username itself
+            if (text === username) continue;
+            
+            // Skip UI text (expanded list)
+            const uiWords = ['verified', 'vérifié', 'j\'aime', 'répondre', 'reply', 'like', 
+                            'more options', 'options', 'suivre', 'follow', 'abonné',
+                            'see translation', 'voir la traduction', 'masquer', 'hide',
+                            'afficher', 'show', 'view replies', 'voir les réponses',
+                            'masquer toutes les réponses', 'hide all replies',
+                            'modifié', 'modified', 'edited', 'for you', 'pour vous',
+                            'following', 'abonnements'];
+            if (uiWords.some(word => text.toLowerCase().includes(word))) continue;
+            
+            // Skip "X J'aime" / "X likes" / "X sem" / "X h" patterns
+            if (/^\d+\s*(j'aime|like|réponse|reply|h|d|w|m|s|min|sem|hour|day|week)$/i.test(text)) continue;
+            
+            // Skip pure numbers
+            if (/^\d+$/.test(text)) continue;
+            
+            // Skip code/JSON
+            if (text.includes('{') || text.includes('require') || text.includes('__d(')) continue;
+            
+            // Skip if text looks like a caption (contains hashtags and is very long)
+            if (text.includes('#') && text.length > 100) continue;
+            
+            // Remove @mentions from the beginning of the text
+            text = text.replace(/^@[a-zA-Z0-9._]+\s*/, '').trim();
+            
+            // Skip if the text is JUST a username (tagging someone)
+            if (text.match(/^[a-zA-Z0-9._]+$/)) {
+              continue; // It's just a tag, not a real comment
+            }
+            
+            // Skip if it looks like a location/place name (usually 2-3 capitalized words)
+            // Examples: "MACFit Buyaka", "Gold's Gym", "Fitness First"
+            if (text.match(/^[A-Z][a-zA-Z]+(\s+[A-Z][a-zA-Z]+){1,2}$/) && text.length < 30) {
+              continue; // Likely a location tag
+            }
+            
+            // If still has content after cleanup
+            if (text.length >= 1 && text.length <= 200) {
+              commentText = text;
+              result.debug.commentCandidatesFound++;
+              break;
+            }
+          }
+
+          if (!commentText) return;
+
+          // SKIP ALL COMMENTS from post author OR excluded users
+          // We don't want any content from these users in our leads
+          const shouldExclude = (postAuthor && username === postAuthor) || 
+                                (additionalExclusions && additionalExclusions.includes(username));
+          
+          if (shouldExclude) {
+            result.debug.skippedAsPostAuthor++;
+            return;
+          }
+
+          // SKIP FIRST 5 COMMENTS (caption, UI elements, tags, etc.)
+          // Instagram can have multiple UI elements and tags before real comments
+          commentCount++;
+          if (commentCount <= 5) {
+            result.debug.skippedAsAuthorOrUI++;
+            return;
+          }
+
+          // Extract timestamp (might be in same div or parent)
+          const timeElement = div.querySelector('time[datetime]');
+          const commentDate = timeElement ? timeElement.getAttribute('datetime') : '';
+
+          // SKIP comments without timestamp (usually replies/responses from post author)
+          // Real user comments ALWAYS have a timestamp
+          if (!commentDate || commentDate === '') {
+            result.debug.skippedNoTimestamp = (result.debug.skippedNoTimestamp || 0) + 1;
+            return;
+          }
+
+          // Build full profile URL
+          const profileUrl = `https://www.instagram.com${profileHref}`;
+
+          result.comments.push({
+            username: username,
             profile_url: profileUrl,
-            comment_text: commentText.trim(),
+            comment_text: commentText.substring(0, 500),
             comment_date: commentDate,
-            followers_estimate: followersEstimate
+            followers_estimate: ''
           });
-        }
+          
+          result.debug.validComments++;
 
-      } catch (error) {
-        // Skip malformed comment elements
-        continue;
+        } catch (error) {
+          // Skip malformed comments
+        }
+      });
+
+      return result;
+    }, { currentPostUrl: postUrl, additionalExclusions: excludeUsernames, detectedAuthor: postAuthor });
+
+    console.log(`      → Scanned ${extraction.debug.totalDivs} DIV elements`);
+    console.log(`      → Using post author: @${extraction.debug.postAuthor || 'unknown'} (from header)`);
+    if (excludeUsernames.length > 0) {
+      console.log(`      → Additional exclusions: ${excludeUsernames.map(u => '@' + u).join(', ')}`);
+    }
+    console.log(`      → Found ${extraction.debug.profileLinksFound} profile links`);
+    console.log(`      → Skipped ${extraction.debug.skippedAsPostAuthor} excluded user comments`);
+    console.log(`      → Skipped ${extraction.debug.skippedAsAuthorOrUI} (first 5: UI elements)`);
+    console.log(`      → Skipped ${extraction.debug.skippedNoTimestamp || 0} without timestamp (replies)`);
+    console.log(`      → Found ${extraction.debug.commentCandidatesFound} comment candidates`);
+    console.log(`      → Extracted ${extraction.debug.validComments} raw comments`);
+
+    // Deduplicate by username + comment text
+    const seen = new Set();
+    for (const comment of extraction.comments) {
+      const key = `${comment.username}:${comment.comment_text.substring(0, 50)}`;
+      
+      if (!seen.has(key) && comments.length < maxComments) {
+        comments.push({
+          post_url: postUrl,
+          username: comment.username,
+          profile_url: comment.profile_url,
+          comment_text: comment.comment_text,
+          comment_date: comment.comment_date,
+          followers_estimate: comment.followers_estimate
+        });
+        seen.add(key);
       }
     }
-    
-    // Debug: show sample of what we collected
+
+    // Debug output
     if (comments.length > 0) {
-      console.log(`      → Sample comment: "${comments[0].comment_text.substring(0, 50)}..." by @${comments[0].username}`);
+      console.log(`      ✅ SUCCESS! Extracted ${comments.length} unique comments`);
+      console.log(`      → Sample: "@${comments[0].username}: ${comments[0].comment_text.substring(0, 60)}..."`);
     } else {
-      console.log(`      ⚠️  No comments extracted - selectors may need updating`);
+      console.log(`      ⚠️  No comments extracted with V8`);
+      console.log(`      💡 Debug info:`);
+      console.log(`         - Post author: @${extraction.debug.postAuthor || 'unknown'}`);
+      console.log(`         - DIVs scanned: ${extraction.debug.totalDivs}`);
+      console.log(`         - Profile links: ${extraction.debug.profileLinksFound}`);
+      console.log(`         - Skipped (author): ${extraction.debug.skippedAsPostAuthor}`);
+      console.log(`         - Candidates: ${extraction.debug.commentCandidatesFound}`);
+      console.log(`      💡 Possible reasons:`);
+      console.log(`         - No comments on this post`);
+      console.log(`         - Bot detection blocking content`);
+      console.log(`         - Need manual verification`);
     }
 
-    // Save context JSON for this post
+    // Save context
     postContext.comments_count = comments.length.toString();
     await saveContextJSON(postUrl, postContext);
 
   } catch (error) {
-    console.error(`   Error extracting post metadata: ${error.message}`);
+    console.error(`   Error in V8 scraper: ${error.message}`);
   }
 
   return comments;
