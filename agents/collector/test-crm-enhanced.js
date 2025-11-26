@@ -87,8 +87,9 @@ async function testEnhancedCRM() {
     }
   ];
   
-  const outputPath = path.join(__dirname, 'output', 'instagram_prospects.xlsx');
-  const writer = new ExcelCRM(outputPath);
+  const outputDir = path.join(__dirname, 'output');
+  const writer = new ExcelCRM(outputDir);
+  const outputPath = path.join(outputDir, 'instagram_prospects.xlsx');
   
   console.log('📝 Initialisation du fichier Excel...');
   await writer.load();
@@ -96,7 +97,10 @@ async function testEnhancedCRM() {
   console.log('💾 Ajout des prospects avec différents niveaux d\'engagement...\n');
   const result = await writer.updateWithComments(mockData, 'test');
   
-  console.log('📊 RÉSULTATS:');
+  console.log('💾 Sauvegarde du fichier Excel...');
+  await writer.save();
+  
+  console.log('\n📊 RÉSULTATS:');
   console.log(`   ✅ Nouveaux prospects: ${result.new_prospects}`);
   console.log(`   💬 Nouveaux commentaires: ${result.new_comments}`);
   console.log(`   📁 Fichier: ${outputPath}\n`);
