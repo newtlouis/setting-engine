@@ -142,6 +142,33 @@ export async function autoLoginInstagram(page, username, password) {
     
     await delay(2000 + Math.random() * 2000);
     
+    // Handle cookie consent popup (appears before login form)
+    console.log('   → Checking for cookie consent popup...');
+    const cookieButtons = [
+      'button:has-text("Accept")',
+      'button:has-text("Allow")',
+      'button:has-text("Accept All")',
+      'button:has-text("Accepter")',
+      'button:has-text("Tout accepter")',
+      'button:has-text("Autoriser")',
+      '[role="button"]:has-text("Accept")',
+      '[role="button"]:has-text("Accepter")'
+    ];
+    
+    for (const selector of cookieButtons) {
+      try {
+        const cookieButton = await page.$(selector);
+        if (cookieButton) {
+          console.log('   → Accepting cookies...');
+          await cookieButton.click();
+          await delay(1000);
+          break;
+        }
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
+    
     // Wait for login form to be visible
     console.log('   → Waiting for login form...');
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
@@ -156,9 +183,18 @@ export async function autoLoginInstagram(page, username, password) {
     await page.fill('input[name="password"]', password);
     await delay(500 + Math.random() * 500);
     
-    // Click login button
+    // Click login button - use force click to bypass any overlays
     console.log('   → Clicking login button...');
-    await page.click('button[type="submit"]');
+    try {
+      await page.click('button[type="submit"]', { force: true });
+    } catch (err) {
+      // Fallback: try clicking with JavaScript
+      console.log('   → Retrying with JavaScript click...');
+      await page.evaluate(() => {
+        const submitBtn = document.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.click();
+      });
+    }
     
     // Wait for navigation or error
     console.log('   → Waiting for login response...');
