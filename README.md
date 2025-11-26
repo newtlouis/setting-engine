@@ -80,30 +80,57 @@ Generates Instagram posts, reels scripts, hooks, and carousels.
 
 ---
 
-## 📦 Installation
+## 🚀 Quick Start (5 Minutes)
+
+### 1. Install Collector Agent
+
+```bash
+cd agents/collector
+npm install
+npx playwright install chromium
+```
+
+### 2. Configure Auto-Login (Optional)
+
+```bash
+./setup-autologin.sh
+```
+
+Or manually create `.env`:
+```bash
+INSTAGRAM_USERNAME=your_username
+INSTAGRAM_PASSWORD="your_password"
+```
+
+### 3. Run Your First Scrape
+
+```bash
+npm run scrape -- --hashtags marketing --target-prospects 20
+```
+
+### 4. View Results
+
+```bash
+./open-crm.sh  # Opens Excel CRM with engagement scores
+```
+
+---
+
+## 📦 Full Installation
 
 ### Prerequisites
 
 - Node.js 18+
 - npm or yarn
 
-### Quick Start
+### Install Additional Agents
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd instagram-lead-engine
-
-# Install Collector Agent
-cd agents/collector
-npm install
-npx playwright install chromium
-
 # Install DM Responder Agent
-cd ../dmresponder
+cd agents/dmresponder
 npm install
 
-# Repeat for other agents as needed
+# Install other agents as needed
 ```
 
 ## 🚀 Usage
@@ -112,13 +139,13 @@ npm install
 
 ```bash
 cd agents/collector
-node bin/run.js --mode both \
-  --hashtags fitness transformation \
-  --profiles competitor_coach \
-  --max-posts 50
+npm run scrape -- --hashtags fitness transformation --target-prospects 50
 ```
 
-**Output**: `output/posts.csv`, `output/comments.csv`
+**Output**: 
+- `output/instagram_prospects.xlsx` - Excel CRM with 3 tabs
+- `output/comments.csv` - Raw comments
+- `output/posts.csv` - Discovered posts
 
 ---
 

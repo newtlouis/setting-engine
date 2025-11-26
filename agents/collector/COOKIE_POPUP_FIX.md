@@ -8,39 +8,64 @@ Lors de l'auto-login, Instagram affiche un popup de consentement aux cookies qui
 ❌ Auto-login error: page.click: Timeout 30000ms exceeded.
 ```
 
-## Solution Implémentée
+### Nouveau format de popup (Nov 2024)
 
-Le système détecte et accepte automatiquement le popup de cookies avant de tenter la connexion.
+Instagram a changé le format de la popup de cookies. Le nouveau HTML contient :
 
-### Code ajouté dans `autoLoginInstagram()`
+```html
+<button class="_a9-- _ap36 _asz1" tabindex="0">Allow all cookies</button>
+<button class="_a9-- _ap36 _a9_1" tabindex="0">Decline optional cookies</button>
+```
+
+## Solution Implémentée (Version 2 - Nov 2024)
+
+Le système utilise maintenant **3 méthodes** pour détecter et accepter le popup de cookies :
+
+### Méthode 1 : Sélecteurs multiples
 
 ```javascript
-// Handle cookie consent popup (appears before login form)
-console.log('   → Checking for cookie consent popup...');
-const cookieButtons = [
+const cookieSelectors = [
+  'button:has-text("Allow all cookies")',          // ✅ NEW
+  'button:has-text("Autoriser tous les cookies")', // ✅ NEW (FR)
+  'button._a9--._ap36._asz1',                      // ✅ NEW (Class-based)
   'button:has-text("Accept")',
-  'button:has-text("Allow")',
   'button:has-text("Accept All")',
-  'button:has-text("Accepter")',
-  'button:has-text("Tout accepter")',
-  'button:has-text("Autoriser")',
-  '[role="button"]:has-text("Accept")',
-  '[role="button"]:has-text("Accepter")'
+  // ... autres sélecteurs
 ];
+```
 
-for (const selector of cookieButtons) {
-  try {
-    const cookieButton = await page.$(selector);
-    if (cookieButton) {
-      console.log('   → Accepting cookies...');
-      await cookieButton.click();
-      await delay(1000);
-      break;
-    }
-  } catch (e) {
-    // Continue to next selector
-  }
+### Méthode 2 : Force click
+
+Si le clic normal échoue (overlay, popup, etc.) :
+
+```javascript
+try {
+  await cookieButton.click({ timeout: 3000 });
+} catch (clickErr) {
+  // Force click bypasses overlays
+  await cookieButton.click({ force: true });
 }
+```
+
+### Méthode 3 : JavaScript evaluation (Fallback ultime)
+
+Si aucun sélecteur ne fonctionne, on cherche le bouton directement dans le DOM :
+
+```javascript
+const jsClicked = await page.evaluate(() => {
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const cookieButton = buttons.find(btn => 
+    btn.textContent.includes('Allow all cookies') ||
+    btn.textContent.includes('Autoriser tous les cookies') ||
+    btn.textContent.includes('Accept')
+  );
+  
+  if (cookieButton) {
+    cookieButton.click();
+    return true;
+  }
+  return false;
+});
 ```
 
 ### Amélioration du clic sur le bouton Login
@@ -79,8 +104,22 @@ Maintenant, lors de l'auto-login :
 ## Langues Supportées
 
 Le système détecte les popups de cookies en :
-- **Anglais** : "Accept", "Accept All", "Allow"
-- **Français** : "Accepter", "Tout accepter", "Autoriser"
+- **Anglais** : "Allow all cookies", "Accept", "Accept All", "Allow"
+- **Français** : "Autoriser tous les cookies", "Accepter", "Tout accepter", "Autoriser"
+
+## Textes de Boutons Supportés (Nov 2024)
+
+### Format actuel Instagram
+- ✅ "Allow all cookies" (EN)
+- ✅ "Autoriser tous les cookies" (FR)
+- ✅ "Decline optional cookies" (EN - non utilisé car on veut tout accepter)
+- ✅ Classes CSS : `._a9--._ap36._asz1`
+
+### Anciens formats (rétro-compatibilité)
+- ✅ "Accept"
+- ✅ "Accept All"
+- ✅ "Accepter"
+- ✅ "Tout accepter"
 
 ## Autres Popups Gérés
 

@@ -2,25 +2,11 @@
 
 **Part of the Instagram Lead Engine**
 
-Multi-mode agent for discovering and scraping Instagram posts and comments from hashtags and competitor profiles.
+Multi-mode agent for discovering and scraping Instagram posts and comments from hashtags and competitor profiles. Generates an Excel CRM with engagement scoring.
 
-## 🚀 Features
+## 🚀 Quick Start
 
-- **Hashtag Discovery**: Find posts from specific hashtags
-- **Profile Discovery**: Scrape posts from competitor profiles  
-- **Comment Extraction**: Collect comments with metadata
-- **Modular Modes**: Run discovery only, scraping only, or both
-- **Safety First**: Manual login, headful browser, randomized delays
-- **ToS Compliant**: Stops on challenge detection, respects rate limits
-
-## 📦 Installation
-
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-
-### Setup
+### 1. Installation
 
 ```bash
 cd agents/collector
@@ -28,43 +14,86 @@ npm install
 npx playwright install chromium
 ```
 
-### Configuration
+### 2. Configure Auto-Login (Recommended)
 
 ```bash
-cp .env.example .env
-# Edit .env as needed
+./setup-autologin.sh
 ```
+
+This will:
+- Prompt for Instagram username/password
+- Save credentials to `.env` securely
+- Handle special characters automatically
+
+**Manual configuration**: Copy `.env.example` to `.env` and edit:
+```bash
+INSTAGRAM_USERNAME=your_username
+INSTAGRAM_PASSWORD="your_password"  # Use quotes for special characters
+```
+
+See `SPECIAL_CHARS_GUIDE.md` if your password contains `"`, `'`, or `\`.
+
+### 3. Run Your First Scrape
+
+```bash
+npm run scrape -- --hashtags marketing entrepreneurship --target-prospects 50
+```
+
+### 4. View Results
+
+```bash
+./open-crm.sh
+```
+
+Opens `output/instagram_prospects.xlsx` with 3 tabs:
+- **Prospects**: Sorted by engagement score (HIGH/MEDIUM/LOW)
+- **Historique**: All comments chronologically
+- **Analytics**: Summary statistics
+
+---
+
+## 🎯 Features
+
+- **Hashtag Discovery**: Find posts from specific hashtags
+- **Profile Discovery**: Scrape posts from competitor profiles  
+- **Comment Extraction**: Collect comments with user metadata
+- **Engagement Scoring**: 50-point algorithm (see `ENGAGEMENT_SCORING.md`)
+- **Excel CRM**: Automated prospect classification
+- **Auto-Login**: Handles Instagram cookies/popups automatically
+- **Modular Modes**: Run discovery only, scraping only, or both
+- **Safety First**: Randomized delays, challenge detection
+- **ToS Compliant**: Stops on rate limits, manual verification support
 
 ## 🎯 Usage
 
-### Basic Examples
+### NPM Scripts (Recommended)
 
-**Discover posts from hashtags:**
 ```bash
-node bin/run.js --mode hashtags --hashtags fitness motivation wellness --max-posts 30
+# Scrape hashtags
+npm run scrape -- --hashtags marketing business --target-prospects 50
+
+# Scrape competitor profiles
+npm run scrape -- --profiles https://instagram.com/competitor1 --target-prospects 30
+
+# Combine both
+npm run scrape -- --hashtags startup --profiles https://instagram.com/ycombinator --target-prospects 100
+
+# Discovery only (no comment scraping)
+npm run scrape -- --mode only-discover --hashtags fitness --max-posts 50
+
+# Scrape previously discovered posts
+npm run scrape -- --mode scrape-comments --target-prospects 50
 ```
 
-**Discover posts from competitor profiles:**
-```bash
-node bin/run.js --mode profiles --profiles competitor_coach fitness_brand --max-posts 50
-```
+### Direct CLI Usage
 
-**Discover from both hashtags and profiles:**
 ```bash
+# Full syntax
 node bin/run.js --mode both \
   --hashtags fitness transformation \
   --profiles competitor_coach \
-  --max-posts 25
-```
-
-**Discovery only (no comment scraping):**
-```bash
-node bin/run.js --mode only-discover --hashtags fitness --max-posts 20
-```
-
-**Scrape comments from previously discovered posts:**
-```bash
-node bin/run.js --mode scrape-comments --max-comments 100
+  --max-posts 25 \
+  --target-prospects 50
 ```
 
 ### CLI Options
@@ -83,37 +112,52 @@ Options:
 
 ## 📊 Output Files
 
-### `posts.csv`
+All files are saved to `output/` directory.
 
-Columns: `source_type`, `source_name`, `post_url`, `post_date`, `likes`, `comments_count`, `caption_excerpt`
+### `instagram_prospects.xlsx` (Main CRM)
 
-```csv
-source_type,source_name,post_url,post_date,likes,comments_count,caption_excerpt
-hashtag,fitness,https://www.instagram.com/p/ABC123/,2024-01-14T18:30:00.000Z,1234,87,Loving this new fitness journey...
-```
+Excel workbook with 3 tabs:
+
+**1. Prospects Tab**
+- Sorted by engagement score (50-point algorithm)
+- Columns: Username, Profile URL, Comment, Score, Engagement Level, Comment Date, Post URL
+- Classification: HIGH (35+), MEDIUM (20-34), LOW (0-19)
+
+**2. Historique Tab**
+- All comments chronologically
+- Full conversation context
+
+**3. Analytics Tab**
+- Total prospects count
+- Average engagement score
+- Distribution by engagement level
+- Top hashtags/sources
+
+See `ENGAGEMENT_SCORING.md` for scoring algorithm details.
 
 ### `comments.csv`
 
-Columns: `post_url`, `username`, `profile_url`, `comment_text`, `comment_date`, `followers_estimate`
-
+Raw comments data:
 ```csv
 post_url,username,profile_url,comment_text,comment_date,followers_estimate
 https://instagram.com/p/ABC123/,sarah_fitness23,https://instagram.com/sarah_fitness23/,This is what I needed!,2024-01-14T19:00:00.000Z,
 ```
 
+### `posts.csv`
+
+Discovered posts metadata:
+```csv
+source_type,source_name,post_url,post_date,likes,comments_count,caption_excerpt
+hashtag,fitness,https://www.instagram.com/p/ABC123/,2024-01-14T18:30:00.000Z,1234,87,Loving this new fitness journey...
+```
+
+### `tracking.json`
+
+Internal tracking file to avoid re-scraping already processed posts.
+
 ### `context/*.json`
 
-Individual JSON files per post with full metadata:
-
-```json
-{
-  "post_url": "https://www.instagram.com/p/ABC123/",
-  "scraped_at": "2024-01-15T14:23:45.678Z",
-  "caption": "Full caption text...",
-  "likes": "1,234 likes",
-  "comments_count": "87"
-}
-```
+Individual JSON files per post with full metadata (for future analysis).
 
 ## 🔒 Safety & Compliance
 
@@ -165,24 +209,78 @@ npm test
 
 ## 🛠️ Troubleshooting
 
+### Cookie Popup Not Closing
+
+Instagram changed their cookie popup in Nov 2024 to "Allow all cookies".
+
+**Quick test:**
+```bash
+node test-cookie-popup.js
+```
+
+**If it fails:**
+```bash
+# Clear Playwright cache
+rm -rf ~/Library/Caches/ms-playwright
+npx playwright install chromium
+
+# Read full debug guide
+cat DEBUG_COOKIE_POPUP.md
+```
+
+The system now handles 8+ cookie popup variants automatically (see `COOKIE_POPUP_FIX.md`).
+
 ### "Login verification failed"
 
-**Solution**: Ensure you've logged in completely and see your Instagram feed before pressing Enter.
+**If using auto-login:**
+```bash
+# Test credentials parsing
+node test-env-parsing.js
+
+# Reconfigure if needed
+./setup-autologin.sh
+```
+
+**If using manual login:**
+Ensure you've logged in completely and see your Instagram feed before pressing Enter.
 
 ### "Challenge detected"
 
-**Solution**: Instagram has flagged suspicious activity. Wait 24-48 hours, use a different account, or reduce scraping frequency.
+Instagram flagged suspicious activity. Wait 24-48 hours, use a different account, or reduce scraping frequency.
 
-### Selectors not finding elements
+### Password with Special Characters
 
-**Solution**: Instagram may have updated their UI. Check `prompts/selector_notes.md` and update selectors in `src/config.js`.
+If your password contains `"`, `'`, or `\`, read `SPECIAL_CHARS_GUIDE.md` or run:
+```bash
+./setup-autologin.sh  # Handles escaping automatically
+```
 
-### Browser won't open
+### Empty Excel File
 
-**Solution**: Reinstall Playwright browsers:
+If Excel was generated but has old/wrong data:
+```bash
+node regenerate-crm.js
+```
+
+This regenerates the Excel from existing CSV files.
+
+### Engagement Scores Wrong
+
+```bash
+node test-engagement.js
+```
+
+See `ENGAGEMENT_SCORING.md` for algorithm details.
+
+### Browser Won't Open
+
 ```bash
 npx playwright install --force chromium
 ```
+
+### Selectors Not Finding Elements
+
+Instagram may have updated their UI. Check `prompts/selector_notes.md` and update selectors in `src/config.js`.
 
 ## 📁 Project Structure
 
@@ -205,13 +303,43 @@ collector/
 └── README.md
 ```
 
-## 🔄 Next Steps
+## 🧪 Testing
+
+### Run All Tests
+```bash
+./test-all.sh
+```
+
+### Individual Tests
+```bash
+node test-cookie-popup.js    # Test Instagram cookie popup handling
+node test-env-parsing.js     # Test .env credentials parsing
+node test-engagement.js      # Test engagement scoring algorithm
+node test-crm-enhanced.js    # Test Excel CRM generation
+```
+
+---
+
+## 📚 Additional Documentation
+
+| File | Description |
+|------|-------------|
+| `AUTOLOGIN_SETUP.md` | Detailed auto-login configuration guide |
+| `COOKIE_POPUP_FIX.md` | Technical details of cookie popup fix (Nov 2024) |
+| `DEBUG_COOKIE_POPUP.md` | Complete troubleshooting guide for cookie issues |
+| `ENGAGEMENT_SCORING.md` | 50-point engagement algorithm documentation |
+| `SPECIAL_CHARS_GUIDE.md` | How to handle special characters in passwords |
+
+---
+
+## 🔄 Integration with Other Agents
 
 After collecting data with this agent:
 
-1. Use **PROSPECTOR AGENT** to classify leads from `comments.csv`
-2. Use **LEAD ANALYZER AGENT** to identify top prospects
-3. Use **DMRESPONDER AGENT** to generate contextual replies (after manual outreach)
+1. Open CRM: `./open-crm.sh`
+2. Sort by Score (descending)
+3. Manually reach out to HIGH engagement prospects
+4. Use **DMRESPONDER AGENT** to generate contextual follow-up messages
 
 ## 📝 License
 
