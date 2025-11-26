@@ -26,11 +26,12 @@ program
   .version('1.0.0');
 
 program
-  .option('-m, --mode <mode>', 'Mode: hashtags|profiles|both|only-discover|scrape-comments', 'both')
+  .option('-m, --mode <mode>', 'Mode: hashtags|profiles|both|only-discover|scrape-comments|daily|deep', 'both')
   .option('-t, --hashtags <tags...>', 'Hashtags to scrape (space-separated)')
   .option('-p, --profiles <urls...>', 'Competitor profile URLs (space-separated)')
   .option('--max-posts <number>', 'Maximum posts per source', '50')
   .option('--max-comments <number>', 'Maximum comments per post', '100')
+  .option('--target-prospects <number>', 'Target number of new prospects to find', '50')
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('--headless', 'Run in headless mode (NOT RECOMMENDED - may trigger detection)', false)
   .action(async (options) => {
@@ -38,11 +39,21 @@ program
       console.log('🚀 Instagram Collector Agent starting...\n');
       
       // Validate mode
-      const validModes = ['hashtags', 'profiles', 'both', 'only-discover', 'scrape-comments'];
+      const validModes = ['hashtags', 'profiles', 'both', 'only-discover', 'scrape-comments', 'daily', 'deep'];
       if (!validModes.includes(options.mode)) {
         console.error(`❌ Invalid mode: ${options.mode}`);
         console.error(`   Valid modes: ${validModes.join(', ')}`);
         process.exit(1);
+      }
+      
+      // Map new modes to standard modes
+      if (options.mode === 'daily' || options.mode === 'deep') {
+        if (!options.hashtags || options.hashtags.length === 0) {
+          console.error(`❌ Mode "${options.mode}" requires --hashtags parameter`);
+          process.exit(1);
+        }
+        // Daily and deep modes are variations of hashtag mode
+        options.mode = 'hashtags';
       }
 
       // Validate inputs based on mode
