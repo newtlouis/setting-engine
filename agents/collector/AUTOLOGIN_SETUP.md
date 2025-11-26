@@ -28,6 +28,21 @@ INSTAGRAM_PASSWORD=ton_mot_de_passe_instagram
 - Ton nom d'utilisateur Instagram
 - Ton numéro de téléphone
 
+**⚠️ Si ton mot de passe contient des caractères spéciaux :**
+
+```env
+# ✅ Utilise des guillemets doubles
+INSTAGRAM_PASSWORD="Mon'P@ss#123"
+
+# ✅ Exemples de caractères spéciaux supportés
+INSTAGRAM_PASSWORD="Pass'avec'apostrophes"
+INSTAGRAM_PASSWORD="Pass@avec#symboles!"
+INSTAGRAM_PASSWORD="Pass avec espaces"
+INSTAGRAM_PASSWORD="Pass$dollar"
+
+# 💡 Le script setup-autologin.sh gère ceci automatiquement !
+```
+
 ### Étape 3 : Sauvegarder et tester
 
 Sauvegarde le fichier et lance le scraper comme d'habitude :
@@ -149,10 +164,23 @@ INSTAGRAM_PASSWORD=
 **Solutions :**
 1. Vérifie que ton mot de passe est correct (essaye de te connecter manuellement)
 2. Vérifie qu'il n'y a pas d'espaces avant/après le mot de passe dans `.env`
-3. Si tu utilises des caractères spéciaux, entoure le mot de passe de guillemets :
+3. **Si ton mot de passe contient des caractères spéciaux** (`'`, `"`, `!`, `@`, `#`, `$`, etc.), utilise des **guillemets doubles** :
    ```env
-   INSTAGRAM_PASSWORD="M0n_P@ss!#123"
+   # ✅ RECOMMANDÉ : Guillemets doubles
+   INSTAGRAM_PASSWORD="M0n'P@ss!#123"
+   
+   # ✅ Fonctionne aussi : Sans guillemets
+   INSTAGRAM_PASSWORD=M0n'P@ss!#123
+   
+   # ❌ NE PAS FAIRE : Guillemets simples avec apostrophe
+   INSTAGRAM_PASSWORD='Mon'Pass'  # ← Erreur !
    ```
+
+4. **Cas particuliers :**
+   - Apostrophe `'` : Utilise des guillemets doubles `"Mon'Pass"`
+   - Guillemets doubles `"` : Échappe-les `"Mon\"Pass"` ou utilise sans guillemets
+   - Espaces : **OBLIGATOIRE** guillemets doubles `"Mon Pass 123"`
+   - Dollar `$` : Utilise guillemets doubles `"Pass$123"`
 
 ### Problème : "Auto-login failed. Falling back to manual login"
 
