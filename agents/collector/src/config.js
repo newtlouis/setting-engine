@@ -2,6 +2,9 @@
  * Configuration Constants
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 export const CONFIG = {
   // Delays (in milliseconds)
   MIN_DELAY: 4000,
@@ -18,6 +21,10 @@ export const CONFIG = {
   // Default limits
   DEFAULT_MAX_POSTS: 50,
   DEFAULT_MAX_COMMENTS: 100,
+
+  // Instagram credentials (optional - for auto-login)
+  INSTAGRAM_USERNAME: process.env.INSTAGRAM_USERNAME || '',
+  INSTAGRAM_PASSWORD: process.env.INSTAGRAM_PASSWORD || '',
 
   // Instagram selectors (centralized for easy updates)
   // FIX NOTE: Update these selectors if Instagram changes their DOM structure

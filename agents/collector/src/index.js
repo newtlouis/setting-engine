@@ -8,7 +8,7 @@
 import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
 import { scrapePostComments } from './scrape_post.js';
-import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge } from './utils.js';
+import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge, autoLoginInstagram } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
 import { PostTracker } from './post_tracker.js';
@@ -66,26 +66,57 @@ export async function runCollector(config) {
   let newProspectsFound = 0;
 
   try {
-    // Step 1: Manual Login
-    console.log('📱 Opening Instagram...');
-    await page.goto('https://www.instagram.com/accounts/login/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000
-    });
+    // Step 1: Login (Auto or Manual)
+    const hasCredentials = CONFIG.INSTAGRAM_USERNAME && CONFIG.INSTAGRAM_PASSWORD;
+    
+    if (hasCredentials) {
+      // Auto-login with credentials from .env
+      const loginSuccess = await autoLoginInstagram(page, CONFIG.INSTAGRAM_USERNAME, CONFIG.INSTAGRAM_PASSWORD);
+      
+      if (!loginSuccess) {
+        console.log('\n⚠️  Auto-login failed. Falling back to manual login...\n');
+        
+        // Fallback to manual login
+        console.log('📱 Opening Instagram...');
+        await page.goto('https://www.instagram.com/accounts/login/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 60000
+        });
 
-    console.log('\n⏸️  Please log in manually in the browser window.');
-    console.log('   Complete any 2FA or security checks.');
-    console.log('   Press ENTER here when you see your Instagram feed...\n');
+        console.log('\n⏸️  Please log in manually in the browser window.');
+        console.log('   Complete any 2FA or security checks.');
+        console.log('   Press ENTER here when you see your Instagram feed...\n');
 
-    // Wait for user input
-    await waitForEnter();
+        await waitForEnter();
 
-    // Verify login success
-    await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
-      throw new Error('Login verification failed. Please ensure you are logged in.');
-    });
+        await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
+          throw new Error('Login verification failed. Please ensure you are logged in.');
+        });
 
-    console.log('✅ Login successful!\n');
+        console.log('✅ Login successful!\n');
+      }
+    } else {
+      // Manual login (no credentials provided)
+      console.log('📱 Opening Instagram...');
+      console.log('💡 Tip: Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login\n');
+      
+      await page.goto('https://www.instagram.com/accounts/login/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
+
+      console.log('⏸️  Please log in manually in the browser window.');
+      console.log('   Complete any 2FA or security checks.');
+      console.log('   Press ENTER here when you see your Instagram feed...\n');
+
+      await waitForEnter();
+
+      await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
+        throw new Error('Login verification failed. Please ensure you are logged in.');
+      });
+
+      console.log('✅ Login successful!\n');
+    }
 
     // Step 2: Discovery phase
     if (config.mode === 'hashtags' || config.mode === 'both' || config.mode === 'only-discover') {

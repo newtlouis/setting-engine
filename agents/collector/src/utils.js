@@ -121,3 +121,112 @@ export function extractPostMetadata(postElement) {
   // Future: extract likes, comments count, date from post grid thumbnail
   return {};
 }
+
+/**
+ * Auto-login to Instagram using credentials from environment variables
+ * 
+ * @param {Page} page - Playwright page object
+ * @param {string} username - Instagram username
+ * @param {string} password - Instagram password
+ * @returns {Promise<boolean>} - True if login successful, false otherwise
+ */
+export async function autoLoginInstagram(page, username, password) {
+  try {
+    console.log('🔐 Auto-login enabled, logging in to Instagram...');
+    
+    // Navigate to login page
+    await page.goto('https://www.instagram.com/accounts/login/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
+    
+    await delay(2000 + Math.random() * 2000);
+    
+    // Wait for login form to be visible
+    console.log('   → Waiting for login form...');
+    await page.waitForSelector('input[name="username"]', { timeout: 10000 });
+    
+    // Fill username
+    console.log('   → Entering username...');
+    await page.fill('input[name="username"]', username);
+    await delay(500 + Math.random() * 500);
+    
+    // Fill password
+    console.log('   → Entering password...');
+    await page.fill('input[name="password"]', password);
+    await delay(500 + Math.random() * 500);
+    
+    // Click login button
+    console.log('   → Clicking login button...');
+    await page.click('button[type="submit"]');
+    
+    // Wait for navigation or error
+    console.log('   → Waiting for login response...');
+    await delay(3000 + Math.random() * 2000);
+    
+    // Check if login was successful
+    const currentUrl = page.url();
+    
+    // Check for login errors
+    const errorElement = await page.$('p[data-testid="login-error-message"]').catch(() => null);
+    if (errorElement) {
+      const errorText = await errorElement.textContent();
+      console.error('   ❌ Login failed:', errorText);
+      return false;
+    }
+    
+    // Check for 2FA challenge
+    if (currentUrl.includes('/challenge/') || currentUrl.includes('/accounts/login/two_factor')) {
+      console.log('\n⚠️  Two-factor authentication detected!');
+      console.log('   Please complete the 2FA verification in the browser.');
+      console.log('   Press ENTER here when you see your Instagram feed...\n');
+      
+      // Wait for manual 2FA completion
+      const { createInterface } = await import('readline');
+      await new Promise((resolve) => {
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        rl.question('', () => {
+          rl.close();
+          resolve();
+        });
+      });
+      
+      return true;
+    }
+    
+    // Wait for successful redirect to home page
+    try {
+      await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 });
+      console.log('   ✅ Auto-login successful!');
+      
+      // Handle "Save Your Login Info?" popup
+      await delay(2000);
+      const saveInfoButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
+      if (saveInfoButton) {
+        console.log('   → Dismissing "Save Login Info" popup...');
+        await saveInfoButton.click();
+        await delay(1000);
+      }
+      
+      // Handle "Turn on Notifications?" popup
+      const notifButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
+      if (notifButton) {
+        console.log('   → Dismissing "Turn on Notifications" popup...');
+        await notifButton.click();
+        await delay(1000);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('   ❌ Login verification failed');
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('   ❌ Auto-login error:', error.message);
+    return false;
+  }
+}
