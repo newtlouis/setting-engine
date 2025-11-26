@@ -144,29 +144,84 @@ export async function autoLoginInstagram(page, username, password) {
     
     // Handle cookie consent popup (appears before login form)
     console.log('   → Checking for cookie consent popup...');
-    const cookieButtons = [
+    
+    // Try multiple methods to find and click the cookie acceptance button
+    let cookieHandled = false;
+    
+    // Method 1: Try new Instagram cookie popup with "Allow all cookies" button
+    const cookieSelectors = [
+      'button:has-text("Allow all cookies")',
+      'button:has-text("Autoriser tous les cookies")',
+      'button._a9-- _ap36._asz1', // Class-based selector for "Allow all cookies"
       'button:has-text("Accept")',
       'button:has-text("Allow")',
       'button:has-text("Accept All")',
       'button:has-text("Accepter")',
       'button:has-text("Tout accepter")',
       'button:has-text("Autoriser")',
-      '[role="button"]:has-text("Accept")',
-      '[role="button"]:has-text("Accepter")'
     ];
     
-    for (const selector of cookieButtons) {
+    for (const selector of cookieSelectors) {
       try {
         const cookieButton = await page.$(selector);
-        if (cookieButton) {
+        if (cookieButton && await cookieButton.isVisible()) {
+          console.log(`   → Found cookie button with selector: ${selector}`);
           console.log('   → Accepting cookies...');
-          await cookieButton.click();
-          await delay(1000);
-          break;
+          
+          // Try regular click first
+          try {
+            await cookieButton.click({ timeout: 3000 });
+            cookieHandled = true;
+            await delay(1500);
+            break;
+          } catch (clickErr) {
+            // If regular click fails, try force click
+            console.log('   → Retrying with force click...');
+            await cookieButton.click({ force: true });
+            cookieHandled = true;
+            await delay(1500);
+            break;
+          }
         }
       } catch (e) {
         // Continue to next selector
+        continue;
       }
+    }
+    
+    // Method 2: If no button found, try JavaScript evaluation
+    if (!cookieHandled) {
+      try {
+        console.log('   → Trying JavaScript-based cookie acceptance...');
+        const jsClicked = await page.evaluate(() => {
+          // Look for buttons with specific text
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const cookieButton = buttons.find(btn => 
+            btn.textContent.includes('Allow all cookies') ||
+            btn.textContent.includes('Autoriser tous les cookies') ||
+            btn.textContent.includes('Accept') ||
+            btn.textContent.includes('Accepter')
+          );
+          
+          if (cookieButton) {
+            cookieButton.click();
+            return true;
+          }
+          return false;
+        });
+        
+        if (jsClicked) {
+          console.log('   ✅ Cookie popup handled with JavaScript');
+          cookieHandled = true;
+          await delay(1500);
+        }
+      } catch (jsErr) {
+        // Continue anyway
+      }
+    }
+    
+    if (!cookieHandled) {
+      console.log('   ⚠️  No cookie popup detected (may already be accepted)');
     }
     
     // Wait for login form to be visible
@@ -233,33 +288,79 @@ export async function autoLoginInstagram(page, username, password) {
       return true;
     }
     
-    // Wait for successful redirect to home page
-    try {
-      await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 });
-      console.log('   ✅ Auto-login successful!');
-      
-      // Handle "Save Your Login Info?" popup
-      await delay(2000);
-      const saveInfoButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
-      if (saveInfoButton) {
-        console.log('   → Dismissing "Save Login Info" popup...');
-        await saveInfoButton.click();
-        await delay(1000);
+    // Check if "Save Your Login Info?" popup appears (means login succeeded!)
+    console.log('   → Checking for "Save Login Info" popup...');
+    await delay(2000);
+    
+    const saveInfoSelectors = [
+      'text=/save info|save your login info|enregistrer/i',
+      'text=/not now|pas maintenant/i',
+      'button:has-text("Not Now")',
+      'button:has-text("Pas maintenant")',
+      '[role="button"]:has-text("Not Now")',
+      '[role="button"]:has-text("Pas maintenant")'
+    ];
+    
+    let loginSuccessful = false;
+    
+    // If "Save Info" popup appears, login was successful
+    for (const selector of saveInfoSelectors) {
+      try {
+        const popup = await page.$(selector);
+        if (popup && await popup.isVisible()) {
+          console.log('   ✅ Login successful! (Save Info popup detected)');
+          loginSuccessful = true;
+          
+          // Click "Not Now"
+          const notNowButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
+          if (notNowButton) {
+            console.log('   → Dismissing "Save Login Info" popup...');
+            await notNowButton.click();
+            await delay(1000);
+          }
+          
+          break;
+        }
+      } catch (e) {
+        continue;
       }
-      
-      // Handle "Turn on Notifications?" popup
-      const notifButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
-      if (notifButton) {
-        console.log('   → Dismissing "Turn on Notifications" popup...');
-        await notifButton.click();
-        await delay(1000);
+    }
+    
+    // Alternative: Check if we're on the home page
+    if (!loginSuccessful) {
+      try {
+        await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 5000 });
+        console.log('   ✅ Auto-login successful! (Home page detected)');
+        loginSuccessful = true;
+      } catch (err) {
+        // Not on home page yet, but might still be successful
       }
-      
-      return true;
-    } catch (err) {
+    }
+    
+    // Alternative: Check if login form disappeared
+    if (!loginSuccessful) {
+      const loginForm = await page.$('input[name="username"]').catch(() => null);
+      if (!loginForm) {
+        console.log('   ✅ Auto-login successful! (Login form disappeared)');
+        loginSuccessful = true;
+      }
+    }
+    
+    if (!loginSuccessful) {
       console.error('   ❌ Login verification failed');
       return false;
     }
+    
+    // Handle "Turn on Notifications?" popup (appears after Save Info)
+    await delay(1000);
+    const notifButton = await page.$('text=/not now|pas maintenant/i').catch(() => null);
+    if (notifButton && await notifButton.isVisible().catch(() => false)) {
+      console.log('   → Dismissing "Turn on Notifications" popup...');
+      await notifButton.click();
+      await delay(1000);
+    }
+    
+    return true;
     
   } catch (error) {
     console.error('   ❌ Auto-login error:', error.message);
