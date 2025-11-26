@@ -55,7 +55,8 @@ export class ExcelCRM {
       { header: 'First Seen', key: 'first_seen', width: 15 },
       { header: 'Last Active', key: 'last_active', width: 15 },
       { header: 'Total Comments', key: 'total_comments', width: 15 },
-      { header: 'Engagement Score', key: 'engagement_score', width: 18 },
+      { header: 'Engagement Level', key: 'engagement_level', width: 18 },
+      { header: 'Score', key: 'score', width: 10 },
       { header: 'Last Comment', key: 'last_comment_text', width: 50 },
       { header: 'Tags', key: 'tags', width: 30 },
       { header: 'Status', key: 'status', width: 15 }
@@ -174,6 +175,9 @@ export class ExcelCRM {
           return currentDate > latestDate ? current : latest;
         });
 
+        // Calculate engagement
+        const engagement = this.calculateEngagementScore(userComments);
+        
         // Add to prospects sheet
         prospectsSheet.addRow({
           username: username,
@@ -181,7 +185,8 @@ export class ExcelCRM {
           first_seen: now.toLocaleDateString(),
           last_active: now.toLocaleDateString(),
           total_comments: userComments.length,
-          engagement_score: this.calculateEngagementScore(userComments),
+          engagement_level: engagement.level,
+          score: engagement.score,
           last_comment_text: latestComment.comment_text,
           tags: source,
           status: 'NEW'
@@ -206,15 +211,19 @@ export class ExcelCRM {
             return currentDate > latestDate ? current : latest;
           }, userComments[0]);
           
+          // Calculate updated engagement
+          const engagement = this.calculateEngagementScore(userComments);
+          
           row.getCell(4).value = now.toLocaleDateString(); // Last Active column
           row.getCell(5).value = currentTotal + userComments.length; // Total Comments
-          row.getCell(6).value = this.calculateEngagementScore(userComments); // Engagement Score
-          row.getCell(7).value = latestComment.comment_text; // Last Comment
+          row.getCell(6).value = engagement.level; // Engagement Level
+          row.getCell(7).value = engagement.score; // Score
+          row.getCell(8).value = latestComment.comment_text; // Last Comment
           
           // Add source as tag if not already present
-          const currentTags = row.getCell(8).value || ''; // Tags column
+          const currentTags = row.getCell(9).value || ''; // Tags column (now column 9)
           if (!currentTags.includes(source)) {
-            row.getCell(8).value = currentTags ? `${currentTags}, ${source}` : source;
+            row.getCell(9).value = currentTags ? `${currentTags}, ${source}` : source;
           }
           
           row.commit();
@@ -265,28 +274,87 @@ export class ExcelCRM {
 
   /**
    * Calculate engagement score based on comment patterns
+   * 
+   * Enhanced algorithm considering:
+   * - Frequency (number of comments)
+   * - Recency (how recent are comments)
+   * - Quality (comment length and content)
+   * - Patterns (questions, emojis, keywords)
    */
   calculateEngagementScore(comments) {
-    // Simple scoring: more recent and frequent comments = higher score
+    if (!comments || comments.length === 0) return 'LOW';
+    
     const now = new Date();
     let score = 0;
     
+    // 1. FREQUENCY SCORE (0-10 points)
+    // Multiple comments show consistent engagement
+    score += Math.min(comments.length * 2, 10);
+    
+    // 2. RECENCY SCORE (0-15 points)
+    // Recent activity is more valuable
+    let recentScore = 0;
     for (const comment of comments) {
       const commentDate = new Date(comment.comment_date || 0);
       const daysAgo = (now - commentDate) / (1000 * 60 * 60 * 24);
       
-      if (daysAgo < 7) score += 3;        // Recent: high value
-      else if (daysAgo < 30) score += 2;  // Medium recent
-      else score += 1;                     // Old but still engaged
-      
-      // Bonus for longer comments (more engaged)
-      if (comment.comment_text.length > 50) score += 1;
+      if (daysAgo < 7) recentScore += 5;       // Very recent: high value
+      else if (daysAgo < 30) recentScore += 3; // Recent: medium value
+      else if (daysAgo < 90) recentScore += 1; // Not too old
     }
+    score += Math.min(recentScore, 15);
     
-    // Normalize to HIGH/MEDIUM/LOW
-    if (score >= 10) return 'HIGH';
-    if (score >= 5) return 'MEDIUM';
-    return 'LOW';
+    // 3. QUALITY SCORE (0-10 points)
+    // Longer, thoughtful comments indicate higher engagement
+    let qualityScore = 0;
+    let totalLength = 0;
+    
+    for (const comment of comments) {
+      const text = comment.comment_text || '';
+      totalLength += text.length;
+      
+      // Individual comment quality
+      if (text.length > 100) qualityScore += 3;      // Detailed comment
+      else if (text.length > 50) qualityScore += 2;  // Engaged comment
+      else if (text.length > 20) qualityScore += 1;  // Basic comment
+    }
+    score += Math.min(qualityScore, 10);
+    
+    // 4. PATTERN SCORE (0-10 points)
+    // Questions and emojis show emotional engagement
+    let patternScore = 0;
+    
+    for (const comment of comments) {
+      const text = comment.comment_text || '';
+      
+      // Questions indicate interest/intent
+      if (text.includes('?')) patternScore += 2;
+      
+      // Emojis indicate emotional engagement
+      if (/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/u.test(text)) patternScore += 1;
+      
+      // Exclamation marks indicate excitement
+      if (text.includes('!')) patternScore += 1;
+      
+      // @ mentions indicate conversation
+      if (text.includes('@')) patternScore += 1;
+    }
+    score += Math.min(patternScore, 10);
+    
+    // 5. AVERAGE LENGTH BONUS (0-5 points)
+    const avgLength = totalLength / comments.length;
+    if (avgLength > 100) score += 5;      // Conversations
+    else if (avgLength > 50) score += 3;  // Engaged
+    else if (avgLength > 20) score += 1;  // Basic
+    
+    // CLASSIFICATION (adjusted thresholds for realistic distribution)
+    // Total possible: 50 points
+    let level;
+    if (score >= 25) level = 'HIGH';        // Top tier: very engaged prospects
+    else if (score >= 12) level = 'MEDIUM'; // Mid tier: moderately engaged
+    else level = 'LOW';                     // Bottom tier: low engagement
+    
+    return { level, score };
   }
 
   /**
