@@ -26,13 +26,32 @@ npm run scrape
 ```
 - Opens browser and logs into Instagram
 - Scrapes posts from hashtags/profiles
-- Saves comments to `data/comments.csv`
+- Saves comments to `output/comments.csv`
+
+**Customize scraping parameters:**
+```bash
+# Limit posts and comments
+npm run scrape -- --max-posts 10 --max-comments 50 -t fitness
+
+# Multiple hashtags
+npm run scrape -- --max-posts 5 --max-comments 100 -t travel paris london
+
+# Scrape from profiles
+npm run scrape -- -m profiles -p https://instagram.com/username
+```
+
+**Available parameters:**
+- `--max-posts <number>` : Maximum posts per hashtag (default: 50)
+- `--max-comments <number>` : Maximum comments per post (default: 100)
+- `-t, --hashtags <tags...>` : Hashtags to scrape
+- `-p, --profiles <urls...>` : Profile URLs to scrape
+- `-m, --mode <mode>` : Mode (hashtags|profiles|both)
 
 ### Step 2: Save to Permanent Storage
 ```bash
 npm run save-comments
 ```
-- Reads `data/comments.csv`
+- Reads `output/comments.csv`
 - Filters out duplicates
 - Appends to `permanent-data/master_comments.csv`
 - Your data is now permanently saved!
@@ -42,7 +61,7 @@ npm run save-comments
 npm run build-final-db
 ```
 - Reads from `permanent-data/master_comments.csv`
-- Creates `data/instagram_final_database.xlsx` with:
+- Creates `output/instagram_final_database.xlsx` with:
   - Sheet 1: All Prospects (complete list)
   - Sheet 2: By Source (grouped by hashtag/profile)
   - Sheet 3: Statistics (summary metrics)
@@ -51,7 +70,7 @@ npm run build-final-db
 
 ```
 collector/
-├── data/                      # Temporary working directory
+├── output/                   # Temporary working directory
 │   ├── comments.csv          # Latest scraping session
 │   └── instagram_final_database.xlsx  # Final Excel output
 ├── permanent-data/           # Permanent storage (never deleted)
@@ -83,7 +102,7 @@ npm run scrape        # Scrape #fitness hashtag
 npm run save-comments # Save to permanent storage  
 npm run build-final-db # Generate Excel report
 
-# The Excel file is now ready at: data/instagram_final_database.xlsx
+# The Excel file is now ready at: output/instagram_final_database.xlsx
 ```
 
 That's it! Simple, reliable, and your data is always safe in the master CSV. 🎉

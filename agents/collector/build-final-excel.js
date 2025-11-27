@@ -16,9 +16,9 @@ const __dirname = path.dirname(__filename);
 
 async function buildFinalExcel() {
   const permanentDir = path.join(__dirname, 'permanent-data');
-  const dataDir = path.join(__dirname, 'data');
+  const outputDir = path.join(__dirname, 'output');
   const masterFile = path.join(permanentDir, 'master_comments.csv');
-  const outputFile = path.join(dataDir, 'instagram_final_database.xlsx');
+  const outputFile = path.join(outputDir, 'instagram_final_database.xlsx');
 
   try {
     // Check if master file exists

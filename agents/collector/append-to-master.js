@@ -15,9 +15,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function appendToMaster() {
-  const dataDir = path.join(__dirname, 'data');
+  const outputDir = path.join(__dirname, 'output');
   const permanentDir = path.join(__dirname, 'permanent-data');
-  const commentsFile = path.join(dataDir, 'comments.csv');
+  const commentsFile = path.join(outputDir, 'comments.csv');
   const masterFile = path.join(permanentDir, 'master_comments.csv');
 
   try {
@@ -28,7 +28,7 @@ async function appendToMaster() {
     try {
       await fs.access(commentsFile);
     } catch {
-      console.log('❌ No comments.csv found in data/ directory');
+      console.log('❌ No comments.csv found in output/ directory');
       console.log('   Run "npm run scrape" first to collect data');
       return;
     }
