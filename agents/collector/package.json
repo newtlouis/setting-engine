@@ -10,6 +10,8 @@
   "scripts": {
     "start": "node bin/run.js",
     "scrape": "node bin/run.js",
+    "save-comments": "node append-to-master.js",
+    "build-final-db": "node build-final-excel.js",
     "test": "node --test tests/*.test.js",
     "dev": "node --watch bin/run.js"
   },
@@ -24,6 +26,7 @@
   "dependencies": {
     "commander": "^11.1.0",
     "csv-parse": "^6.1.0",
+    "csv-stringify": "^6.6.0",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",

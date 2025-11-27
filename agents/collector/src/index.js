@@ -1,8 +1,8 @@
 /**
  * Collector Agent Main Controller
  * 
- * Orchestrates the discovery and scraping workflow with intelligent
- * post tracking and Excel CRM management for optimal prospect discovery.
+ * Orchestrates the discovery and scraping workflow for Instagram data collection.
+ * Outputs data to CSV files for further processing.
  */
 
 import { chromium } from 'playwright';
@@ -11,8 +11,6 @@ import { scrapePostComments } from './scrape_post.js';
 import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge, autoLoginInstagram } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
-import { PostTracker } from './post_tracker.js';
-import { ExcelCRM } from './excel_writer.js';
 
 /**
  * Main collector entry point
@@ -27,18 +25,7 @@ import { ExcelCRM } from './excel_writer.js';
  * @param {boolean} config.headless - Run headless (not recommended)
  */
 export async function runCollector(config) {
-  // Initialize tracking and CRM
-  const tracker = new PostTracker(config.outputDir);
-  await tracker.load();
-  
-  const excelCRM = new ExcelCRM(config.outputDir);
-  await excelCRM.load();
-
-  console.log('📊 Current stats:');
-  const trackerStats = tracker.getStats();
-  console.log(`   Total prospects tracked: ${trackerStats.total_prospects}`);
-  console.log(`   Posts in database: ${trackerStats.total_posts_tracked}`);
-  console.log(`   New today: ${trackerStats.new_today}\n`);
+  console.log('🚀 Starting Instagram data collection...\n');
 
   const browser = await chromium.launch({
     headless: config.headless,
@@ -63,7 +50,6 @@ export async function runCollector(config) {
 
   let allPosts = [];
   let allComments = [];
-  let newProspectsFound = 0;
 
   try {
     // Step 1: Login (Auto or Manual)
@@ -151,122 +137,68 @@ export async function runCollector(config) {
       console.log(`✅ Saved ${allPosts.length} posts to posts.csv\n`);
     }
 
-    // Step 3: Intelligent scraping phase
+    // Step 3: Simple scraping phase - CSV output only
     if (config.mode !== 'only-discover' && allPosts.length > 0) {
-      console.log('🧠 Starting intelligent scraping...\n');
+      console.log('💬 Starting comment scraping...\n');
       
-      // Get source identifier
+      // Get source identifier for tracking
       const source = config.hashtags?.length > 0 
         ? `hashtag:${config.hashtags[0]}` 
         : `profile:${config.profiles?.[0] || 'unknown'}`;
       
-      // Prioritize posts for scraping
-      const categorizedPosts = tracker.prioritizePosts(allPosts.map(p => p.post_url), source);
+      console.log(`📍 Scraping ${allPosts.length} posts...`);
       
-      console.log('📊 Post analysis:');
-      console.log(`   Never scraped: ${categorizedPosts.never_scraped.length} posts`);
-      console.log(`   Recent (< 24h): ${categorizedPosts.recent_rescrape.length} posts`);
-      console.log(`   Medium (1-7d): ${categorizedPosts.medium_rescrape.length} posts`);
-      console.log(`   Old (> 7d): ${categorizedPosts.old_rescrape.length} posts\n`);
-      
-      // Target new prospects count (configurable)
-      const targetNewProspects = config.targetProspects || 50;
-      console.log(`🎯 Target: Find ${targetNewProspects} new prospects\n`);
-      
-      // Scrape in priority order
-      const priorityOrder = [
-        { name: 'Phase 1: Never scraped posts', posts: categorizedPosts.never_scraped },
-        { name: 'Phase 2: Recent posts (< 24h)', posts: categorizedPosts.recent_rescrape },
-        { name: 'Phase 3: Medium aged posts (1-7d)', posts: categorizedPosts.medium_rescrape },
-        { name: 'Phase 4: Older posts (> 7d)', posts: categorizedPosts.old_rescrape }
-      ];
-      
-      phaseLoop: for (const phase of priorityOrder) {
-        if (phase.posts.length === 0) continue;
-        if (newProspectsFound >= targetNewProspects) {
-          console.log(`\n✅ Target reached! Found ${newProspectsFound} new prospects.`);
+      for (let i = 0; i < allPosts.length; i++) {
+        const post = allPosts[i];
+        console.log(`   [${i + 1}/${allPosts.length}] Scraping: ${post.post_url}`);
+        
+        // Check for challenges
+        if (await detectChallenge(page)) {
+          console.error('⚠️  Challenge detected! Stopping to avoid account restrictions.');
           break;
         }
         
-        console.log(`\n📍 ${phase.name}:`);
-        
-        for (let i = 0; i < phase.posts.length; i++) {
-          if (newProspectsFound >= targetNewProspects) break phaseLoop;
+        try {
+          const comments = await scrapePostComments(
+            page, 
+            post.post_url, 
+            config.maxCommentsPerPost
+          );
           
-          const postUrl = phase.posts[i];
-          const postData = allPosts.find(p => p.post_url === postUrl);
-          
-          // Check if we should scrape this post
-          if (!tracker.shouldScrapePost(postUrl)) {
-            console.log(`   [${i + 1}/${phase.posts.length}] Skipping (too recent): ${postUrl}`);
-            continue;
+          if (comments.length > 0) {
+            // Add source to each comment
+            const commentsWithSource = comments.map(comment => ({
+              ...comment,
+              source: source
+            }));
+            
+            allComments.push(...commentsWithSource);
+            console.log(`      → Found ${comments.length} comments`);
+          } else {
+            console.log(`      → No comments found`);
           }
           
-          console.log(`   [${i + 1}/${phase.posts.length}] Scraping: ${postUrl}`);
+          // Random delay between posts
+          const delayMs = CONFIG.MIN_DELAY + Math.random() * (CONFIG.MAX_DELAY - CONFIG.MIN_DELAY);
+          await delay(delayMs);
           
-          // Check for challenges
-          if (await detectChallenge(page)) {
-            console.error('⚠️  Challenge detected! Stopping to avoid account restrictions.');
-            break phaseLoop;
-          }
-          
-          try {
-            const comments = await scrapePostComments(
-              page, 
-              postUrl, 
-              config.maxCommentsPerPost
-            );
-            
-            if (comments.length > 0) {
-              // Update Excel CRM
-              const stats = await excelCRM.updateWithComments(comments, source);
-              newProspectsFound += stats.new_prospects;
-              
-              console.log(`      → Found ${comments.length} comments (${stats.new_prospects} new prospects)`);
-              
-              // Mark post as scraped
-              tracker.markPostScraped(postUrl, {
-                commentCount: comments.length,
-                source: source
-              });
-              
-              // Also save to CSV for backup
-              allComments.push(...comments);
-            } else {
-              console.log(`      → No comments found`);
-            }
-            
-            // Random delay between posts
-            const delayMs = CONFIG.MIN_DELAY + Math.random() * (CONFIG.MAX_DELAY - CONFIG.MIN_DELAY);
-            await delay(delayMs);
-            
-          } catch (error) {
-            console.error(`      ⚠️  Error scraping post: ${error.message}`);
-            continue;
-          }
+        } catch (error) {
+          console.error(`      ⚠️  Error scraping post: ${error.message}`);
+          continue;
         }
       }
       
-      // Update tracker stats
-      tracker.updateStats(newProspectsFound);
-      
-      // Save tracking data
-      await tracker.save();
-      
-      // Save Excel CRM
-      await excelCRM.save();
-      
-      // Also write comments to CSV for backup
+      // Write all comments to CSV
       if (allComments.length > 0) {
         await writeComments(allComments, config.outputDir);
+        console.log(`\n✅ Saved ${allComments.length} comments to comments.csv`);
       }
       
       // Final summary
       console.log('\n📊 Session summary:');
-      console.log(`   New prospects found: ${newProspectsFound}`);
+      console.log(`   Total posts scraped: ${allPosts.length}`);
       console.log(`   Total comments collected: ${allComments.length}`);
-      console.log(`   Excel CRM: ${excelCRM.getStats().total_prospects} total prospects`);
-      console.log(`   Output: ${config.outputDir}/instagram_prospects.xlsx`);
+      console.log(`   Output directory: ${config.outputDir}/`);
     }
 
   } catch (error) {
