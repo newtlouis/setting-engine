@@ -128,86 +128,126 @@ export async function initBrowser(options = {}) {
 }
 
 /**
- * Navigate to a user's profile
+ * Navigate to a user's profile and check if we can contact them
  * 
  * @param {Page} page - Playwright page
  * @param {string} username - Instagram username
- * @returns {Promise<{success: boolean, error?: string}>}
+ * @returns {Promise<{success: boolean, canContact: boolean, error?: string}>}
  */
 export async function goToProfile(page, username) {
   const profileUrl = `https://www.instagram.com/${username}/`;
   
   try {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
-    await delay(1500, 2500);
+    await delay(2000, 3000);
     
     // Check for blocks
     const blockStatus = await detectBlock(page);
     if (blockStatus.blocked) {
-      return { success: false, error: blockStatus.reason };
+      return { success: false, canContact: false, error: blockStatus.reason };
     }
     
-    // Check if profile exists
-    const notFound = await page.$('text=/sorry, this page/i');
-    if (notFound) {
-      return { success: false, error: 'profile_not_found' };
+    // Check if profile exists (multiple languages)
+    const notFoundSelectors = [
+      'text=/sorry, this page/i',
+      'text=/cette page n\'est pas disponible/i',
+      'text=/page not available/i'
+    ];
+    
+    for (const selector of notFoundSelectors) {
+      const notFound = await page.$(selector).catch(() => null);
+      if (notFound) {
+        return { success: false, canContact: false, error: 'profile_not_found' };
+      }
     }
     
-    // Check if it's a private account we can't message
-    const isPrivate = await page.evaluate(() => {
-      return document.body.innerText.toLowerCase().includes('this account is private');
-    });
+    // Check if the "Contacter" / "Message" button exists
+    const { canContact } = await checkCanContact(page);
     
-    // Private accounts can still be messaged if they have Message button
-    // So we just note it but don't fail
+    if (!canContact) {
+      // Could be private account or some other restriction
+      const isPrivate = await page.evaluate(() => {
+        const text = document.body.innerText.toLowerCase();
+        return text.includes('this account is private') || 
+               text.includes('ce compte est privé') ||
+               text.includes('compte privé');
+      });
+      
+      return { 
+        success: true, 
+        canContact: false, 
+        error: isPrivate ? 'private_account_no_contact' : 'no_contact_button'
+      };
+    }
     
-    return { success: true, isPrivate };
+    return { success: true, canContact: true };
     
   } catch (error) {
-    return { success: false, error: error.message };
+    return { success: false, canContact: false, error: error.message };
   }
 }
 
 /**
- * Click the Message button on a profile page
+ * Check if the profile has a "Contacter" / "Message" button
+ * This indicates we can DM this user (public account or we follow them)
+ * 
+ * @param {Page} page - Playwright page
+ * @returns {Promise<{canContact: boolean, button?: ElementHandle}>}
+ */
+export async function checkCanContact(page) {
+  // Try all possible selectors for the contact button
+  const selectors = CONFIG.SELECTORS.CONTACT_BUTTON;
+  
+  for (const selector of selectors) {
+    const button = await page.$(selector).catch(() => null);
+    if (button) {
+      // Verify it's visible
+      const isVisible = await button.isVisible().catch(() => false);
+      if (isVisible) {
+        return { canContact: true, button };
+      }
+    }
+  }
+  
+  return { canContact: false };
+}
+
+/**
+ * Click the Contact/Message button on a profile page
  * 
  * @param {Page} page - Playwright page
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function clickMessageButton(page) {
   try {
-    // Try multiple selectors for the Message button
-    const selectors = [
-      CONFIG.SELECTORS.MESSAGE_BUTTON,
-      CONFIG.SELECTORS.MESSAGE_BUTTON_ALT,
-      'text="Message"',
-      'button >> text="Message"'
-    ];
+    // First check if the contact button exists
+    const { canContact, button } = await checkCanContact(page);
     
-    let clicked = false;
-    for (const selector of selectors) {
-      const button = await page.$(selector);
-      if (button) {
-        await button.click();
-        clicked = true;
-        break;
+    if (!canContact || !button) {
+      return { success: false, error: 'no_contact_button_private_account' };
+    }
+    
+    // Click the contact button
+    await button.click();
+    
+    // Wait for DM popup to open
+    await delay(2000, 3000);
+    
+    // Verify the message input appeared (DM popup opened)
+    const inputSelectors = CONFIG.SELECTORS.MESSAGE_INPUT;
+    let dmInput = null;
+    
+    for (const selector of inputSelectors) {
+      dmInput = await page.$(selector).catch(() => null);
+      if (dmInput) {
+        const isVisible = await dmInput.isVisible().catch(() => false);
+        if (isVisible) break;
+        dmInput = null;
       }
     }
     
-    if (!clicked) {
-      return { success: false, error: 'message_button_not_found' };
-    }
-    
-    // Wait for DM dialog to open
-    await delay(1500, 2500);
-    
-    // Verify we're in the DM view
-    const dmInput = await page.$(CONFIG.SELECTORS.MESSAGE_INPUT) ||
-                    await page.$(CONFIG.SELECTORS.MESSAGE_INPUT_ALT) ||
-                    await page.$('div[role="textbox"]');
-    
     if (!dmInput) {
-      return { success: false, error: 'dm_dialog_not_opened' };
+      return { success: false, error: 'dm_popup_not_opened' };
     }
     
     return { success: true };
@@ -218,7 +258,7 @@ export async function clickMessageButton(page) {
 }
 
 /**
- * Type and send a DM message
+ * Type and send a DM message in the popup
  * 
  * @param {Page} page - Playwright page
  * @param {string} message - Message to send
@@ -227,29 +267,29 @@ export async function clickMessageButton(page) {
  */
 export async function sendMessage(page, message, dryRun = true) {
   try {
-    // Find message input
-    const inputSelectors = [
-      CONFIG.SELECTORS.MESSAGE_INPUT,
-      CONFIG.SELECTORS.MESSAGE_INPUT_ALT,
-      'div[role="textbox"]',
-      'div[contenteditable="true"]'
-    ];
+    // Find message input using configured selectors
+    const inputSelectors = CONFIG.SELECTORS.MESSAGE_INPUT;
     
     let input = null;
     for (const selector of inputSelectors) {
-      input = await page.$(selector);
-      if (input) break;
+      input = await page.$(selector).catch(() => null);
+      if (input) {
+        const isVisible = await input.isVisible().catch(() => false);
+        if (isVisible) break;
+        input = null;
+      }
     }
     
     if (!input) {
       return { success: false, error: 'message_input_not_found' };
     }
     
-    // Click to focus
+    // Click to focus the contenteditable div
     await input.click();
     await delay(300, 500);
     
     // Type message with human-like delays
+    // For contenteditable, we use keyboard.type which handles it properly
     for (const char of message) {
       await page.keyboard.type(char, { delay: 30 + Math.random() * 50 });
     }
@@ -258,30 +298,23 @@ export async function sendMessage(page, message, dryRun = true) {
     
     if (dryRun) {
       console.log('      [DRY RUN] Message typed but not sent');
-      // Clear the message
+      // Clear the message using Cmd+A then Backspace
       await page.keyboard.down('Meta');
       await page.keyboard.press('a');
       await page.keyboard.up('Meta');
       await page.keyboard.press('Backspace');
+      await delay(500, 800);
       return { success: true, dryRun: true };
     }
     
-    // Find and click send button
-    const sendSelectors = [
-      CONFIG.SELECTORS.SEND_BUTTON,
-      CONFIG.SELECTORS.SEND_BUTTON_ALT,
-      'button:has-text("Send")',
-      'div[role="button"]:has-text("Send")'
-    ];
-    
-    // Or just press Enter
+    // Send the message by pressing Enter
     await page.keyboard.press('Enter');
     
-    await delay(1000, 1500);
+    await delay(1500, 2000);
     
-    // Verify message was sent (input should be empty)
-    const inputValue = await input.textContent().catch(() => '');
-    if (inputValue.length > 10) {
+    // Verify message was sent (input should be empty or have placeholder)
+    const inputText = await input.textContent().catch(() => '');
+    if (inputText.length > 10 && inputText !== message.substring(0, 10)) {
       // Message might not have sent
       return { success: false, error: 'message_may_not_have_sent' };
     }
@@ -295,6 +328,13 @@ export async function sendMessage(page, message, dryRun = true) {
 
 /**
  * Send a DM to a user (full flow)
+ * 
+ * Flow:
+ * 1. Navigate to profile
+ * 2. Check if "Contacter" button exists (skip if not - private account)
+ * 3. Click "Contacter" to open DM popup
+ * 4. Type message in the contenteditable field
+ * 5. Send (or dry-run: clear message)
  * 
  * @param {Page} page - Playwright page
  * @param {string} username - Instagram username
@@ -311,13 +351,14 @@ export async function sendDMToUser(page, username, message, options = {}) {
   const result = {
     username,
     success: false,
+    skipped: false,
     steps: [],
     error: null,
     timestamp: new Date().toISOString()
   };
   
   try {
-    // Step 1: Go to profile
+    // Step 1: Go to profile and check if we can contact
     if (onProgress) onProgress('navigating', username);
     const navResult = await goToProfile(page, username);
     result.steps.push({ step: 'navigate', ...navResult });
@@ -327,17 +368,25 @@ export async function sendDMToUser(page, username, message, options = {}) {
       return result;
     }
     
-    // Step 2: Click Message button
-    if (onProgress) onProgress('clicking_message', username);
+    // Step 2: Check if we can contact this user
+    if (!navResult.canContact) {
+      result.skipped = true;
+      result.error = navResult.error || 'cannot_contact';
+      console.log(`      SKIPPED: ${result.error}`);
+      return result;
+    }
+    
+    // Step 3: Click "Contacter" button to open DM popup
+    if (onProgress) onProgress('clicking_contact', username);
     const clickResult = await clickMessageButton(page);
-    result.steps.push({ step: 'click_message', ...clickResult });
+    result.steps.push({ step: 'click_contact', ...clickResult });
     
     if (!clickResult.success) {
       result.error = clickResult.error;
       return result;
     }
     
-    // Step 3: Send message
+    // Step 4: Type and send message
     if (onProgress) onProgress('sending', username);
     const sendResult = await sendMessage(page, message, dryRun);
     result.steps.push({ step: 'send', ...sendResult });
@@ -379,7 +428,7 @@ export async function batchSendDMs(page, targets, options = {}) {
     attempted: 0,
     successful: 0,
     failed: 0,
-    skipped: 0,
+    skipped: 0,  // Private accounts / no contact button
     blocked: false,
     details: []
   };
@@ -389,7 +438,9 @@ export async function batchSendDMs(page, targets, options = {}) {
   console.log(`   Max per session: ${maxPerSession}`);
   console.log(`   Delay range: ${CONFIG.MIN_DELAY_BETWEEN_DMS/1000}s - ${CONFIG.MAX_DELAY_BETWEEN_DMS/1000}s\n`);
   
-  for (let i = 0; i < Math.min(targets.length, maxPerSession); i++) {
+  let successfulCount = 0;  // Track actual successes for max limit
+  
+  for (let i = 0; i < targets.length && successfulCount < maxPerSession; i++) {
     const target = targets[i];
     results.attempted++;
     
@@ -414,20 +465,33 @@ export async function batchSendDMs(page, targets, options = {}) {
     
     if (result.success) {
       results.successful++;
-      console.log(`      OK${dryRun ? ' (dry run)' : ''}`);
+      successfulCount++;
+      console.log(`      ✓ OK${dryRun ? ' (dry run)' : ''}`);
+    } else if (result.skipped) {
+      results.skipped++;
+      // Don't count skipped towards max, continue to next
+      console.log(`      → SKIPPED: ${result.error}`);
     } else {
       results.failed++;
-      console.log(`      FAILED: ${result.error}`);
+      console.log(`      ✗ FAILED: ${result.error}`);
     }
     
     if (onComplete) {
       onComplete(result);
     }
     
-    // Rate limiting delay (except for last item)
+    // Rate limiting delay (except for last item and skipped items)
+    // Use shorter delay for skipped items since we didn't interact much
     if (i < targets.length - 1) {
-      const waitTime = CONFIG.MIN_DELAY_BETWEEN_DMS + 
-                       Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS);
+      let waitTime;
+      if (result.skipped) {
+        // Shorter delay for skipped (just loaded profile)
+        waitTime = 3000 + Math.random() * 5000;  // 3-8 seconds
+      } else {
+        // Normal delay for actual DM attempts
+        waitTime = CONFIG.MIN_DELAY_BETWEEN_DMS + 
+                   Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS);
+      }
       console.log(`      Waiting ${Math.round(waitTime/1000)}s before next...`);
       await delay(waitTime, waitTime + 1000);
     }
@@ -437,6 +501,7 @@ export async function batchSendDMs(page, targets, options = {}) {
   console.log('\n=== Batch Complete ===');
   console.log(`   Attempted: ${results.attempted}`);
   console.log(`   Successful: ${results.successful}`);
+  console.log(`   Skipped (private): ${results.skipped}`);
   console.log(`   Failed: ${results.failed}`);
   if (results.blocked) {
     console.log(`   STOPPED: ${results.blockReason}`);

@@ -32,15 +32,30 @@ export const CONFIG = {
   
   // Selectors - may need updating if Instagram changes UI
   SELECTORS: {
-    // Profile page
-    MESSAGE_BUTTON: 'div[role="button"]:has-text("Message")',
-    MESSAGE_BUTTON_ALT: 'button:has-text("Message")',
+    // Profile page - "Contacter" button (FR) or "Message" button (EN)
+    // This button opens the DM popup directly from the profile
+    CONTACT_BUTTON: [
+      'div[role="button"]:has-text("Contacter")',  // French
+      'div[role="button"]:has-text("Message")',     // English
+      'button:has-text("Contacter")',
+      'button:has-text("Message")'
+    ],
     
-    // DM dialog/inbox
-    MESSAGE_INPUT: 'div[role="textbox"][aria-label*="Message"]',
-    MESSAGE_INPUT_ALT: 'textarea[placeholder*="Message"]',
-    SEND_BUTTON: 'button[type="submit"]',
-    SEND_BUTTON_ALT: 'div[role="button"]:has-text("Send")',
+    // DM popup - contenteditable message input
+    MESSAGE_INPUT: [
+      'div[contenteditable="true"][role="textbox"]',
+      'div[aria-label*="message" i][contenteditable="true"]',
+      'div[aria-label*="Message" i][contenteditable="true"]',
+      'div[aria-placeholder*="message" i][contenteditable="true"]',
+      'div[data-lexical-editor="true"]'
+    ],
+    
+    // Send button (after typing, usually just Enter works)
+    SEND_BUTTON: [
+      'button[type="submit"]',
+      'div[role="button"]:has-text("Send")',
+      'div[role="button"]:has-text("Envoyer")'  // French
+    ],
     
     // Detection indicators
     CHALLENGE_INDICATOR: 'form[id*="challenge"]'
