@@ -49,7 +49,7 @@ export async function writePosts(posts, outputDir) {
 /**
  * Save comments to CSV
  * 
- * CSV columns: post_url,username,profile_url,comment_text,comment_date,followers_estimate,source
+ * CSV columns: post_url,username,profile_url,comment_text,comment_date,followers_estimate,source,is_spam,spam_reason,quality_score
  */
 export async function writeComments(comments, outputDir) {
   const csvWriter = createObjectCsvWriter({
@@ -61,7 +61,10 @@ export async function writeComments(comments, outputDir) {
       { id: 'comment_text', title: 'comment_text' },
       { id: 'comment_date', title: 'comment_date' },
       { id: 'followers_estimate', title: 'followers_estimate' },
-      { id: 'source', title: 'source' }
+      { id: 'source', title: 'source' },
+      { id: 'is_spam', title: 'is_spam' },
+      { id: 'spam_reason', title: 'spam_reason' },
+      { id: 'quality_score', title: 'quality_score' }
     ]
   });
 

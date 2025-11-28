@@ -12,6 +12,148 @@ import { delay, detectChallenge, saveContextJSON } from './utils.js';
 import { CONFIG } from './config.js';
 
 /**
+ * Sort comments by "Most Recent" / "Les plus récents"
+ * This ensures we get the freshest leads first
+ * 
+ * @param {Page} page - Playwright page object
+ * @returns {Promise<boolean>} True if sort was changed successfully
+ */
+async function sortCommentsByRecent(page) {
+  try {
+    console.log(`      → Looking for sort dropdown...`);
+    
+    // Try using Playwright's locator API for more reliable clicking
+    // Look for the dropdown trigger containing sort text
+    
+    // Method 1: Try clicking on text "Les plus récents" or "Pour vous" (the current sort selection)
+    const sortTexts = ['Les plus récents', 'Pour vous', 'Most recent', 'For you'];
+    let dropdownOpened = false;
+    
+    for (const sortText of sortTexts) {
+      try {
+        // Find a clickable element containing this text
+        const locator = page.locator(`[role="button"]:has-text("${sortText}")`).first();
+        const isVisible = await locator.isVisible({ timeout: 2000 }).catch(() => false);
+        
+        if (isVisible) {
+          console.log(`      → Found sort button with text: "${sortText}"`);
+          await locator.click({ timeout: 3000 });
+          dropdownOpened = true;
+          await delay(1500);
+          break;
+        }
+      } catch (e) {
+        // Try next text
+        continue;
+      }
+    }
+    
+    // Method 2: If no text found, try finding by chevron icon
+    if (!dropdownOpened) {
+      try {
+        const chevronButton = page.locator('[aria-haspopup="menu"]:has(svg)').first();
+        const isVisible = await chevronButton.isVisible({ timeout: 2000 }).catch(() => false);
+        
+        if (isVisible) {
+          const buttonText = await chevronButton.textContent();
+          if (buttonText && (buttonText.includes('récent') || buttonText.includes('vous') || 
+                            buttonText.includes('recent') || buttonText.includes('you'))) {
+            console.log(`      → Found sort button via aria-haspopup`);
+            await chevronButton.click({ timeout: 3000 });
+            dropdownOpened = true;
+            await delay(1500);
+          }
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
+    
+    if (!dropdownOpened) {
+      console.log(`      → Sort dropdown not found on this post`);
+      return false;
+    }
+    
+    // Now click on "Les plus récents" in the dropdown menu
+    console.log(`      → Dropdown opened, looking for "Most recent" option...`);
+    
+    // Wait a bit more for menu to fully render
+    await delay(1000);
+    
+    // Try to click "Les plus récents" / "Most recent" option
+    const recentTexts = ['Les plus récents', 'Most recent'];
+    let optionClicked = false;
+    
+    for (const recentText of recentTexts) {
+      try {
+        // Look for the menu item - it should be a role="button" that appeared after clicking
+        const menuItem = page.locator(`[role="button"]:has-text("${recentText}")`);
+        const count = await menuItem.count();
+        
+        // There might be multiple matches - the dropdown trigger and the menu option
+        // Click the second one (index 1) if it exists, otherwise the first
+        if (count > 1) {
+          await menuItem.nth(1).click({ timeout: 3000 });
+          optionClicked = true;
+          console.log(`      ✅ Clicked "${recentText}" (menu option)`);
+          break;
+        } else if (count === 1) {
+          // Check if this is already showing as selected (might not need to click)
+          const element = menuItem.first();
+          const hasCheckmark = await element.locator('svg polyline, svg path').count() > 0;
+          if (!hasCheckmark) {
+            await element.click({ timeout: 3000 });
+            optionClicked = true;
+            console.log(`      ✅ Clicked "${recentText}"`);
+            break;
+          } else {
+            console.log(`      → "${recentText}" already selected`);
+            optionClicked = true;
+            break;
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!optionClicked) {
+      // Try clicking by evaluating in page context as fallback
+      const clicked = await page.evaluate(() => {
+        const allButtons = document.querySelectorAll('[role="button"]');
+        for (const btn of allButtons) {
+          const text = btn.textContent.trim();
+          if (text === 'Les plus récents' || text === 'Most recent') {
+            btn.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (clicked) {
+        console.log(`      ✅ Clicked "Most recent" via evaluate`);
+        optionClicked = true;
+      }
+    }
+    
+    if (optionClicked) {
+      await delay(2000); // Wait for comments to reload
+      return true;
+    }
+    
+    // Close dropdown by pressing Escape or clicking elsewhere
+    await page.keyboard.press('Escape').catch(() => {});
+    console.log(`      → Could not select "Most recent" option`);
+    return false;
+
+  } catch (error) {
+    console.log(`      ⚠️  Error sorting comments: ${error.message}`);
+    return false;
+  }
+}
+
+/**
  * Scrape comments using DIV-only structure (no UL/LI)
  * 
  * @param {Page} page - Playwright page object
@@ -40,6 +182,16 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
   try {
     console.log(`      → Waiting for page to load...`);
     await delay(4000);
+    
+    // STEP 1: Sort comments by "Most Recent" / "Les plus récents"
+    console.log(`      → Sorting comments by most recent...`);
+    const sortChanged = await sortCommentsByRecent(page);
+    if (sortChanged) {
+      console.log(`      ✅ Comments sorted by most recent`);
+      await delay(2000); // Wait for comments to reload
+    } else {
+      console.log(`      ⚠️  Could not change sort order (may already be sorted or not available)`);
+    }
     
     // Aggressive scrolling to load comments
     console.log(`      → Scrolling to load comments...`);

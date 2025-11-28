@@ -11,6 +11,9 @@ import { scrapePostComments } from './scrape_post.js';
 import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge, autoLoginInstagram } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
+import { filterComments } from './spam_filter.js';
+import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
+import path from 'path';
 
 /**
  * Main collector entry point
@@ -137,7 +140,7 @@ export async function runCollector(config) {
       console.log(`✅ Saved ${allPosts.length} posts to posts.csv\n`);
     }
 
-    // Step 3: Simple scraping phase - CSV output only
+    // Step 3: Scraping phase with pre-qualification and tracking
     if (config.mode !== 'only-discover' && allPosts.length > 0) {
       console.log('💬 Starting comment scraping...\n');
       
@@ -146,11 +149,38 @@ export async function runCollector(config) {
         ? `hashtag:${config.hashtags[0]}` 
         : `profile:${config.profiles?.[0] || 'unknown'}`;
       
-      console.log(`📍 Scraping ${allPosts.length} posts...`);
+      // Load already-scraped posts to avoid duplicates
+      const trackingFile = path.join(config.outputDir, '..', 'permanent-data', 'scraped_posts.json');
+      const alreadyScraped = await loadScrapedPosts(trackingFile);
       
-      for (let i = 0; i < allPosts.length; i++) {
-        const post = allPosts[i];
-        console.log(`   [${i + 1}/${allPosts.length}] Scraping: ${post.post_url}`);
+      if (alreadyScraped.size > 0) {
+        const { newPosts, skippedCount } = filterAlreadyScraped(allPosts, alreadyScraped);
+        if (skippedCount > 0) {
+          console.log(`⏭️  Skipping ${skippedCount} already-scraped posts`);
+        }
+        allPosts = newPosts;
+      }
+      
+      if (allPosts.length === 0) {
+        console.log('ℹ️  All posts have already been scraped. Nothing new to process.');
+        return;
+      }
+      
+      // SKIP pre-qualification entirely - it doesn't work reliably with Instagram's current structure
+      // Just scrape all discovered posts directly
+      const qualifiedPosts = allPosts;
+      const qualifyStats = { total: allPosts.length, qualified: allPosts.length };
+      
+      console.log(`📍 Scraping all ${qualifiedPosts.length} discovered posts (pre-qualification disabled)...`);
+      
+      if (qualifiedPosts.length === 0) {
+        console.log('ℹ️  No posts to scrape.');
+        return;
+      }
+      
+      for (let i = 0; i < qualifiedPosts.length; i++) {
+        const post = qualifiedPosts[i];
+        console.log(`   [${i + 1}/${qualifiedPosts.length}] Scraping: ${post.post_url}`);
         
         // Check for challenges
         if (await detectChallenge(page)) {
@@ -178,6 +208,9 @@ export async function runCollector(config) {
             console.log(`      → No comments found`);
           }
           
+          // Mark post as scraped
+          alreadyScraped.add(post.post_url);
+          
           // Random delay between posts
           const delayMs = CONFIG.MIN_DELAY + Math.random() * (CONFIG.MAX_DELAY - CONFIG.MIN_DELAY);
           await delay(delayMs);
@@ -188,15 +221,36 @@ export async function runCollector(config) {
         }
       }
       
-      // Write all comments to CSV
+      // Save updated tracking file
+      await saveScrapedPosts(trackingFile, alreadyScraped);
+      console.log(`\n💾 Updated tracking file (${alreadyScraped.size} total posts tracked)`);
+      
+      // Filter comments for spam and quality
       if (allComments.length > 0) {
-        await writeComments(allComments, config.outputDir);
-        console.log(`\n✅ Saved ${allComments.length} comments to comments.csv`);
+        console.log(`\n🔍 Analyzing ${allComments.length} comments for quality...`);
+        const { all: processedComments, filtered: qualityComments, stats } = filterComments(allComments);
+        
+        // Write ALL comments to CSV (with spam flags for transparency)
+        await writeComments(processedComments, config.outputDir);
+        
+        console.log(`\n✅ Saved ${processedComments.length} comments to comments.csv`);
+        console.log(`   📊 Quality breakdown:`);
+        console.log(`      - High quality: ${qualityComments.length} comments`);
+        console.log(`      - Spam filtered: ${stats.spam} comments`);
+        
+        if (Object.keys(stats.spamReasons).length > 0) {
+          console.log(`   🚫 Spam reasons:`);
+          for (const [reason, count] of Object.entries(stats.spamReasons)) {
+            console.log(`      - ${reason}: ${count}`);
+          }
+        }
       }
       
       // Final summary
       console.log('\n📊 Session summary:');
-      console.log(`   Total posts scraped: ${allPosts.length}`);
+      console.log(`   Posts discovered: ${qualifyStats.total}`);
+      console.log(`   Posts qualified: ${qualifiedPosts.length}`);
+      console.log(`   Posts scraped: ${qualifiedPosts.length}`);
       console.log(`   Total comments collected: ${allComments.length}`);
       console.log(`   Output directory: ${config.outputDir}/`);
     }

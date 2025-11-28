@@ -130,22 +130,36 @@ async function buildFinalExcel() {
 
     console.log(`📊 Building Excel from ${comments.length} comments...`);
 
+    // Filter out spam comments for engagement calculation
+    const nonSpamComments = comments.filter(c => c.is_spam !== 'true' && c.is_spam !== true);
+    const spamComments = comments.filter(c => c.is_spam === 'true' || c.is_spam === true);
+    
+    console.log(`   Non-spam comments: ${nonSpamComments.length}`);
+    console.log(`   Spam comments filtered: ${spamComments.length}`);
+
     // Group comments by username to calculate engagement
     const userGroups = {};
-    comments.forEach(comment => {
+    nonSpamComments.forEach(comment => {
       const username = comment.username;
       if (!userGroups[username]) {
         userGroups[username] = {
           username: username,
           full_name: comment.full_name || '',
+          profile_url: comment.profile_url || '',
           comments: [],
           sources: new Set(),
           firstSeen: comment.comment_date,
-          lastSeen: comment.comment_date
+          lastSeen: comment.comment_date,
+          qualityScores: []
         };
       }
       userGroups[username].comments.push(comment);
       userGroups[username].sources.add(comment.source);
+      
+      // Track quality scores
+      if (comment.quality_score) {
+        userGroups[username].qualityScores.push(parseInt(comment.quality_score, 10));
+      }
       
       // Update date range
       if (comment.comment_date < userGroups[username].firstSeen) {
@@ -173,13 +187,15 @@ async function buildFinalExcel() {
     // Define columns for prospect summary
     prospectSummarySheet.columns = [
       { header: 'Username', key: 'username', width: 20 },
+      { header: 'Profile URL', key: 'profile_url', width: 35 },
       { header: 'Full Name', key: 'full_name', width: 25 },
       { header: 'Total Comments', key: 'comment_count', width: 15 },
+      { header: 'Avg Quality', key: 'avg_quality', width: 12 },
       { header: 'Engagement Score', key: 'engagement_score', width: 18 },
       { header: 'Engagement Level', key: 'engagement_level', width: 18 },
       { header: 'Latest Comment', key: 'latest_comment', width: 50 },
-      { header: 'First Seen', key: 'first_seen', width: 20 },
-      { header: 'Last Seen', key: 'last_seen', width: 20 },
+      { header: 'First Seen', key: 'first_seen', width: 15 },
+      { header: 'Last Seen', key: 'last_seen', width: 15 },
       { header: 'Sources', key: 'sources', width: 30 }
     ];
 
@@ -189,6 +205,11 @@ async function buildFinalExcel() {
       // Calculate engagement score
       const engagement = calculateEngagementScore(user.comments);
       
+      // Calculate average quality score
+      const avgQuality = user.qualityScores.length > 0
+        ? (user.qualityScores.reduce((a, b) => a + b, 0) / user.qualityScores.length).toFixed(1)
+        : 'N/A';
+      
       // Find latest comment
       const latestComment = user.comments.reduce((latest, current) => {
         return new Date(current.comment_date) > new Date(latest.comment_date) ? current : latest;
@@ -196,8 +217,10 @@ async function buildFinalExcel() {
       
       prospectRows.push({
         username: user.username,
+        profile_url: user.profile_url,
         full_name: user.full_name,
         comment_count: user.comments.length,
+        avg_quality: avgQuality,
         engagement_score: engagement.score,
         engagement_level: engagement.level,
         latest_comment: latestComment.comment_text.substring(0, 100) + (latestComment.comment_text.length > 100 ? '...' : ''),
@@ -282,14 +305,24 @@ async function buildFinalExcel() {
       { header: 'Username', key: 'username', width: 20 },
       { header: 'Full Name', key: 'full_name', width: 25 },
       { header: 'Comment', key: 'comment_text', width: 50 },
+      { header: 'Quality', key: 'quality_score', width: 10 },
+      { header: 'Is Spam', key: 'is_spam', width: 10 },
+      { header: 'Spam Reason', key: 'spam_reason', width: 15 },
       { header: 'Date', key: 'comment_date', width: 20 },
       { header: 'Source', key: 'source', width: 20 },
       { header: 'Post URL', key: 'post_url', width: 40 }
     ];
 
-    // Add all comments
+    // Add all comments (including spam for transparency)
     comments.forEach(comment => {
-      allCommentsSheet.addRow(comment);
+      const row = allCommentsSheet.addRow(comment);
+      
+      // Highlight spam rows
+      if (comment.is_spam === 'true' || comment.is_spam === true) {
+        row.eachCell(cell => {
+          cell.font = { color: { argb: 'FF999999' }, italic: true };
+        });
+      }
     });
 
     // Style the header row
@@ -367,12 +400,17 @@ async function buildFinalExcel() {
       { header: 'Value', key: 'value', width: 35 }
     ];
 
-    statsSheet.addRow({ metric: 'Total Comments', value: comments.length });
+    statsSheet.addRow({ metric: 'Total Comments (raw)', value: comments.length });
+    statsSheet.addRow({ metric: 'Quality Comments (non-spam)', value: nonSpamComments.length });
+    statsSheet.addRow({ metric: 'Spam Comments Filtered', value: spamComments.length });
+    statsSheet.addRow({ metric: 'Spam Rate', value: `${((spamComments.length / comments.length) * 100).toFixed(1)}%` });
+    statsSheet.addRow({ metric: '', value: '' }); // Separator
     statsSheet.addRow({ metric: 'Unique Prospects', value: Object.keys(userGroups).length });
     statsSheet.addRow({ metric: 'High Engagement Prospects', value: engagementStats.high });
     statsSheet.addRow({ metric: 'Medium Engagement Prospects', value: engagementStats.medium });
     statsSheet.addRow({ metric: 'Low Engagement Prospects', value: engagementStats.low });
-    statsSheet.addRow({ metric: 'Average Comments per Prospect', value: (comments.length / Object.keys(userGroups).length).toFixed(2) });
+    statsSheet.addRow({ metric: '', value: '' }); // Separator
+    statsSheet.addRow({ metric: 'Average Comments per Prospect', value: (nonSpamComments.length / Object.keys(userGroups).length).toFixed(2) });
     statsSheet.addRow({ metric: 'Number of Sources', value: Object.keys(sourceGroups).length });
     statsSheet.addRow({ metric: 'Date Range', value: `${dateRange.min?.toLocaleDateString()} - ${dateRange.max?.toLocaleDateString()}` });
     statsSheet.addRow({ metric: 'Last Updated', value: new Date().toLocaleString() });

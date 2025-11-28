@@ -34,6 +34,7 @@ program
   .option('--target-prospects <number>', 'Target number of new prospects to find', '50')
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('--headless', 'Run in headless mode (NOT RECOMMENDED - may trigger detection)', false)
+  .option('--skip-qualify', 'Skip post pre-qualification (scrape all discovered posts)', false)
   .action(async (options) => {
     try {
       console.log('🚀 Instagram Collector Agent starting...\n');
@@ -89,7 +90,8 @@ program
         maxPostsPerSource: parseInt(options.maxPosts, 10),
         maxCommentsPerPost: parseInt(options.maxComments, 10),
         outputDir: options.output,
-        headless: options.headless
+        headless: options.headless,
+        skipQualification: options.skipQualify
       };
 
       if (config.headless) {

@@ -2,7 +2,9 @@
 
 /**
  * Append scraped comments to permanent master CSV
- * This ensures all data is permanently saved and never lost
+ * 
+ * IMPROVED: Now keeps ALL comments per user (not just the first one)
+ * This allows accurate engagement scoring based on comment frequency
  */
 
 import { promises as fs } from 'fs';
@@ -49,7 +51,6 @@ async function appendToMaster() {
 
     // Read existing master (if exists)
     let existingComments = [];
-    let existingUsernames = new Set();
     
     try {
       const masterData = await fs.readFile(masterFile, 'utf-8');
@@ -58,47 +59,74 @@ async function appendToMaster() {
         skip_empty_lines: true
       });
       
-      // Track existing usernames to avoid duplicates
-      existingComments.forEach(comment => {
-        existingUsernames.add(comment.username);
-      });
-      
       console.log(`📚 Master file has ${existingComments.length} existing records`);
     } catch {
       console.log('📝 Creating new master file...');
     }
 
-    // Filter out duplicates
-    const uniqueNewComments = newComments.filter(comment => 
-      !existingUsernames.has(comment.username)
-    );
+    // Create a Set of existing comment signatures to detect TRUE duplicates
+    // A duplicate = same username + same comment text + same post URL
+    const existingSignatures = new Set();
+    existingComments.forEach(comment => {
+      const signature = `${comment.username}|${comment.post_url}|${comment.comment_text?.substring(0, 50)}`;
+      existingSignatures.add(signature);
+    });
+
+    // Filter out TRUE duplicates only (same person, same comment, same post)
+    // But KEEP multiple comments from the same person on different posts or different comments
+    const uniqueNewComments = newComments.filter(comment => {
+      const signature = `${comment.username}|${comment.post_url}|${comment.comment_text?.substring(0, 50)}`;
+      return !existingSignatures.has(signature);
+    });
+
+    const duplicatesSkipped = newComments.length - uniqueNewComments.length;
 
     if (uniqueNewComments.length === 0) {
-      console.log('ℹ️  All comments already exist in master (no new unique prospects)');
+      console.log('ℹ️  All comments already exist in master (exact duplicates)');
       return;
     }
 
     // Append new unique comments
     const allComments = [...existingComments, ...uniqueNewComments];
 
-    // Write back to master
+    // Get all column headers from both existing and new comments
+    const allColumns = new Set([
+      'username',
+      'full_name', 
+      'comment_text',
+      'comment_date',
+      'post_url',
+      'source',
+      'profile_url',
+      'is_spam',
+      'spam_reason',
+      'followers_count',
+      'is_verified',
+      'is_business'
+    ]);
+
+    // Write back to master with all columns
     const csvOutput = stringify(allComments, {
       header: true,
-      columns: [
-        'username',
-        'full_name',
-        'comment_text',
-        'comment_date',
-        'post_url',
-        'source'
-      ]
+      columns: Array.from(allColumns)
     });
 
     await fs.writeFile(masterFile, csvOutput);
 
+    // Calculate stats
+    const uniqueUsers = new Set(allComments.map(c => c.username));
+    const totalCommentsByUser = {};
+    allComments.forEach(c => {
+      totalCommentsByUser[c.username] = (totalCommentsByUser[c.username] || 0) + 1;
+    });
+    const multiCommenters = Object.values(totalCommentsByUser).filter(count => count > 1).length;
+
     console.log(`\n✅ Success!`);
-    console.log(`   Added ${uniqueNewComments.length} new unique prospects`);
-    console.log(`   Master now contains ${allComments.length} total prospects`);
+    console.log(`   Added ${uniqueNewComments.length} new comments`);
+    console.log(`   Skipped ${duplicatesSkipped} exact duplicates`);
+    console.log(`   Master now contains ${allComments.length} total comments`);
+    console.log(`   From ${uniqueUsers.size} unique prospects`);
+    console.log(`   ${multiCommenters} prospects have multiple comments (high engagement)`);
     console.log(`   Saved to: ${masterFile}`);
 
   } catch (error) {
