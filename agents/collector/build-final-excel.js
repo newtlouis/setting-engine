@@ -3,6 +3,7 @@
 /**
  * Build final Excel database from master CSV
  * Creates a professional Excel file with multiple sheets and formatting
+ * Now includes engagement scoring and comment tracking
  */
 
 import { promises as fs } from 'fs';
@@ -13,6 +14,91 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Calculate engagement score based on comment patterns
+ * 
+ * Enhanced algorithm considering:
+ * - Frequency (number of comments)
+ * - Recency (how recent are comments)
+ * - Quality (comment length and content)
+ * - Patterns (questions, emojis, keywords)
+ */
+function calculateEngagementScore(comments) {
+  if (!comments || comments.length === 0) return { level: 'LOW', score: 0 };
+  
+  const now = new Date();
+  let score = 0;
+  
+  // 1. FREQUENCY SCORE (0-10 points)
+  // Multiple comments show consistent engagement
+  score += Math.min(comments.length * 2, 10);
+  
+  // 2. RECENCY SCORE (0-15 points)
+  // Recent activity is more valuable
+  let recentScore = 0;
+  for (const comment of comments) {
+    const commentDate = new Date(comment.comment_date || 0);
+    const daysAgo = (now - commentDate) / (1000 * 60 * 60 * 24);
+    
+    if (daysAgo < 7) recentScore += 5;       // Very recent: high value
+    else if (daysAgo < 30) recentScore += 3; // Recent: medium value
+    else if (daysAgo < 90) recentScore += 1; // Not too old
+  }
+  score += Math.min(recentScore, 15);
+  
+  // 3. QUALITY SCORE (0-10 points)
+  // Longer, thoughtful comments indicate higher engagement
+  let qualityScore = 0;
+  let totalLength = 0;
+  
+  for (const comment of comments) {
+    const text = comment.comment_text || '';
+    totalLength += text.length;
+    
+    // Individual comment quality
+    if (text.length > 100) qualityScore += 3;      // Detailed comment
+    else if (text.length > 50) qualityScore += 2;  // Engaged comment
+    else if (text.length > 20) qualityScore += 1;  // Basic comment
+  }
+  score += Math.min(qualityScore, 10);
+  
+  // 4. PATTERN SCORE (0-10 points)
+  // Questions and emojis show emotional engagement
+  let patternScore = 0;
+  
+  for (const comment of comments) {
+    const text = comment.comment_text || '';
+    
+    // Questions indicate interest/intent
+    if (text.includes('?')) patternScore += 2;
+    
+    // Emojis indicate emotional engagement
+    if (/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/u.test(text)) patternScore += 1;
+    
+    // Exclamation marks indicate excitement
+    if (text.includes('!')) patternScore += 1;
+    
+    // @ mentions indicate conversation
+    if (text.includes('@')) patternScore += 1;
+  }
+  score += Math.min(patternScore, 10);
+  
+  // 5. AVERAGE LENGTH BONUS (0-5 points)
+  const avgLength = totalLength / comments.length;
+  if (avgLength > 100) score += 5;      // Conversations
+  else if (avgLength > 50) score += 3;  // Engaged
+  else if (avgLength > 20) score += 1;  // Basic
+  
+  // CLASSIFICATION (adjusted thresholds for realistic distribution)
+  // Total possible: 50 points
+  let level;
+  if (score >= 25) level = 'HIGH';        // Top tier: very engaged prospects
+  else if (score >= 12) level = 'MEDIUM'; // Mid tier: moderately engaged
+  else level = 'LOW';                     // Bottom tier: low engagement
+  
+  return { level, score };
+}
 
 async function buildFinalExcel() {
   const permanentDir = path.join(__dirname, 'permanent-data');
@@ -42,7 +128,35 @@ async function buildFinalExcel() {
       return;
     }
 
-    console.log(`📊 Building Excel from ${comments.length} prospects...`);
+    console.log(`📊 Building Excel from ${comments.length} comments...`);
+
+    // Group comments by username to calculate engagement
+    const userGroups = {};
+    comments.forEach(comment => {
+      const username = comment.username;
+      if (!userGroups[username]) {
+        userGroups[username] = {
+          username: username,
+          full_name: comment.full_name || '',
+          comments: [],
+          sources: new Set(),
+          firstSeen: comment.comment_date,
+          lastSeen: comment.comment_date
+        };
+      }
+      userGroups[username].comments.push(comment);
+      userGroups[username].sources.add(comment.source);
+      
+      // Update date range
+      if (comment.comment_date < userGroups[username].firstSeen) {
+        userGroups[username].firstSeen = comment.comment_date;
+      }
+      if (comment.comment_date > userGroups[username].lastSeen) {
+        userGroups[username].lastSeen = comment.comment_date;
+      }
+    });
+
+    console.log(`   Found ${Object.keys(userGroups).length} unique prospects`);
 
     // Create workbook
     const workbook = new ExcelJS.Workbook();
@@ -51,13 +165,120 @@ async function buildFinalExcel() {
     workbook.created = new Date();
     workbook.modified = new Date();
 
-    // Sheet 1: All Prospects
-    const allProspectsSheet = workbook.addWorksheet('All Prospects', {
+    // Sheet 1: Prospect Summary (new main sheet)
+    const prospectSummarySheet = workbook.addWorksheet('Prospect Summary', {
       properties: { tabColor: { argb: 'FF0070C0' } }
     });
 
+    // Define columns for prospect summary
+    prospectSummarySheet.columns = [
+      { header: 'Username', key: 'username', width: 20 },
+      { header: 'Full Name', key: 'full_name', width: 25 },
+      { header: 'Total Comments', key: 'comment_count', width: 15 },
+      { header: 'Engagement Score', key: 'engagement_score', width: 18 },
+      { header: 'Engagement Level', key: 'engagement_level', width: 18 },
+      { header: 'Latest Comment', key: 'latest_comment', width: 50 },
+      { header: 'First Seen', key: 'first_seen', width: 20 },
+      { header: 'Last Seen', key: 'last_seen', width: 20 },
+      { header: 'Sources', key: 'sources', width: 30 }
+    ];
+
+    // Process and add prospect data
+    const prospectRows = [];
+    Object.values(userGroups).forEach(user => {
+      // Calculate engagement score
+      const engagement = calculateEngagementScore(user.comments);
+      
+      // Find latest comment
+      const latestComment = user.comments.reduce((latest, current) => {
+        return new Date(current.comment_date) > new Date(latest.comment_date) ? current : latest;
+      });
+      
+      prospectRows.push({
+        username: user.username,
+        full_name: user.full_name,
+        comment_count: user.comments.length,
+        engagement_score: engagement.score,
+        engagement_level: engagement.level,
+        latest_comment: latestComment.comment_text.substring(0, 100) + (latestComment.comment_text.length > 100 ? '...' : ''),
+        first_seen: new Date(user.firstSeen).toLocaleDateString(),
+        last_seen: new Date(user.lastSeen).toLocaleDateString(),
+        sources: Array.from(user.sources).join(', ')
+      });
+    });
+
+    // Sort by engagement score (highest first)
+    prospectRows.sort((a, b) => b.engagement_score - a.engagement_score);
+
+    // Add rows to sheet
+    prospectRows.forEach(row => {
+      const excelRow = prospectSummarySheet.addRow(row);
+      
+      // Color code engagement levels
+      const levelCell = excelRow.getCell('engagement_level');
+      if (row.engagement_level === 'HIGH') {
+        levelCell.font = { color: { argb: 'FF008000' }, bold: true };
+        levelCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8F5E9' }
+        };
+      } else if (row.engagement_level === 'MEDIUM') {
+        levelCell.font = { color: { argb: 'FFFF8C00' }, bold: true };
+        levelCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFF3E0' }
+        };
+      } else {
+        levelCell.font = { color: { argb: 'FFFF0000' } };
+        levelCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFEBEE' }
+        };
+      }
+    });
+
+    // Style the header row
+    prospectSummarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    prospectSummarySheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0070C0' }
+    };
+    prospectSummarySheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Sheet 2: Top Prospects (HIGH engagement only)
+    const topProspectsSheet = workbook.addWorksheet('Top Prospects', {
+      properties: { tabColor: { argb: 'FF008000' } }
+    });
+
+    // Same columns as summary
+    topProspectsSheet.columns = prospectSummarySheet.columns;
+    
+    // Filter and add only HIGH engagement prospects
+    const topProspects = prospectRows.filter(p => p.engagement_level === 'HIGH');
+    topProspects.forEach(row => {
+      topProspectsSheet.addRow(row);
+    });
+
+    // Style the header
+    topProspectsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    topProspectsSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF008000' }
+    };
+    topProspectsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Sheet 3: All Comments (detailed view)
+    const allCommentsSheet = workbook.addWorksheet('All Comments', {
+      properties: { tabColor: { argb: 'FFC0C0C0' } }
+    });
+
     // Define columns
-    allProspectsSheet.columns = [
+    allCommentsSheet.columns = [
       { header: 'Username', key: 'username', width: 20 },
       { header: 'Full Name', key: 'full_name', width: 25 },
       { header: 'Comment', key: 'comment_text', width: 50 },
@@ -66,21 +287,21 @@ async function buildFinalExcel() {
       { header: 'Post URL', key: 'post_url', width: 40 }
     ];
 
-    // Add data
+    // Add all comments
     comments.forEach(comment => {
-      allProspectsSheet.addRow(comment);
+      allCommentsSheet.addRow(comment);
     });
 
     // Style the header row
-    allProspectsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    allProspectsSheet.getRow(1).fill = {
+    allCommentsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    allCommentsSheet.getRow(1).fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF0070C0' }
+      fgColor: { argb: 'FF808080' }
     };
-    allProspectsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+    allCommentsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-    // Sheet 2: By Source
+    // Sheet 4: By Source
     const bySourceSheet = workbook.addWorksheet('By Source', {
       properties: { tabColor: { argb: 'FF00B050' } }
     });
@@ -98,15 +319,18 @@ async function buildFinalExcel() {
     // Add source summary
     bySourceSheet.columns = [
       { header: 'Source', key: 'source', width: 30 },
-      { header: 'Prospect Count', key: 'count', width: 15 },
+      { header: 'Total Comments', key: 'comment_count', width: 15 },
+      { header: 'Unique Prospects', key: 'unique_prospects', width: 18 },
       { header: 'Percentage', key: 'percentage', width: 15 }
     ];
 
-    Object.entries(sourceGroups).forEach(([source, prospects]) => {
+    Object.entries(sourceGroups).forEach(([source, sourceComments]) => {
+      const uniqueUsers = new Set(sourceComments.map(c => c.username));
       bySourceSheet.addRow({
         source: source,
-        count: prospects.length,
-        percentage: `${((prospects.length / comments.length) * 100).toFixed(1)}%`
+        comment_count: sourceComments.length,
+        unique_prospects: uniqueUsers.size,
+        percentage: `${((sourceComments.length / comments.length) * 100).toFixed(1)}%`
       });
     });
 
@@ -118,13 +342,18 @@ async function buildFinalExcel() {
       fgColor: { argb: 'FF00B050' }
     };
 
-    // Sheet 3: Statistics
+    // Sheet 5: Statistics
     const statsSheet = workbook.addWorksheet('Statistics', {
       properties: { tabColor: { argb: 'FFFF0000' } }
     });
 
     // Calculate statistics
-    const uniqueUsernames = new Set(comments.map(c => c.username));
+    const engagementStats = {
+      high: prospectRows.filter(p => p.engagement_level === 'HIGH').length,
+      medium: prospectRows.filter(p => p.engagement_level === 'MEDIUM').length,
+      low: prospectRows.filter(p => p.engagement_level === 'LOW').length
+    };
+
     const dateRange = comments.reduce((acc, comment) => {
       const date = new Date(comment.comment_date);
       if (!acc.min || date < acc.min) acc.min = date;
@@ -134,12 +363,16 @@ async function buildFinalExcel() {
 
     // Add statistics
     statsSheet.columns = [
-      { header: 'Metric', key: 'metric', width: 30 },
-      { header: 'Value', key: 'value', width: 30 }
+      { header: 'Metric', key: 'metric', width: 35 },
+      { header: 'Value', key: 'value', width: 35 }
     ];
 
-    statsSheet.addRow({ metric: 'Total Prospects', value: comments.length });
-    statsSheet.addRow({ metric: 'Unique Usernames', value: uniqueUsernames.size });
+    statsSheet.addRow({ metric: 'Total Comments', value: comments.length });
+    statsSheet.addRow({ metric: 'Unique Prospects', value: Object.keys(userGroups).length });
+    statsSheet.addRow({ metric: 'High Engagement Prospects', value: engagementStats.high });
+    statsSheet.addRow({ metric: 'Medium Engagement Prospects', value: engagementStats.medium });
+    statsSheet.addRow({ metric: 'Low Engagement Prospects', value: engagementStats.low });
+    statsSheet.addRow({ metric: 'Average Comments per Prospect', value: (comments.length / Object.keys(userGroups).length).toFixed(2) });
     statsSheet.addRow({ metric: 'Number of Sources', value: Object.keys(sourceGroups).length });
     statsSheet.addRow({ metric: 'Date Range', value: `${dateRange.min?.toLocaleDateString()} - ${dateRange.max?.toLocaleDateString()}` });
     statsSheet.addRow({ metric: 'Last Updated', value: new Date().toLocaleString() });
@@ -153,7 +386,7 @@ async function buildFinalExcel() {
     };
 
     // Apply borders to all sheets
-    [allProspectsSheet, bySourceSheet, statsSheet].forEach(sheet => {
+    [prospectSummarySheet, topProspectsSheet, allCommentsSheet, bySourceSheet, statsSheet].forEach(sheet => {
       sheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -166,17 +399,27 @@ async function buildFinalExcel() {
       });
     });
 
+    // Add autofilters to main sheets
+    prospectSummarySheet.autoFilter = prospectSummarySheet.dimensions.ref;
+    allCommentsSheet.autoFilter = allCommentsSheet.dimensions.ref;
+
     // Save the file
     await workbook.xlsx.writeFile(outputFile);
 
     console.log('\n✅ Excel database built successfully!');
-    console.log(`   Total prospects: ${comments.length}`);
+    console.log(`   Total comments: ${comments.length}`);
+    console.log(`   Unique prospects: ${Object.keys(userGroups).length}`);
+    console.log(`   High engagement: ${engagementStats.high} prospects`);
+    console.log(`   Medium engagement: ${engagementStats.medium} prospects`);
+    console.log(`   Low engagement: ${engagementStats.low} prospects`);
     console.log(`   Sources: ${Object.keys(sourceGroups).join(', ')}`);
     console.log(`   Output: ${outputFile}`);
     console.log('\n📊 Sheets created:');
-    console.log('   1. All Prospects - Complete list of all prospects');
-    console.log('   2. By Source - Prospects grouped by source');
-    console.log('   3. Statistics - Summary metrics');
+    console.log('   1. Prospect Summary - All prospects with engagement scores');
+    console.log('   2. Top Prospects - HIGH engagement prospects only');
+    console.log('   3. All Comments - Complete list of all comments');
+    console.log('   4. By Source - Comments grouped by source');
+    console.log('   5. Statistics - Summary metrics and insights');
 
   } catch (error) {
     console.error('❌ Error:', error.message);
