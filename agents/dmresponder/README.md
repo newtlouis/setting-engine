@@ -4,7 +4,7 @@
 
 Context-aware conversation AI that generates personalized follow-up messages for Instagram DM conversations.
 
-## 🚀 Features
+## Features
 
 - **Conversation State Machine**: Automatically detects conversation stage
 - **Intent Detection**: Identifies pain points, objections, and buying signals
@@ -13,6 +13,7 @@ Context-aware conversation AI that generates personalized follow-up messages for
 - **Objection Handling**: Pre-built frameworks for common concerns
 - **CTA Generation**: Natural call-to-action suggestions
 - **Human-In-Loop**: NEVER sends automated messages—suggestions only
+- **SQLite Integration**: Load conversations and lead context from shared database
 
 ## ⚠️ CRITICAL SAFETY REQUIREMENTS
 
@@ -45,9 +46,24 @@ cp .env.example .env
 # Edit .env as needed
 ```
 
-## 🎯 Usage
+## Usage
 
-### Interactive Mode (Recommended)
+### Database Mode (Recommended)
+
+Load conversation from SQLite database by username:
+
+```bash
+# List active conversations
+node bin/run.js --list
+
+# Respond to a lead (add their latest message)
+node bin/run.js --username johndoe --message "their reply here"
+
+# Save response to database
+node bin/run.js --username johndoe --message "their reply" --save
+```
+
+### Interactive Mode
 
 ```bash
 node bin/run.js --interactive

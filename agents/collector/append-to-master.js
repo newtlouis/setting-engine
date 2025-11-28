@@ -1,31 +1,36 @@
 #!/usr/bin/env node
 
 /**
- * Append scraped comments to permanent master CSV
+ * Save Comments to Database
  * 
- * IMPROVED: Now keeps ALL comments per user (not just the first one)
- * This allows accurate engagement scoring based on comment frequency
+ * Reads comments from output/comments.csv and saves them to the SQLite database.
+ * - Creates leads for new usernames
+ * - Stores all comments (deduplicates exact matches)
+ * - Recalculates engagement scores
  */
 
 import { promises as fs } from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse/sync';
-import { stringify } from 'csv-stringify/sync';
 import { fileURLToPath } from 'url';
+import {
+  initDatabase,
+  closeDatabase,
+  insertCommentsBatch,
+  recalculateAllEngagement,
+  getStats
+} from './src/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function appendToMaster() {
+async function saveToDatabase() {
   const outputDir = path.join(__dirname, 'output');
   const permanentDir = path.join(__dirname, 'permanent-data');
   const commentsFile = path.join(outputDir, 'comments.csv');
-  const masterFile = path.join(permanentDir, 'master_comments.csv');
+  const dbFile = path.join(permanentDir, 'leads.db');
 
   try {
-    // Ensure permanent directory exists
-    await fs.mkdir(permanentDir, { recursive: true });
-
     // Check if comments.csv exists
     try {
       await fs.access(commentsFile);
@@ -35,105 +40,72 @@ async function appendToMaster() {
       return;
     }
 
-    // Read new comments
-    const newCommentsData = await fs.readFile(commentsFile, 'utf-8');
-    const newComments = parse(newCommentsData, {
+    // Read new comments from CSV
+    const commentsData = await fs.readFile(commentsFile, 'utf-8');
+    const comments = parse(commentsData, {
       columns: true,
       skip_empty_lines: true
     });
 
-    if (newComments.length === 0) {
-      console.log('⚠️  comments.csv is empty, nothing to append');
+    if (comments.length === 0) {
+      console.log('⚠️  comments.csv is empty, nothing to save');
       return;
     }
 
-    console.log(`📋 Found ${newComments.length} comments to process`);
+    console.log(`📋 Found ${comments.length} comments to process`);
 
-    // Read existing master (if exists)
-    let existingComments = [];
+    // Initialize database
+    await initDatabase(dbFile);
     
-    try {
-      const masterData = await fs.readFile(masterFile, 'utf-8');
-      existingComments = parse(masterData, {
-        columns: true,
-        skip_empty_lines: true
-      });
-      
-      console.log(`📚 Master file has ${existingComments.length} existing records`);
-    } catch {
-      console.log('📝 Creating new master file...');
+    // Get stats before
+    const statsBefore = getStats();
+    console.log(`📚 Database has ${statsBefore.total_leads} leads and ${statsBefore.total_comments} comments`);
+
+    // Insert comments in batch
+    console.log('\n💾 Saving comments to database...');
+    const { inserted, skipped } = insertCommentsBatch(comments);
+
+    console.log(`   ✅ Inserted ${inserted.length} new comments`);
+    console.log(`   ⏭️  Skipped ${skipped.length} duplicates`);
+
+    // Recalculate engagement scores
+    if (inserted.length > 0) {
+      console.log('\n📊 Recalculating engagement scores...');
+      const updatedCount = recalculateAllEngagement();
+      console.log(`   Updated ${updatedCount} leads`);
     }
 
-    // Create a Set of existing comment signatures to detect TRUE duplicates
-    // A duplicate = same username + same comment text + same post URL
-    const existingSignatures = new Set();
-    existingComments.forEach(comment => {
-      const signature = `${comment.username}|${comment.post_url}|${comment.comment_text?.substring(0, 50)}`;
-      existingSignatures.add(signature);
+    // Get stats after
+    const statsAfter = getStats();
+    
+    // Format engagement distribution
+    const engagementDist = {};
+    statsAfter.leads_by_engagement.forEach(e => {
+      engagementDist[e.engagement_level] = e.count;
     });
 
-    // Filter out TRUE duplicates only (same person, same comment, same post)
-    // But KEEP multiple comments from the same person on different posts or different comments
-    const uniqueNewComments = newComments.filter(comment => {
-      const signature = `${comment.username}|${comment.post_url}|${comment.comment_text?.substring(0, 50)}`;
-      return !existingSignatures.has(signature);
-    });
+    console.log('\n✅ Database updated successfully!');
+    console.log('─'.repeat(50));
+    console.log('📊 Current Statistics:');
+    console.log(`   Total leads:     ${statsAfter.total_leads}`);
+    console.log(`   Total comments:  ${statsAfter.total_comments}`);
+    console.log(`   Spam filtered:   ${statsAfter.spam_comments}`);
+    console.log('');
+    console.log('   Engagement distribution:');
+    console.log(`     HIGH:   ${engagementDist.HIGH || 0} leads`);
+    console.log(`     MEDIUM: ${engagementDist.MEDIUM || 0} leads`);
+    console.log(`     LOW:    ${engagementDist.LOW || 0} leads`);
+    console.log('');
+    console.log(`   Database: ${dbFile}`);
 
-    const duplicatesSkipped = newComments.length - uniqueNewComments.length;
-
-    if (uniqueNewComments.length === 0) {
-      console.log('ℹ️  All comments already exist in master (exact duplicates)');
-      return;
-    }
-
-    // Append new unique comments
-    const allComments = [...existingComments, ...uniqueNewComments];
-
-    // Get all column headers from both existing and new comments
-    const allColumns = new Set([
-      'username',
-      'full_name', 
-      'comment_text',
-      'comment_date',
-      'post_url',
-      'source',
-      'profile_url',
-      'is_spam',
-      'spam_reason',
-      'followers_count',
-      'is_verified',
-      'is_business'
-    ]);
-
-    // Write back to master with all columns
-    const csvOutput = stringify(allComments, {
-      header: true,
-      columns: Array.from(allColumns)
-    });
-
-    await fs.writeFile(masterFile, csvOutput);
-
-    // Calculate stats
-    const uniqueUsers = new Set(allComments.map(c => c.username));
-    const totalCommentsByUser = {};
-    allComments.forEach(c => {
-      totalCommentsByUser[c.username] = (totalCommentsByUser[c.username] || 0) + 1;
-    });
-    const multiCommenters = Object.values(totalCommentsByUser).filter(count => count > 1).length;
-
-    console.log(`\n✅ Success!`);
-    console.log(`   Added ${uniqueNewComments.length} new comments`);
-    console.log(`   Skipped ${duplicatesSkipped} exact duplicates`);
-    console.log(`   Master now contains ${allComments.length} total comments`);
-    console.log(`   From ${uniqueUsers.size} unique prospects`);
-    console.log(`   ${multiCommenters} prospects have multiple comments (high engagement)`);
-    console.log(`   Saved to: ${masterFile}`);
+    closeDatabase();
 
   } catch (error) {
     console.error('❌ Error:', error.message);
+    closeDatabase();
     process.exit(1);
   }
 }
 
 // Run the script
-appendToMaster();
+saveToDatabase();

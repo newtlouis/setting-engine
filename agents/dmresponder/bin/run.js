@@ -4,6 +4,11 @@
  * DM Responder Agent CLI Entry Point
  * 
  * Generates contextual follow-up messages for Instagram DM conversations.
+ * 
+ * Modes:
+ * - Interactive: Paste message directly
+ * - File: Load from conversation_history.json
+ * - Database: Load from SQLite database by username
  */
 
 import { program } from 'commander';
@@ -13,6 +18,15 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { generateResponse } from '../src/engine.js';
 import { createInterface } from 'readline';
+import {
+  initDB,
+  getLeadWithContext,
+  getConversationHistory,
+  addMessage,
+  updateConversationStage,
+  getActiveConversations,
+  getConversationSummary
+} from '../src/db_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,65 +39,60 @@ program
   .version('1.0.0');
 
 program
-  .option('-c, --conversation <file>', 'Path to conversation_history.json', 'conversation_history.json')
+  .option('-c, --conversation <file>', 'Path to conversation_history.json')
   .option('-l, --lead <file>', 'Path to lead_context.json (optional)')
   .option('-b, --business <file>', 'Path to business_context.json (optional)')
   .option('-o, --output <file>', 'Output file for response', 'response.json')
+  .option('-u, --username <username>', 'Load conversation from database by username')
+  .option('-m, --message <text>', 'User message to respond to (with --username)')
   .option('--interactive', 'Interactive mode: prompt for user message', false)
+  .option('--list', 'List active conversations from database', false)
+  .option('--save', 'Save response to database (with --username)', false)
   .action(async (options) => {
     try {
-      console.log('💬 DM Responder Agent\n');
+      console.log('\n=== DM Responder Agent ===\n');
 
-      console.log('⚠️  IMPORTANT REMINDERS:');
-      console.log('   • This agent generates SUGGESTIONS only');
-      console.log('   • ALWAYS review and personalize before sending');
-      console.log('   • NEVER automate sending without human approval');
-      console.log('   • Only use AFTER prospect replied to your manual first message\n');
+      console.log('REMINDERS:');
+      console.log('  - This agent generates SUGGESTIONS only');
+      console.log('  - ALWAYS review and personalize before sending');
+      console.log('  - NEVER automate sending without human approval\n');
+
+      // List mode: show active conversations
+      if (options.list) {
+        await handleListMode();
+        return;
+      }
 
       let conversationHistory;
       let leadContext = null;
       let businessContext = null;
+      let currentUsername = null;
 
+      // Database mode: load by username
+      if (options.username) {
+        currentUsername = options.username;
+        const result = await handleDatabaseMode(options);
+        conversationHistory = result.conversationHistory;
+        leadContext = result.leadContext;
+        
       // Interactive mode
-      if (options.interactive) {
-        console.log('📝 Interactive mode\n');
-        console.log('Enter the prospect\'s message (press Enter twice when done):');
+      } else if (options.interactive) {
+        conversationHistory = await handleInteractiveMode();
         
-        const userMessage = await readMultilineInput();
-        
-        conversationHistory = [
-          {
-            role: 'user',
-            text: userMessage.trim()
-          }
-        ];
-
-        console.log('\n✅ Message received\n');
-
+      // File mode
       } else {
-        // File mode
-        try {
-          const conversationData = await readFile(options.conversation, 'utf-8');
-          conversationHistory = JSON.parse(conversationData);
-        } catch (error) {
-          console.error(`❌ Error reading conversation file: ${error.message}`);
-          console.error('\nUsage:');
-          console.error('  1. Create conversation_history.json with format:');
-          console.error('     [{"role":"user","text":"..."},{"role":"assistant","text":"..."}]');
-          console.error('  2. Run: dmresponder -c conversation_history.json\n');
-          console.error('Or use --interactive mode to paste the message directly.\n');
-          process.exit(1);
-        }
+        const conversationFile = options.conversation || 'conversation_history.json';
+        conversationHistory = await handleFileMode(conversationFile);
       }
 
-      // Load optional contexts
-      if (options.lead) {
+      // Load optional contexts from files
+      if (options.lead && !leadContext) {
         try {
           const leadData = await readFile(options.lead, 'utf-8');
           leadContext = JSON.parse(leadData);
-          console.log('📊 Lead context loaded\n');
+          console.log('Lead context loaded from file\n');
         } catch (error) {
-          console.log('ℹ️  No lead context provided (optional)\n');
+          // Ignore
         }
       }
 
@@ -91,14 +100,14 @@ program
         try {
           const businessData = await readFile(options.business, 'utf-8');
           businessContext = JSON.parse(businessData);
-          console.log('🏢 Business context loaded\n');
+          console.log('Business context loaded\n');
         } catch (error) {
-          console.log('ℹ️  No business context provided (optional)\n');
+          // Ignore
         }
       }
 
       // Generate response
-      console.log('🤖 Generating response...\n');
+      console.log('Generating response...\n');
 
       const response = await generateResponse({
         conversationHistory,
@@ -107,38 +116,23 @@ program
       });
 
       // Display response
-      console.log('─'.repeat(60));
-      console.log('💡 SUGGESTED RESPONSE:\n');
-      console.log(response.next_message);
-      console.log('\n' + '─'.repeat(60));
-      console.log(`\n📍 Stage: ${response.conversation_stage}`);
-      console.log(`📝 Type: ${response.message_type}`);
-      console.log(`\n🧠 Reasoning:\n${response.reasoning}\n`);
-
-      if (response.alternative_approaches && response.alternative_approaches.length > 0) {
-        console.log('💭 Alternative approaches:');
-        response.alternative_approaches.forEach((alt, i) => {
-          console.log(`   ${i + 1}. ${alt}`);
-        });
-        console.log('');
-      }
-
-      if (response.next_steps && response.next_steps.length > 0) {
-        console.log('📋 Suggested next steps:');
-        response.next_steps.forEach((step, i) => {
-          console.log(`   ${i + 1}. ${step}`);
-        });
-        console.log('');
-      }
+      displayResponse(response, leadContext);
 
       // Save to file
       await writeFile(options.output, JSON.stringify(response, null, 2));
-      console.log(`💾 Response saved to: ${options.output}\n`);
+      console.log(`Response saved to: ${options.output}\n`);
 
-      console.log('⚠️  Remember to review and personalize before sending!\n');
+      // Save to database if requested
+      if (options.save && currentUsername) {
+        await addMessage(currentUsername, 'assistant', response.next_message, response.message_type);
+        await updateConversationStage(currentUsername, response.conversation_stage);
+        console.log(`Response saved to database for @${currentUsername}\n`);
+      }
+
+      console.log('Remember to review and personalize before sending!\n');
 
     } catch (error) {
-      console.error('\n❌ Error:', error.message);
+      console.error('\nERROR:', error.message);
       if (process.env.DEBUG === 'true') {
         console.error(error.stack);
       }
@@ -147,6 +141,190 @@ program
   });
 
 program.parse();
+
+/**
+ * Handle database mode
+ */
+async function handleDatabaseMode(options) {
+  const username = options.username;
+  console.log(`Loading data for @${username} from database...\n`);
+  
+  await initDB();
+  
+  // Get lead context
+  const leadContext = await getLeadWithContext(username);
+  if (!leadContext) {
+    throw new Error(`Lead not found: @${username}`);
+  }
+  
+  console.log(`Lead: @${username}`);
+  console.log(`  Status: ${leadContext.status}`);
+  console.log(`  Stage: ${leadContext.conversation_stage || 'initial'}`);
+  console.log(`  Engagement: ${leadContext.engagement_level}`);
+  if (leadContext.bio) {
+    console.log(`  Bio: ${leadContext.bio.substring(0, 60)}...`);
+  }
+  if (leadContext.pain_points.length > 0) {
+    console.log(`  Pain points: ${leadContext.pain_points.join(', ')}`);
+  }
+  console.log('');
+  
+  // Get conversation history
+  let conversationHistory = await getConversationHistory(username);
+  
+  // If user provided a new message, add it
+  if (options.message) {
+    console.log('New message from prospect:');
+    console.log(`  "${options.message}"\n`);
+    
+    // Save to DB
+    await addMessage(username, 'user', options.message);
+    
+    // Add to history
+    conversationHistory.push({
+      role: 'user',
+      text: options.message
+    });
+  }
+  
+  // If no conversation and no new message, prompt for one
+  if (conversationHistory.length === 0) {
+    console.log('No conversation history found.');
+    console.log('Use --message "their message" to add the prospect\'s message.\n');
+    throw new Error('No messages to respond to');
+  }
+  
+  // Display conversation history
+  console.log('--- Conversation History ---');
+  conversationHistory.forEach((msg, i) => {
+    const role = msg.role === 'user' ? 'PROSPECT' : 'YOU';
+    const text = msg.text.length > 100 ? msg.text.substring(0, 100) + '...' : msg.text;
+    console.log(`[${i + 1}] ${role}: ${text}`);
+  });
+  console.log('---\n');
+  
+  // Ensure last message is from user
+  if (conversationHistory[conversationHistory.length - 1].role !== 'user') {
+    throw new Error('Last message must be from the prospect. Use --message to add their reply.');
+  }
+  
+  return { conversationHistory, leadContext };
+}
+
+/**
+ * Handle interactive mode
+ */
+async function handleInteractiveMode() {
+  console.log('Interactive mode\n');
+  console.log('Enter the prospect\'s message (press Enter twice when done):\n');
+  
+  const userMessage = await readMultilineInput();
+  
+  console.log('\nMessage received\n');
+  
+  return [
+    {
+      role: 'user',
+      text: userMessage.trim()
+    }
+  ];
+}
+
+/**
+ * Handle file mode
+ */
+async function handleFileMode(conversationFile) {
+  try {
+    const conversationData = await readFile(conversationFile, 'utf-8');
+    return JSON.parse(conversationData);
+  } catch (error) {
+    console.error(`Error reading conversation file: ${error.message}`);
+    console.error('\nUsage:');
+    console.error('  1. Create conversation_history.json with format:');
+    console.error('     [{"role":"user","text":"..."},{"role":"assistant","text":"..."}]');
+    console.error('  2. Run: node bin/run.js -c conversation_history.json\n');
+    console.error('Or use --interactive mode to paste the message directly.');
+    console.error('Or use --username to load from database.\n');
+    process.exit(1);
+  }
+}
+
+/**
+ * Handle list mode - show active conversations
+ */
+async function handleListMode() {
+  console.log('Active Conversations:\n');
+  
+  await initDB();
+  const conversations = await getActiveConversations();
+  
+  if (conversations.length === 0) {
+    console.log('No active conversations found.\n');
+    console.log('Start by using the Outreach agent to send first messages.\n');
+    return;
+  }
+  
+  for (const lead of conversations) {
+    const summary = await getConversationSummary(lead.username);
+    
+    console.log(`@${lead.username}`);
+    console.log(`  Status: ${lead.status} | Stage: ${lead.conversation_stage || 'initial'}`);
+    console.log(`  Messages: ${summary.message_count} | Last: ${lead.last_message_at || 'N/A'}`);
+    if (summary.last_message) {
+      const lastText = summary.last_message.text.substring(0, 60);
+      console.log(`  Last message (${summary.last_message.role}): "${lastText}..."`);
+    }
+    console.log('');
+  }
+  
+  console.log('To respond to a conversation:');
+  console.log('  node bin/run.js --username <username> --message "their reply"\n');
+}
+
+/**
+ * Display the generated response
+ */
+function displayResponse(response, leadContext) {
+  console.log('='.repeat(60));
+  console.log('SUGGESTED RESPONSE:\n');
+  console.log(response.next_message);
+  console.log('\n' + '='.repeat(60));
+  
+  console.log(`\nStage: ${response.conversation_stage}`);
+  console.log(`Type: ${response.message_type}`);
+  console.log(`\nReasoning:\n${response.reasoning}\n`);
+
+  if (response.alternative_approaches && response.alternative_approaches.length > 0) {
+    console.log('Alternative approaches:');
+    response.alternative_approaches.forEach((alt, i) => {
+      console.log(`  ${i + 1}. ${alt}`);
+    });
+    console.log('');
+  }
+
+  if (response.next_steps && response.next_steps.length > 0) {
+    console.log('Suggested next steps:');
+    response.next_steps.forEach((step, i) => {
+      console.log(`  ${i + 1}. ${step}`);
+    });
+    console.log('');
+  }
+  
+  // Show lead context tips if available
+  if (leadContext) {
+    console.log('--- Lead Context Tips ---');
+    if (leadContext.bio) {
+      console.log(`Bio mentions: ${leadContext.bio.substring(0, 80)}...`);
+    }
+    if (leadContext.pain_points && leadContext.pain_points.length > 0) {
+      console.log(`Known pain points: ${leadContext.pain_points.join(', ')}`);
+    }
+    if (leadContext.original_comments && leadContext.original_comments.length > 0) {
+      console.log(`Their original comment: "${leadContext.original_comments[0].text.substring(0, 60)}..."`);
+    }
+    console.log('');
+  }
+}
 
 /**
  * Read multiline input from stdin (ends with empty line)

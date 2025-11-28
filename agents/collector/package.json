@@ -14,6 +14,8 @@
     "build-final-db": "node build-final-excel.js",
     "collect": "node collect.js",
     "process": "node collect.js --only-save-build",
+    "scrape-profiles": "node scrape-profiles.js",
+    "migrate": "node migrate-csv-to-db.js",
     "test": "node --test tests/*.test.js",
     "dev": "node --watch bin/run.js"
   },
@@ -26,6 +28,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^12.4.6",
     "commander": "^11.1.0",
     "csv-parse": "^6.1.0",
     "csv-stringify": "^6.6.0",
