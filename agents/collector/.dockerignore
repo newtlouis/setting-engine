@@ -1,7 +1,0 @@
-node_modules
-output
-*.log
-.env
-.DS_Store
-tests
-samples

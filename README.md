@@ -105,13 +105,10 @@ INSTAGRAM_PASSWORD="your_password"
 ### 3. Run Your First Scrape
 
 ```bash
-npm run scrape -- --hashtags marketing --target-prospects 20
-```
-
-### 4. View Results
-
-```bash
-./open-crm.sh  # Opens Excel CRM with engagement scores
+npm run scrape -- --max-posts 2 --max-comments 10 -t blue
+npm run save-comments
+npm run build-final-db
+open output/instagram_final_database.xlsx
 ```
 
 ---
