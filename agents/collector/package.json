@@ -12,6 +12,8 @@
     "scrape": "node bin/run.js",
     "save-comments": "node append-to-master.js",
     "build-final-db": "node build-final-excel.js",
+    "collect": "node collect.js",
+    "process": "node collect.js --only-save-build",
     "test": "node --test tests/*.test.js",
     "dev": "node --watch bin/run.js"
   },
