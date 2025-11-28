@@ -45,6 +45,14 @@ build/
 playwright-report/
 test-results/
 
+# Browser session data (Playwright persistent context)
+browser-data/
+**/browser-data/
+
+# Persistent local data (SQLite, etc.)
+permanent-data/
+**/permanent-data/
+
 # Temporary files
 tmp/
 temp/
