@@ -43,8 +43,8 @@ export const CONFIG = {
     SEND_BUTTON_ALT: 'div[role="button"]:has-text("Send")',
     
     // Detection indicators
-    CHALLENGE_INDICATOR: 'form[id*="challenge"]',
-    RATE_LIMIT_TEXT: /try again later|action blocked|wait/i
+    CHALLENGE_INDICATOR: 'form[id*="challenge"]'
+    // Note: Rate limit detection is now done with specific selectors in dm_sender.js
   }
 };
 

@@ -31,10 +31,20 @@ async function detectBlock(page) {
     return { blocked: true, reason: 'challenge_detected' };
   }
   
-  // Check page text for rate limit messages
-  const pageText = await page.textContent('body').catch(() => '');
-  if (CONFIG.SELECTORS.RATE_LIMIT_TEXT.test(pageText)) {
-    return { blocked: true, reason: 'rate_limit_detected' };
+  // Check for specific rate limit dialogs/messages (more targeted)
+  const rateLimitIndicators = [
+    'text="Try Again Later"',
+    'text="Action Blocked"', 
+    'text="We limit how often"',
+    'text="You\'re Temporarily Blocked"',
+    '[role="dialog"]:has-text("try again")'
+  ];
+  
+  for (const selector of rateLimitIndicators) {
+    const element = await page.$(selector).catch(() => null);
+    if (element) {
+      return { blocked: true, reason: 'rate_limit_detected' };
+    }
   }
   
   return { blocked: false };
@@ -57,17 +67,34 @@ export async function initBrowser(options = {}) {
   console.log(`   User data: ${userDataDir}`);
   console.log(`   Headless: ${headless}`);
   
+  const timeout = CONFIG.PAGE_TIMEOUT || 90000;
+  
   const browser = await chromium.launchPersistentContext(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
     viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    timeout: timeout
   });
   
   const page = await browser.newPage();
+  page.setDefaultTimeout(timeout);
   
   // Navigate to Instagram to check login status
-  await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded' });
+  console.log(`   Loading Instagram (timeout: ${timeout/1000}s)...`);
+  try {
+    await page.goto('https://www.instagram.com/', { 
+      waitUntil: 'domcontentloaded',
+      timeout: timeout
+    });
+  } catch (error) {
+    console.log('   Slow connection, retrying with extended timeout...');
+    await delay(3000, 5000);
+    await page.goto('https://www.instagram.com/', { 
+      waitUntil: 'domcontentloaded',
+      timeout: timeout * 2  // Double timeout on retry
+    });
+  }
   await delay(2000, 3000);
   
   // Check if logged in
