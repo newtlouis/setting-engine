@@ -3,6 +3,12 @@
  * 
  * Handles sending DMs via Playwright with proper rate limiting and safety features.
  * 
+ * WORKFLOW:
+ * - Opens one "working" tab to check profiles
+ * - For each contactable profile: opens a NEW tab, types message, keeps tab open
+ * - Skipped profiles: just changes URL in working tab
+ * - At the end: browser stays open so user can review and send messages manually
+ * 
  * CRITICAL SAFETY NOTES:
  * - This module requires manual login (no automated login)
  * - Rate limits are enforced to avoid account restrictions
@@ -12,6 +18,11 @@
 
 import { chromium } from 'playwright';
 import { CONFIG } from './config.js';
+
+// Store reference to browser context for tab management
+let browserContext = null;
+let workingPage = null;  // Reusable tab for checking profiles
+let messageTabs = [];    // Tabs with typed messages (kept open)
 
 /**
  * Wait for a random delay between min and max
@@ -69,7 +80,7 @@ export async function initBrowser(options = {}) {
   
   const timeout = CONFIG.PAGE_TIMEOUT || 90000;
   
-  const browser = await chromium.launchPersistentContext(userDataDir, {
+  browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
     viewport: { width: 1280, height: 800 },
@@ -77,20 +88,24 @@ export async function initBrowser(options = {}) {
     timeout: timeout
   });
   
-  const page = await browser.newPage();
-  page.setDefaultTimeout(timeout);
+  // Reset tab tracking
+  messageTabs = [];
+  
+  // Create working page (for checking profiles)
+  workingPage = await browserContext.newPage();
+  workingPage.setDefaultTimeout(timeout);
   
   // Navigate to Instagram to check login status
   console.log(`   Loading Instagram (timeout: ${timeout/1000}s)...`);
   try {
-    await page.goto('https://www.instagram.com/', { 
+    await workingPage.goto('https://www.instagram.com/', { 
       waitUntil: 'domcontentloaded',
       timeout: timeout
     });
   } catch (error) {
     console.log('   Slow connection, retrying with extended timeout...');
     await delay(3000, 5000);
-    await page.goto('https://www.instagram.com/', { 
+    await workingPage.goto('https://www.instagram.com/', { 
       waitUntil: 'domcontentloaded',
       timeout: timeout * 2  // Double timeout on retry
     });
@@ -98,7 +113,7 @@ export async function initBrowser(options = {}) {
   await delay(2000, 3000);
   
   // Check if logged in
-  const isLoggedIn = await page.evaluate(() => {
+  const isLoggedIn = await workingPage.evaluate(() => {
     // Check for elements that only appear when logged in
     return !!(
       document.querySelector('svg[aria-label="Home"]') ||
@@ -118,13 +133,35 @@ export async function initBrowser(options = {}) {
     });
     
     // Verify login
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await workingPage.reload({ waitUntil: 'domcontentloaded' });
     await delay(2000, 3000);
   }
   
   console.log('   Browser ready\n');
   
-  return { browser, page };
+  return { browser: browserContext, page: workingPage };
+}
+
+/**
+ * Create a new tab for a contactable profile
+ * @returns {Promise<Page>}
+ */
+async function createNewTab() {
+  if (!browserContext) {
+    throw new Error('Browser not initialized');
+  }
+  const timeout = CONFIG.PAGE_TIMEOUT || 90000;
+  const newPage = await browserContext.newPage();
+  newPage.setDefaultTimeout(timeout);
+  return newPage;
+}
+
+/**
+ * Get the working page (reusable tab for checking profiles)
+ * @returns {Page}
+ */
+function getWorkingPage() {
+  return workingPage;
 }
 
 /**
@@ -327,14 +364,193 @@ export async function sendMessage(page, message, dryRun = true) {
 }
 
 /**
- * Send a DM to a user (full flow)
+ * Check if a profile can be contacted (using working tab)
+ * Does NOT type any message - just checks if "Contacter" button exists
+ * 
+ * @param {string} username - Instagram username
+ * @returns {Promise<Object>} Result with canContact boolean
+ */
+export async function checkProfileContactable(username) {
+  const page = getWorkingPage();
+  
+  const result = {
+    username,
+    canContact: false,
+    error: null
+  };
+  
+  try {
+    const navResult = await goToProfile(page, username);
+    
+    if (!navResult.success) {
+      result.error = navResult.error;
+      return result;
+    }
+    
+    result.canContact = navResult.canContact;
+    if (!navResult.canContact) {
+      result.error = navResult.error || 'cannot_contact';
+    }
+    
+    return result;
+    
+  } catch (error) {
+    result.error = error.message;
+    return result;
+  }
+}
+
+/**
+ * Send a DM to a user in a NEW tab (keeps tab open with message)
  * 
  * Flow:
- * 1. Navigate to profile
- * 2. Check if "Contacter" button exists (skip if not - private account)
- * 3. Click "Contacter" to open DM popup
- * 4. Type message in the contenteditable field
- * 5. Send (or dry-run: clear message)
+ * 1. Open new tab and navigate to profile
+ * 2. Click "Contacter" to open DM popup
+ * 3. Type message in the contenteditable field
+ * 4. Keep tab open (don't send, don't close)
+ * 
+ * @param {string} username - Instagram username
+ * @param {string} message - Message to send
+ * @param {Object} options
+ * @returns {Promise<Object>} Result object
+ */
+export async function sendDMToUserInNewTab(username, message, options = {}) {
+  const {
+    dryRun = true,  // In new flow, dryRun means "type but don't send"
+    onProgress = null
+  } = options;
+  
+  const result = {
+    username,
+    success: false,
+    skipped: false,
+    steps: [],
+    error: null,
+    tabKeptOpen: false,
+    timestamp: new Date().toISOString()
+  };
+  
+  let newTab = null;
+  
+  try {
+    // Step 1: Create new tab and navigate to profile
+    if (onProgress) onProgress('opening_tab', username);
+    newTab = await createNewTab();
+    
+    const navResult = await goToProfile(newTab, username);
+    result.steps.push({ step: 'navigate', ...navResult });
+    
+    if (!navResult.success) {
+      result.error = navResult.error;
+      // Close failed tab
+      await newTab.close().catch(() => {});
+      return result;
+    }
+    
+    // Step 2: Check if we can contact (should be true since we pre-checked)
+    if (!navResult.canContact) {
+      result.skipped = true;
+      result.error = navResult.error || 'cannot_contact';
+      // Close tab for non-contactable
+      await newTab.close().catch(() => {});
+      return result;
+    }
+    
+    // Step 3: Click "Contacter" button to open DM popup
+    if (onProgress) onProgress('clicking_contact', username);
+    const clickResult = await clickMessageButton(newTab);
+    result.steps.push({ step: 'click_contact', ...clickResult });
+    
+    if (!clickResult.success) {
+      result.error = clickResult.error;
+      await newTab.close().catch(() => {});
+      return result;
+    }
+    
+    // Step 4: Type message (but DON'T send, DON'T clear - keep it ready)
+    if (onProgress) onProgress('typing', username);
+    const typeResult = await typeMessageOnly(newTab, message);
+    result.steps.push({ step: 'type', ...typeResult });
+    
+    if (!typeResult.success) {
+      result.error = typeResult.error;
+      await newTab.close().catch(() => {});
+      return result;
+    }
+    
+    // Success! Keep tab open with message ready to send
+    result.success = true;
+    result.tabKeptOpen = true;
+    result.dryRun = dryRun;
+    
+    // Track this tab
+    messageTabs.push({
+      username,
+      page: newTab,
+      message,
+      timestamp: result.timestamp
+    });
+    
+    return result;
+    
+  } catch (error) {
+    result.error = error.message;
+    if (newTab) {
+      await newTab.close().catch(() => {});
+    }
+    return result;
+  }
+}
+
+/**
+ * Type message only (don't send, don't clear)
+ * Message stays in the input field ready for manual send
+ * 
+ * @param {Page} page - Playwright page
+ * @param {string} message - Message to type
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function typeMessageOnly(page, message) {
+  try {
+    // Find message input using configured selectors
+    const inputSelectors = CONFIG.SELECTORS.MESSAGE_INPUT;
+    
+    let input = null;
+    for (const selector of inputSelectors) {
+      input = await page.$(selector).catch(() => null);
+      if (input) {
+        const isVisible = await input.isVisible().catch(() => false);
+        if (isVisible) break;
+        input = null;
+      }
+    }
+    
+    if (!input) {
+      return { success: false, error: 'message_input_not_found' };
+    }
+    
+    // Click to focus the contenteditable div
+    await input.click();
+    await delay(300, 500);
+    
+    // Type message with human-like delays
+    for (const char of message) {
+      await page.keyboard.type(char, { delay: 30 + Math.random() * 50 });
+    }
+    
+    await delay(300, 500);
+    
+    // DON'T send, DON'T clear - leave message in input
+    return { success: true, typed: true };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Legacy: Send a DM to a user (full flow) - single page mode
+ * Kept for backwards compatibility
  * 
  * @param {Page} page - Playwright page
  * @param {string} username - Instagram username
@@ -408,16 +624,22 @@ export async function sendDMToUser(page, username, message, options = {}) {
 }
 
 /**
- * Batch send DMs with rate limiting
+ * Batch send DMs with multi-tab workflow
  * 
- * @param {Page} page - Playwright page
+ * NEW WORKFLOW:
+ * 1. Use working tab to check if profile is contactable
+ * 2. If contactable: open NEW tab, navigate, type message, keep tab open
+ * 3. If not contactable: just move to next (working tab already has it)
+ * 4. At end: browser stays open with all message tabs ready to send
+ * 
+ * @param {Page} page - Playwright page (working page)
  * @param {Array} targets - Array of { username, message } objects
  * @param {Object} options
  * @returns {Promise<Object>} Results summary
  */
 export async function batchSendDMs(page, targets, options = {}) {
   const {
-    dryRun = true,
+    dryRun = true,  // In new flow, always "types but doesn't send"
     maxPerSession = CONFIG.MAX_DMS_PER_SESSION,
     onProgress = null,
     onComplete = null
@@ -430,12 +652,14 @@ export async function batchSendDMs(page, targets, options = {}) {
     failed: 0,
     skipped: 0,  // Private accounts / no contact button
     blocked: false,
+    tabsOpen: 0,
     details: []
   };
   
-  console.log(`\n=== Starting Batch DM ${dryRun ? '(DRY RUN)' : '(LIVE)'} ===`);
+  console.log(`\n=== Starting Batch DM (Multi-Tab Mode) ===`);
   console.log(`   Targets: ${targets.length}`);
   console.log(`   Max per session: ${maxPerSession}`);
+  console.log(`   Mode: Type messages, keep tabs open for manual review`);
   console.log(`   Delay range: ${CONFIG.MIN_DELAY_BETWEEN_DMS/1000}s - ${CONFIG.MAX_DELAY_BETWEEN_DMS/1000}s\n`);
   
   let successfulCount = 0;  // Track actual successes for max limit
@@ -446,8 +670,14 @@ export async function batchSendDMs(page, targets, options = {}) {
     
     console.log(`   [${i + 1}/${targets.length}] @${target.username}`);
     
-    // Check for blocks before each attempt
-    const blockStatus = await detectBlock(page);
+    // Step 1: Check if profile is contactable (using working tab)
+    if (onProgress) onProgress('checking', target.username);
+    console.log(`      Checking profile...`);
+    
+    const checkResult = await checkProfileContactable(target.username);
+    
+    // Check for blocks
+    const blockStatus = await detectBlock(getWorkingPage());
     if (blockStatus.blocked) {
       console.log(`   BLOCKED: ${blockStatus.reason}. Stopping.`);
       results.blocked = true;
@@ -455,22 +685,46 @@ export async function batchSendDMs(page, targets, options = {}) {
       break;
     }
     
-    // Send DM
-    const result = await sendDMToUser(page, target.username, target.message, {
-      dryRun,
+    if (!checkResult.canContact) {
+      // Not contactable - skip (working tab already moved on)
+      results.skipped++;
+      results.details.push({
+        username: target.username,
+        success: false,
+        skipped: true,
+        error: checkResult.error,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`      → SKIPPED: ${checkResult.error}`);
+      
+      if (onComplete) {
+        onComplete({ username: target.username, skipped: true, error: checkResult.error });
+      }
+      
+      // Short delay before next check
+      if (i < targets.length - 1) {
+        const waitTime = 2000 + Math.random() * 3000;  // 2-5 seconds
+        console.log(`      Waiting ${Math.round(waitTime/1000)}s...`);
+        await delay(waitTime, waitTime + 500);
+      }
+      continue;
+    }
+    
+    // Step 2: Contactable! Open new tab and type message
+    console.log(`      ✓ Can contact - opening new tab...`);
+    
+    const result = await sendDMToUserInNewTab(target.username, target.message, {
+      dryRun: true,  // Always just type, don't send
       onProgress
     });
     
     results.details.push(result);
     
-    if (result.success) {
+    if (result.success && result.tabKeptOpen) {
       results.successful++;
+      results.tabsOpen++;
       successfulCount++;
-      console.log(`      ✓ OK${dryRun ? ' (dry run)' : ''}`);
-    } else if (result.skipped) {
-      results.skipped++;
-      // Don't count skipped towards max, continue to next
-      console.log(`      → SKIPPED: ${result.error}`);
+      console.log(`      ✓ Message typed - tab #${results.tabsOpen} kept open`);
     } else {
       results.failed++;
       console.log(`      ✗ FAILED: ${result.error}`);
@@ -480,18 +734,10 @@ export async function batchSendDMs(page, targets, options = {}) {
       onComplete(result);
     }
     
-    // Rate limiting delay (except for last item and skipped items)
-    // Use shorter delay for skipped items since we didn't interact much
-    if (i < targets.length - 1) {
-      let waitTime;
-      if (result.skipped) {
-        // Shorter delay for skipped (just loaded profile)
-        waitTime = 3000 + Math.random() * 5000;  // 3-8 seconds
-      } else {
-        // Normal delay for actual DM attempts
-        waitTime = CONFIG.MIN_DELAY_BETWEEN_DMS + 
-                   Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS);
-      }
+    // Rate limiting delay (longer since we did more interaction)
+    if (i < targets.length - 1 && successfulCount < maxPerSession) {
+      const waitTime = CONFIG.MIN_DELAY_BETWEEN_DMS + 
+                       Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS);
       console.log(`      Waiting ${Math.round(waitTime/1000)}s before next...`);
       await delay(waitTime, waitTime + 1000);
     }
@@ -500,21 +746,89 @@ export async function batchSendDMs(page, targets, options = {}) {
   // Summary
   console.log('\n=== Batch Complete ===');
   console.log(`   Attempted: ${results.attempted}`);
-  console.log(`   Successful: ${results.successful}`);
+  console.log(`   Messages typed: ${results.successful}`);
+  console.log(`   Tabs open: ${results.tabsOpen}`);
   console.log(`   Skipped (private): ${results.skipped}`);
   console.log(`   Failed: ${results.failed}`);
   if (results.blocked) {
     console.log(`   STOPPED: ${results.blockReason}`);
   }
   
+  if (results.tabsOpen > 0) {
+    console.log(`\n   ⚠️  BROWSER LEFT OPEN`);
+    console.log(`   ${results.tabsOpen} tabs with messages ready to send.`);
+    console.log(`   Review each tab and press Enter to send manually.`);
+    console.log(`   Close browser when done.`);
+  }
+  
   return results;
 }
 
 /**
- * Close browser
+ * Get list of open message tabs
+ * @returns {Array} Array of {username, page, message, timestamp}
  */
-export async function closeBrowser(browser) {
-  if (browser) {
-    await browser.close();
+export function getOpenMessageTabs() {
+  return messageTabs;
+}
+
+/**
+ * Wait for user to finish reviewing and close browser manually
+ * Browser stays open until user presses Ctrl+C or closes it
+ */
+export async function waitForUserToFinish() {
+  if (messageTabs.length === 0) {
+    console.log('\n   No message tabs open. Closing browser...');
+    await closeBrowser();
+    return;
+  }
+  
+  console.log('\n=== REVIEW YOUR MESSAGES ===');
+  console.log(`   ${messageTabs.length} tabs with messages ready:`);
+  messageTabs.forEach((tab, i) => {
+    console.log(`   ${i + 1}. @${tab.username}`);
+  });
+  console.log('\n   For each tab:');
+  console.log('   1. Review the message');
+  console.log('   2. Press Enter to send (or edit first)');
+  console.log('   3. Move to next tab');
+  console.log('\n   When done, press Ctrl+C or close the browser manually.');
+  console.log('   Waiting...\n');
+  
+  // Keep process alive until browser is closed or Ctrl+C
+  return new Promise((resolve) => {
+    // Check if browser is still open every second
+    const checkInterval = setInterval(async () => {
+      try {
+        // Try to get pages - will fail if browser closed
+        const pages = browserContext?.pages();
+        if (!pages || pages.length === 0) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      } catch (e) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 1000);
+    
+    // Also handle Ctrl+C
+    process.on('SIGINT', () => {
+      clearInterval(checkInterval);
+      console.log('\n   Received Ctrl+C. Exiting...');
+      resolve();
+    });
+  });
+}
+
+/**
+ * Close browser (force close all tabs)
+ */
+export async function closeBrowser() {
+  if (browserContext) {
+    await browserContext.close().catch(() => {});
+    browserContext = null;
+    workingPage = null;
+    messageTabs = [];
   }
 }

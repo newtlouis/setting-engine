@@ -12,7 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { CONFIG, OUTREACH_CRITERIA } from './config.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
-import { initBrowser, batchSendDMs, closeBrowser } from './dm_sender.js';
+import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
 
 // Import database from collector (shared)
 const __filename = fileURLToPath(import.meta.url);
@@ -181,6 +181,12 @@ export async function previewOutreach(options = {}) {
 /**
  * Run outreach campaign
  * 
+ * NEW WORKFLOW:
+ * 1. Check each profile for "Contacter" button
+ * 2. If contactable: open new tab, type message, keep tab open
+ * 3. Skip non-contactable profiles
+ * 4. At end: browser stays open for manual review and sending
+ * 
  * @param {Object} options
  */
 export async function runOutreach(options = {}) {
@@ -188,19 +194,16 @@ export async function runOutreach(options = {}) {
     limit = CONFIG.MAX_DMS_PER_SESSION,
     niche = 'fitness',
     topic = 'their goals',
-    dryRun = true,
+    dryRun = true,  // In new flow, this is always "type but don't auto-send"
     userDataDir = './browser-data'
   } = options;
   
   console.log('\n========================================');
-  console.log(`   OUTREACH ${dryRun ? '(DRY RUN)' : '(LIVE MODE)'}`);
+  console.log('   OUTREACH (Multi-Tab Mode)');
   console.log('========================================\n');
-  
-  if (!dryRun) {
-    console.log('   LIVE MODE: Messages will be sent!');
-    console.log('   Press Ctrl+C within 5 seconds to cancel...\n');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-  }
+  console.log('   Messages will be typed but NOT sent automatically.');
+  console.log('   Each contactable profile opens in a new tab.');
+  console.log('   Review and send manually, then close browser.\n');
   
   // Get candidates
   const leads = await getOutreachCandidates({ limit, ...options });
@@ -240,33 +243,21 @@ export async function runOutreach(options = {}) {
     leadId: m.lead.id
   }));
   
-  // Send DMs
+  // Process leads with multi-tab workflow
   const results = await batchSendDMs(page, targets, {
-    dryRun,
+    dryRun: true,  // Always type, never auto-send in new flow
     onComplete: async (result) => {
-      // Update database for each sent message
-      if (result.success && !dryRun) {
+      // Track in database (mark as pending, not sent yet)
+      if (result.success && result.tabKeptOpen) {
         await loadDatabase();
         
-        // Find lead ID
         const target = targets.find(t => t.username === result.username);
         if (target) {
-          // Add to conversations
-          dbFunctions.addConversationMessage(
-            target.leadId,
-            'assistant',
-            targets.find(t => t.username === result.username)?.message,
-            'first_dm'
-          );
-          
-          // Update lead status
-          dbFunctions.updateLeadStatus(result.username, 'contacted');
-          
-          // Update first message sent timestamp
+          // Mark lead as having message ready (but not sent)
           db.prepare(`
             UPDATE leads SET 
-              first_message_sent_at = datetime('now'),
-              conversation_stage = 'initial'
+              status = 'message_ready',
+              conversation_stage = 'pending_send'
             WHERE username = ?
           `).run(result.username);
         }
@@ -274,8 +265,14 @@ export async function runOutreach(options = {}) {
     }
   });
   
-  // Close browser
-  await closeBrowser(browser);
+  // If we have tabs open, wait for user to finish
+  const openTabs = getOpenMessageTabs();
+  if (openTabs.length > 0) {
+    await waitForUserToFinish();
+  } else {
+    // No tabs open, close browser
+    await closeBrowser();
+  }
   
   return results;
 }
