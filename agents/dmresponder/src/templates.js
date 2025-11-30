@@ -1,51 +1,51 @@
 /**
- * Modèles de Messages (Ton chaleureux & informel)
+ * Modèles de Messages (Ton 100% humain)
  * 
- * Modèles de messages pré-écrits avec un style énergique et utilisant le tutoiement.
+ * Style : chaleureux, énergique, tutoiement, smileys, onomatopées.
  */
 
 export const EMPATHY_TEMPLATES = {
-  pain_acknowledgment: 'Je te comprends tellement. {painPoints}, c\'est vraiment un truc difficile, surtout quand on a l\'impression d\'avoir tout tenté. T\'es pas seul(e) là-dedans ! Est-ce que je peux te poser une question pour être sûr de bien saisir ton défi ?',
+  pain_acknowledgment: 'Ouch, je te comprends tellement. Galérer avec {painPoints}, c\'est vraiment un truc difficile, surtout quand on a l\'impression d\'avoir tout tenté. Mais hey, t\'es pas seul ! Est-ce que je peux te poser une petite question pour être sûr de bien capter ton défi ? 🤔',
   
-  curiosity_response: 'Super question ! Juste avant de te répondre, dis-moi, qu\'est-ce qui t\'a motivé(e) à m\'écrire aujourd\'hui ? Ça m\'aidera à te donner la meilleure réponse possible !',
+  curiosity_response: 'Ahah super question ! 😉 Écoute, juste avant de te dire qui je suis, dis-moi plutôt : qu\'est-ce qui t\'amène à m\'écrire aujourd\'hui ? Ça m\'aidera à te donner la réponse la plus utile pour TOI !',
   
-  general: 'Merci d\'avoir partagé ça avec moi. On dirait que ça te pèse depuis un moment. Qu\'est-ce qui changerait pour toi si on pouvait régler ce problème ensemble ?'
+  general: 'Merci de te confier à moi. On sent que ça te pèse depuis un moment... Dis-moi, qu\'est-ce qui changerait dans ta vie si on pouvait pulvériser ce problème ensemble ? 🚀'
 };
 
 export const QUALIFICATION_TEMPLATES = {
-  timeline: 'Merci pour ta confiance ! Juste par curiosité, tu aimerais que ça change rapidement ? C\'est un projet pour les prochaines semaines ou tu explores encore tes options ?',
+  timeline: 'Merci pour ta confiance ! Dis-moi, c\'est un truc que tu veux faire bouger vite, genre dans les prochaines semaines, ou t\'es plus en mode explo pour l\'instant ? 🧭',
   
-  commitment_level: 'Je pige. Dis-moi, si je te montrais un plan d\'action pour {achieve their goal}, qu\'est-ce qui pourrait te freiner pour te lancer ?',
+  commitment_level: 'Ok je vois ! Allez, question directe : si je te montrais un plan d\'action pour {achieve their goal}, qu\'est-ce qui te retiendrait de te lancer à fond ? 🔥',
   
-  investment_readiness: 'Logique. Petite question : si c\'était LA solution pour toi, est-ce que tu serais prêt(e) à investir sur toi maintenant, ou c\'est plus un truc que tu gardes pour plus tard ?',
+  investment_readiness: 'Bien vu. Question cash : si c\'était LA solution pour toi, est-ce que t\'es prêt à investir sur toi maintenant, ou c\'est un projet que tu gardes dans un coin de ta tête pour plus tard ?',
   
-  pain_depth: 'Je te suis. Sur une échelle de 1 à 10, à quel point {painPoint} te pèse au quotidien ? Et qu\'est-ce qui se passe si rien ne bouge ?'
+  pain_depth: 'Je te suis. Sur une échelle de 1 à 10, à quel point {painPoint} te prend la tête en ce moment ? Et imagine 2 secondes si rien ne changeait ?'
 };
 
 export const OBJECTION_TEMPLATES = {
-  price: 'Je comprends carrément. La plupart de mes clients pensaient la même chose au début. Puis ils ont réalisé que le coût de rester bloqué est bien plus lourd que l\'investissement pour avancer. Pour toi, ça représente quoi comme "coût" de ne pas régler ça maintenant ?',
+  price: 'Ah, la question du prix ! Je te comprends à 100%. Honnêtement, la plupart de mes clients ont eu la même réaction au début. Puis ils ont calculé ce que ça leur coûtait VRAIMENT de rester bloqués... C\'est souvent bien plus cher, tu ne crois pas ? 🤔',
   
-  time: 'Je vois, t\'es à fond ! Justement, ce que je propose est pensé pour les gens qui courent partout. C\'est pour ça que ça marche. Et si je te montrais comment avoir des résultats sans devoir rajouter des heures à ta semaine ?',
+  time: 'Ahah je vois, t\'es overbooké ! Justement, mon approche est pensée pour les gens qui courent partout. C\'est pour ça que ça marche. Et si je te montrais comment tout cartonner sans devoir rajouter des heures à ta semaine ? 😉',
   
-  skepticism: 'C\'est normal d\'être prudent(e). Tu as sûrement vu passer plein de promesses en l\'air. Je respecte ça. Qu\'est-ce qui te mettrait en confiance pour te dire que cette fois, c\'est différent ?',
+  skepticism: 'C\'est super sain d\'être prudent. T\'as sûrement vu passer des tonnes de promesses en l\'air. Je respecte ça. De quoi t\'aurais besoin pour sentir que cette fois, c\'est la bonne ?',
   
-  general: 'Je comprends ton hésitation. C\'est une réaction saine ! Peux-tu m\'en dire un peu plus sur ce qui te fait douter ?'
+  general: 'Je comprends ton hésitation, c\'est normal ! Dis-m\'en un peu plus, qu\'est-ce qui te fait douter ?'
 };
 
 export const CTA_TEMPLATES = {
-  soft_cta: 'Écoute, avec ce que tu me dis, je suis quasi sûr que je peux t\'aider. Ça te dirait qu\'on s\'appelle 15 minutes pour en discuter ? Sans pression, juste pour voir si le courant passe !',
+  soft_cta: 'Franchement, avec ce que tu me dis, je suis quasi sûr que je peux t\'aider. Ça te chauffe qu\'on s\'appelle 15 petites minutes pour en parler ? Zéro pression, juste pour voir si le feeling passe bien ! 🤙',
   
-  scheduling: 'Top ! Voilà mon lien de calendrier. Choisis le créneau qui t\'arrange le plus et on se fait cet appel. Ça te va ?',
+  scheduling: 'Génial ! Voilà mon lien de calendrier. Choisis le créneau qui t\'arrange le plus et on se cale ça. Ça te va ? 😊',
   
-  direct_cta: 'OK, je vois. Voilà ce que je te propose : on se bloque un appel pour analyser ta situation et voir si ça matche. Au pire, tu repars avec des conseils gratuits. Au mieux, on dessine un plan pour tout déchirer. T\'en penses quoi ?'
+  direct_cta: 'Ok, je vois parfaitement. Voilà ce que je te propose : on se bloque un appel pour décortiquer ta situation et voir comment avancer. Au pire, tu repars avec des conseils qui déchirent. Au mieux, on met en place un plan pour tout exploser. T\'en dis quoi ? 🚀'
 };
 
 export const VALUE_TEMPLATES = {
-  results_focused: 'Voilà ce qui marche super bien : quand quelqu\'un dans ta situation {takes specific action}, en général il obtient {specific result} en {timeframe}. Un résultat comme ça, ça te parlerait ?',
+  results_focused: 'Tu sais ce qui marche du tonnerre ? Quand quelqu\'un dans ton cas {takes specific action}, en général il obtient {specific result} en {timeframe}. Un résultat comme ça, ça te motiverait ? 🔥',
   
-  case_study: 'Ça me rappelle un client qui était dans le même cas. Il galérait avec {pain point}, et après {timeframe}, il a réussi à {specific outcome}. Tu veux que je te raconte comment il a fait ?',
+  case_study: 'Ah, ça me rappelle l\'histoire d\'un client. Il était bloqué sur {pain point}, et après {timeframe}, il a réussi à {specific outcome}. Tu veux que je te raconte son parcours ?',
   
-  framework: 'Mon approche pour ça est simple : {3-step framework}. Est-ce que ça te semble coller à ce que tu vis ?'
+  framework: 'Ma méthode pour ça est super simple : {3-step framework}. Ça te parle par rapport à ce que tu vis ?'
 };
 
 /**
@@ -68,11 +68,11 @@ export function generatePersonalizedMessage(template, variables) {
  */
 export function getEmpathyMessage(painType) {
   const empathyMap = {
-    'fitness': 'Je sais à quel point c\'est frustrant de se donner à fond sans voir les résultats qu\'on espère.',
-    'business': 'Lancer son business, c\'est un marathon, surtout quand on a l\'impression de tout porter sur ses épaules.',
-    'relationship': 'Les galères de couple, ça peut vraiment isoler. T\'es pas seul(e) là-dedans.',
-    'career': 'Changer de carrière, c\'est un gros stress, surtout quand on est dans le flou pour la suite.',
-    'default': 'Je te comprends. Ça a l\'air vraiment pas simple ce que tu traverses.'
+    'fitness': 'Ah, je sais ce que c\'est de se donner à fond à la salle sans voir les résultats qu\'on veut. C\'est tellement frustrant !',
+    'business': 'Lancer son business, c\'est les montagnes russes, surtout quand on a l\'impression d\'être seul aux commandes !',
+    'relationship': 'Les galères de couple, ça peut vraiment miner le moral. T\'es pas seul là-dedans.',
+    'career': 'Ouch, changer de carrière c\'est un vrai saut dans le vide. Gros stress, surtout quand on est dans le brouillard.',
+    'default': 'Je te comprends. Ça a l\'air d\'être une sacrée galère ce que tu traverses.'
   };
 
   return empathyMap[painType] || empathyMap.default;
