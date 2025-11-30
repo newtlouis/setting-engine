@@ -1,7 +1,7 @@
 /**
- * DM Responder Conversation Engine
+ * Moteur de Conversation pour DM Responder
  * 
- * Core logic for generating contextual follow-up messages based on conversation state.
+ * Logique centrale pour générer des messages de suivi contextuels basés sur l'état de la conversation.
  */
 
 import { analyzeConversationStage, detectIntent, extractPainPoints } from './state_machine.js';
@@ -15,35 +15,35 @@ import {
 import { sanitizeMessage, validateConversation } from './utils.js';
 
 /**
- * Generate response for a conversation
+ * Génère une réponse pour une conversation
  * 
  * @param {Object} params
- * @param {Array} params.conversationHistory - Array of {role, text} objects
- * @param {Object} params.leadContext - Optional lead data from prospector
- * @param {Object} params.businessContext - Optional business details
- * @returns {Promise<Object>} Response object with next_message, stage, reasoning, etc.
+ * @param {Array} params.conversationHistory - Tableau d'objets {role, text}
+ * @param {Object} params.leadContext - Données du prospect (optionnel)
+ * @param {Object} params.businessContext - Détails de l'entreprise (optionnel)
+ * @returns {Promise<Object>} Objet de réponse avec next_message, stage, reasoning, etc.
  */
 export async function generateResponse({ conversationHistory, leadContext, businessContext }) {
-  // Validate input
+  // Valider l'entrée
   validateConversation(conversationHistory);
 
-  // Get the latest user message
+  // Obtenir le dernier message de l'utilisateur
   const latestMessage = conversationHistory[conversationHistory.length - 1];
   
   if (latestMessage.role !== 'user') {
-    throw new Error('Latest message must be from user (prospect)');
+    throw new Error('Le dernier message doit provenir de l\'utilisateur (prospect)');
   }
 
-  // Analyze conversation stage
+  // Analyser l'étape de la conversation
   const stage = analyzeConversationStage(conversationHistory, leadContext);
 
-  // Detect user intent
+  // Détecter l'intention de l'utilisateur
   const intent = detectIntent(latestMessage.text);
 
-  // Extract pain points mentioned
+  // Extraire les points de douleur mentionnés
   const painPoints = extractPainPoints(latestMessage.text);
 
-  // Build context for message generation
+  // Construire le contexte pour la génération de message
   const context = {
     userMessage: latestMessage.text,
     conversationHistory,
@@ -54,12 +54,12 @@ export async function generateResponse({ conversationHistory, leadContext, busin
     businessContext
   };
 
-  // Generate response based on stage and intent
+  // Générer la réponse en fonction de l'étape et de l'intention
   let response;
 
   switch (stage) {
-    case 'initial_rapport':
-    case 'empathy_building':
+    case 'rapport_initial':
+    case 'creation_empathie':
       response = generateEmpathyResponse(context);
       break;
 
@@ -67,16 +67,16 @@ export async function generateResponse({ conversationHistory, leadContext, busin
       response = generateQualificationResponse(context);
       break;
 
-    case 'objection_handling':
+    case 'gestion_objection':
       response = generateObjectionResponse(context);
       break;
 
-    case 'value_demonstration':
+    case 'demonstration_valeur':
       response = generateValueResponse(context);
       break;
 
-    case 'call_to_action':
-    case 'scheduling':
+    case 'appel_a_l_action':
+    case 'planification':
       response = generateCTAResponse(context);
       break;
 
@@ -84,63 +84,63 @@ export async function generateResponse({ conversationHistory, leadContext, busin
       response = generateDefaultResponse(context);
   }
 
-  // Sanitize output
+  // Nettoyer la sortie
   response.next_message = sanitizeMessage(response.next_message);
 
   return response;
 }
 
 /**
- * Generate empathy-focused response
+ * Génère une réponse axée sur l'empathie
  */
 function generateEmpathyResponse(context) {
   const { userMessage, painPoints, intent } = context;
 
-  // Select appropriate template
+  // Sélectionner le modèle approprié
   let template;
   let reasoning = '';
 
-  if (intent.type === 'expressing_pain') {
+  if (intent.type === 'expression_douleur') {
     template = EMPATHY_TEMPLATES.pain_acknowledgment;
-    reasoning = 'User is expressing emotional pain or struggle. Respond with empathy and validation.';
-  } else if (intent.type === 'asking_question') {
+    reasoning = 'L\'utilisateur exprime une douleur émotionnelle ou une difficulté. Répondre avec empathie et validation.';
+  } else if (intent.type === 'pose_question') {
     template = EMPATHY_TEMPLATES.curiosity_response;
-    reasoning = 'User is asking a question. Show empathy while gently guiding toward qualification.';
+    reasoning = 'L\'utilisateur pose une question. Montrer de l\'empathie tout en guidant doucement vers la qualification.';
   } else {
     template = EMPATHY_TEMPLATES.general;
-    reasoning = 'Building initial rapport with empathetic, human tone.';
+    reasoning = 'Création d\'un rapport initial avec un ton empathique et humain.';
   }
 
   const message = generatePersonalizedMessage(template, {
-    painPoints: painPoints.length > 0 ? painPoints[0] : 'this challenge',
+    painPoints: painPoints.length > 0 ? painPoints[0] : 'ce défi',
     userMessage
   });
 
   return {
     next_message: message,
-    conversation_stage: 'empathy_building',
-    message_type: 'empathy',
+    conversation_stage: 'creation_empathie',
+    message_type: 'empathie',
     reasoning,
     alternative_approaches: [
-      'Ask a follow-up question about their specific situation',
-      'Share a brief relatable story (1-2 sentences)',
-      'Validate their feelings and offer hope'
+      'Poser une question de suivi sur sa situation spécifique',
+      'Partager une brève histoire personnelle (1-2 phrases)',
+      'Valider ses sentiments et offrir de l\'espoir'
     ],
     next_steps: [
-      'Wait for their response',
-      'Look for qualification signals (timeline, commitment level)',
-      'Continue building trust before pitching'
+      'Attendre sa réponse',
+      'Rechercher des signaux de qualification (délai, niveau d\'engagement)',
+      'Continuer à construire la confiance avant de proposer une offre'
     ]
   };
 }
 
 /**
- * Generate qualification question
+ * Génère une question de qualification
  */
 function generateQualificationResponse(context) {
   const { conversationHistory, painPoints, leadContext } = context;
 
-  // Determine what to qualify
+  // Déterminer ce qu'il faut qualifier
   const needsToQualify = determineQualificationNeeds(conversationHistory, leadContext);
 
   let template;
@@ -148,20 +148,20 @@ function generateQualificationResponse(context) {
 
   if (needsToQualify.includes('timeline')) {
     template = QUALIFICATION_TEMPLATES.timeline;
-    reasoning = 'Need to understand their timeline and urgency.';
+    reasoning = 'Besoin de comprendre son calendrier et son urgence.';
   } else if (needsToQualify.includes('budget')) {
     template = QUALIFICATION_TEMPLATES.investment_readiness;
-    reasoning = 'Qualify their readiness to invest (without mentioning price directly).';
+    reasoning = 'Qualifier sa disposition à investir (sans mentionner directement le prix).';
   } else if (needsToQualify.includes('commitment')) {
     template = QUALIFICATION_TEMPLATES.commitment_level;
-    reasoning = 'Assess their commitment level and seriousness.';
+    reasoning = 'Évaluer son niveau d\'engagement et son sérieux.';
   } else {
     template = QUALIFICATION_TEMPLATES.pain_depth;
-    reasoning = 'Deepen understanding of their pain points.';
+    reasoning = 'Approfondir la compréhension de ses points de douleur.';
   }
 
   const message = generatePersonalizedMessage(template, {
-    painPoint: painPoints.length > 0 ? painPoints[0] : 'your situation'
+    painPoint: painPoints.length > 0 ? painPoints[0] : 'votre situation'
   });
 
   return {
@@ -170,20 +170,20 @@ function generateQualificationResponse(context) {
     message_type: 'qualification',
     reasoning,
     alternative_approaches: [
-      'Use a curiosity-based question instead of direct qualification',
-      'Share a relevant client success story to gauge interest',
-      'Ask about their biggest obstacle right now'
+      'Utiliser une question basée sur la curiosité au lieu d\'une qualification directe',
+      'Partager une histoire de réussite client pertinente pour évaluer l\'intérêt',
+      'Demander quel est son plus grand obstacle en ce moment'
     ],
     next_steps: [
-      'Listen for buying signals (urgency, frustration with current state)',
-      'If qualified, transition to value demonstration',
-      'If not qualified, nurture with value content'
+      'Écouter les signaux d\'achat (urgence, frustration avec la situation actuelle)',
+      'Si qualifié, passer à la démonstration de valeur',
+      'Si non qualifié, entretenir la relation avec du contenu de valeur'
     ]
   };
 }
 
 /**
- * Generate objection handling response
+ * Génère une réponse pour la gestion des objections
  */
 function generateObjectionResponse(context) {
   const { userMessage, intent } = context;
@@ -191,74 +191,74 @@ function generateObjectionResponse(context) {
   let template;
   let reasoning = '';
 
-  if (intent.objection === 'price') {
+  if (intent.objection === 'prix') {
     template = OBJECTION_TEMPLATES.price;
-    reasoning = 'User is concerned about price. Reframe to value and ROI.';
-  } else if (intent.objection === 'time') {
+    reasoning = 'L\'utilisateur est préoccupé par le prix. Recadrer sur la valeur et le retour sur investissement.';
+  } else if (intent.objection === 'temps') {
     template = OBJECTION_TEMPLATES.time;
-    reasoning = 'User says they don\'t have time. Address with efficiency and prioritization.';
-  } else if (intent.objection === 'skepticism') {
+    reasoning = 'L\'utilisateur dit qu\'il n\'a pas le temps. Répondre avec l\'efficacité et la priorisation.';
+  } else if (intent.objection === 'scepticisme') {
     template = OBJECTION_TEMPLATES.skepticism;
-    reasoning = 'User is skeptical. Use social proof and understanding.';
+    reasoning = 'L\'utilisateur est sceptique. Utiliser la preuve sociale et la compréhension.';
   } else {
     template = OBJECTION_TEMPLATES.general;
-    reasoning = 'General objection detected. Acknowledge and reframe.';
+    reasoning = 'Objection générale détectée. Reconnaître et recadrer.';
   }
 
   const message = generatePersonalizedMessage(template, { userMessage });
 
   return {
     next_message: message,
-    conversation_stage: 'objection_handling',
-    message_type: 'objection_response',
+    conversation_stage: 'gestion_objection',
+    message_type: 'reponse_objection',
     reasoning,
     alternative_approaches: [
-      'Use a "feel, felt, found" framework',
-      'Ask a clarifying question to understand the real objection',
-      'Share a specific client transformation story'
+      'Utiliser le cadre "ressentir, ressenti, trouvé" (feel, felt, found)',
+      'Poser une question de clarification pour comprendre la véritable objection',
+      'Partager une histoire de transformation client spécifique'
     ],
     next_steps: [
-      'Wait for their response to the reframe',
-      'If objection persists, qualify harder (may not be right fit)',
-      'If objection resolves, move to CTA'
+      'Attendre sa réponse au recadrage',
+      'Si l\'objection persiste, qualifier plus durement (peut ne pas être le bon profil)',
+      'Si l\'objection est résolue, passer à l\'appel à l\'action'
     ]
   };
 }
 
 /**
- * Generate value-focused response
+ * Génère une réponse axée sur la valeur
  */
 function generateValueResponse(context) {
   const { leadContext, painPoints, businessContext } = context;
 
   const message = generatePersonalizedMessage(
-    'Based on what you\'ve shared, I think I can help. [Insert specific value prop based on their pain]. Would you be open to a quick call to see if this could work for you?',
+    'D\'après ce que vous avez partagé, je pense que je peux aider. [Insérer une proposition de valeur spécifique basée sur leur douleur]. Seriez-vous ouvert à un appel rapide pour voir si cela pourrait fonctionner pour vous ?',
     { 
-      painPoint: painPoints.length > 0 ? painPoints[0] : 'your goals',
-      service: businessContext?.service || 'my program'
+      painPoint: painPoints.length > 0 ? painPoints[0] : 'vos objectifs',
+      service: businessContext?.service || 'mon programme'
     }
   );
 
   return {
     next_message: message,
-    conversation_stage: 'value_demonstration',
-    message_type: 'value_prop',
-    reasoning: 'User is qualified and interested. Present clear value tied to their pain points.',
+    conversation_stage: 'demonstration_valeur',
+    message_type: 'proposition_valeur',
+    reasoning: 'L\'utilisateur est qualifié et intéressé. Présenter une valeur claire liée à ses points de douleur.',
     alternative_approaches: [
-      'Share a before/after case study matching their situation',
-      'Offer a free resource or assessment first',
-      'Ask what success would look like for them in 90 days'
+      'Partager une étude de cas avant/après correspondant à sa situation',
+      'Offrir d\'abord une ressource gratuite ou une évaluation',
+      'Demander à quoi ressemblerait le succès pour lui dans 90 jours'
     ],
     next_steps: [
-      'If interested, transition to call scheduling',
-      'If hesitant, address remaining objections',
-      'If not ready, offer to stay in touch'
+      'Si intéressé, passer à la planification de l\'appel',
+      'Si hésitant, adresser les objections restantes',
+      'S\'il n\'est pas prêt, proposer de rester en contact'
     ]
   };
 }
 
 /**
- * Generate call-to-action response
+ * Génère une réponse d'appel à l'action (CTA)
  */
 function generateCTAResponse(context) {
   const { stage } = context;
@@ -266,12 +266,12 @@ function generateCTAResponse(context) {
   let template;
   let reasoning = '';
 
-  if (stage === 'scheduling') {
+  if (stage === 'planification') {
     template = CTA_TEMPLATES.scheduling;
-    reasoning = 'User agreed to a call. Make scheduling easy and low-pressure.';
+    reasoning = 'L\'utilisateur a accepté un appel. Rendre la planification facile et sans pression.';
   } else {
     template = CTA_TEMPLATES.soft_cta;
-    reasoning = 'User is interested but not fully committed. Use soft CTA.';
+    reasoning = 'L\'utilisateur est intéressé mais pas totalement engagé. Utiliser un CTA doux.';
   }
 
   const message = generatePersonalizedMessage(template, {});
@@ -279,70 +279,70 @@ function generateCTAResponse(context) {
   return {
     next_message: message,
     conversation_stage: stage,
-    message_type: 'call_to_action',
+    message_type: 'appel_a_l_action',
     reasoning,
     alternative_approaches: [
-      'Offer 2-3 specific time slots instead of open-ended ask',
-      'Send calendar link directly (if already using scheduling tool)',
-      'Suggest a short 15-min clarity call first'
+      'Proposer 2-3 créneaux horaires spécifiques au lieu d\'une demande ouverte',
+      'Envoyer directement le lien du calendrier (si vous utilisez déjà un outil de planification)',
+      'Suggérer d\'abord un court appel de clarification de 15 minutes'
     ],
     next_steps: [
-      'Send calendar link or confirm time',
-      'Send pre-call prep questions if they book',
-      'Follow up in 24-48h if no response'
+      'Envoyer le lien du calendrier ou confirmer l\'heure',
+      'Envoyer des questions de préparation avant l\'appel s\'il réserve',
+      'Faire un suivi dans 24-48h en cas de non-réponse'
     ]
   };
 }
 
 /**
- * Generate default/fallback response
+ * Génère une réponse par défaut/de secours
  */
 function generateDefaultResponse(context) {
-  const message = 'Thanks for sharing that. Can you tell me more about what you\'re looking to achieve?';
+  const message = 'Merci d\'avoir partagé cela. Pouvez-vous m\'en dire plus sur ce que vous cherchez à accomplir ?';
 
   return {
     next_message: message,
-    conversation_stage: 'initial_rapport',
+    conversation_stage: 'rapport_initial',
     message_type: 'rapport',
-    reasoning: 'Default response: gathering more information to understand their needs.',
+    reasoning: 'Réponse par défaut : recueillir plus d\'informations pour comprendre leurs besoins.',
     alternative_approaches: [
-      'Ask about their biggest challenge right now',
-      'Ask what they\'ve already tried',
-      'Ask what would make this conversation valuable for them'
+      'Demander quel est leur plus grand défi en ce moment',
+      'Demander ce qu\'ils ont déjà essayé',
+      'Demander ce qui rendrait cette conversation précieuse pour eux'
     ],
     next_steps: [
-      'Listen for pain points and goals',
-      'Transition to qualification when appropriate',
-      'Build rapport before pitching'
+      'Écouter les points de douleur et les objectifs',
+      'Passer à la qualification lorsque c\'est approprié',
+      'Construire le rapport avant de proposer une offre'
     ]
   };
 }
 
 /**
- * Determine what still needs to be qualified
+ * Détermine ce qui doit encore être qualifié
  */
 function determineQualificationNeeds(conversationHistory, leadContext) {
   const needs = [];
 
-  // Check if timeline has been discussed
+  // Vérifier si le calendrier a été discuté
   const hasTimeline = conversationHistory.some(msg => 
-    /when|timeline|how soon|urgent|asap/i.test(msg.text)
+    /when|timeline|how soon|urgent|asap|quand|délai|combien de temps|urgent/i.test(msg.text)
   );
   if (!hasTimeline) needs.push('timeline');
 
-  // Check if commitment has been discussed
+  // Vérifier si l'engagement a été discuté
   const hasCommitment = conversationHistory.some(msg =>
-    /ready|commit|serious|willing|invest/i.test(msg.text)
+    /ready|commit|serious|willing|invest|prêt|engagé|sérieux|disposé|investir/i.test(msg.text)
   );
   if (!hasCommitment) needs.push('commitment');
 
-  // Check if budget/investment readiness discussed
+  // Vérifier si le budget/la disposition à investir a été discuté
   const hasBudget = conversationHistory.some(msg =>
-    /afford|price|cost|budget|invest|pay/i.test(msg.text)
+    /afford|price|cost|budget|invest|pay|moyens|prix|coût|budget|investir|payer/i.test(msg.text)
   );
   if (!hasBudget) needs.push('budget');
 
-  // Default to pain depth if all else covered
+  // Par défaut, approfondir la douleur si tout le reste est couvert
   if (needs.length === 0) needs.push('pain_depth');
 
   return needs;

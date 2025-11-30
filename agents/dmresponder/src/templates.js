@@ -1,59 +1,59 @@
 /**
- * Message Templates
+ * Modèles de Messages
  * 
- * Pre-written message templates organized by type and stage.
+ * Modèles de messages pré-écrits organisés par type et étape.
  */
 
 export const EMPATHY_TEMPLATES = {
-  pain_acknowledgment: 'I hear you. {painPoints} can be really tough, especially when you feel like you\'ve tried everything. You\'re not alone in this. Can I ask you something that might help me understand better?',
+  pain_acknowledgment: 'Je comprends. {painPoints} peut être vraiment difficile, surtout quand on a l\'impression d\'avoir tout essayé. Vous n\'êtes pas seul(e) là-dedans. Puis-je vous demander quelque chose qui pourrait m\'aider à mieux comprendre ?',
   
-  curiosity_response: 'That\'s a great question. Before I answer, can I ask—what made you reach out about this now? I want to make sure I give you the most helpful response.',
+  curiosity_response: 'C\'est une excellente question. Avant de répondre, puis-je vous demander ce qui vous a poussé à me contacter à ce sujet maintenant ? Je veux m\'assurer de vous donner la réponse la plus utile possible.',
   
-  general: 'Thanks for sharing that with me. It sounds like this has been on your mind for a while. What would change for you if you could solve this?'
+  general: 'Merci d\'avoir partagé cela avec moi. On dirait que ça vous préoccupe depuis un moment. Qu\'est-ce qui changerait pour vous si vous pouviez résoudre ce problème ?'
 };
 
 export const QUALIFICATION_TEMPLATES = {
-  timeline: 'I appreciate you sharing that. Just curious—how soon are you looking to make a change? Is this something you want to tackle in the next few weeks, or are you still exploring?',
+  timeline: 'J\'apprécie que vous partagiez cela. Par curiosité, dans combien de temps cherchez-vous à faire un changement ? Est-ce quelque chose que vous voulez aborder dans les prochaines semaines, ou êtes-vous encore en phase d\'exploration ?',
   
-  commitment_level: 'I get it. Let me ask you something: if I could show you a way to {achieve their goal}, what would hold you back from starting?',
+  commitment_level: 'Je vois. Laissez-moi vous demander quelque chose : si je pouvais vous montrer un moyen de {achieve their goal}, qu\'est-ce qui vous empêcherait de commencer ?',
   
-  investment_readiness: 'Makes sense. Quick question—if this was the right fit for you, are you in a position to invest in yourself right now, or is this more of a "someday" thing?',
+  investment_readiness: 'Logique. Petite question : si c\'était la solution idéale pour vous, êtes-vous en mesure d\'investir en vous-même en ce moment, ou est-ce plutôt un projet pour "un jour" ?',
   
-  pain_depth: 'I hear you. On a scale of 1-10, how much is {painPoint} affecting your life right now? And what happens if nothing changes?'
+  pain_depth: 'Je vous entends. Sur une échelle de 1 à 10, à quel point {painPoint} affecte votre vie en ce moment ? Et que se passerait-il si rien ne changeait ?'
 };
 
 export const OBJECTION_TEMPLATES = {
-  price: 'I totally understand. Most people I work with felt the same way at first. What they realized is that the cost of staying stuck is way higher than the investment in solving it. Can I ask—what\'s it costing you to not fix this right now?',
+  price: 'Je comprends tout à fait. La plupart des gens avec qui je travaille ressentaient la même chose au début. Ce qu\'ils ont réalisé, c\'est que le coût de rester bloqué est bien plus élevé que l\'investissement pour le résoudre. Puis-je demander ce que ça vous coûte de ne pas régler ce problème maintenant ?',
   
-  time: 'I get it—you\'re busy. Here\'s the thing: this is designed for people who don\'t have time. That\'s exactly why it works. What if I could show you how to get results without adding hours to your week?',
+  time: 'Je comprends, vous êtes occupé(e). Voilà le truc : c\'est conçu pour les gens qui n\'ont pas le temps. C\'est exactement pour ça que ça fonctionne. Et si je pouvais vous montrer comment obtenir des résultats sans ajouter des heures à votre semaine ?',
   
-  skepticism: 'That\'s fair. You\'ve probably seen a lot of people promise things and not deliver. I respect that you\'re cautious. What would you need to see to feel confident this is different?',
+  skepticism: 'C\'est juste. Vous avez probablement vu beaucoup de gens promettre des choses sans les tenir. Je respecte votre prudence. De quoi auriez-vous besoin pour être convaincu(e) que c\'est différent ?',
   
-  general: 'I understand where you\'re coming from. A lot of people I work with had the same concern. Can you tell me more about what\'s making you hesitate?'
+  general: 'Je comprends d\'où vous venez. Beaucoup de personnes avec qui je travaille avaient la même préoccupation. Pouvez-vous m\'en dire plus sur ce qui vous fait hésiter ?'
 };
 
 export const CTA_TEMPLATES = {
-  soft_cta: 'Based on what you\'ve shared, I think I can help. Would you be open to a quick 15-minute call to see if this could work for you? No pressure—just a conversation.',
+  soft_cta: 'D\'après ce que vous avez partagé, je pense que je peux vous aider. Seriez-vous ouvert(e) à un rapide appel de 15 minutes pour voir si cela pourrait fonctionner pour vous ? Sans pression, juste une conversation.',
   
-  scheduling: 'Perfect! Let me send you my calendar link. Pick a time that works for you, and we\'ll hop on a call. Sound good?',
+  scheduling: 'Parfait ! Laissez-moi vous envoyer mon lien de calendrier. Choisissez un créneau qui vous convient, et nous nous appellerons. Ça vous va ?',
   
-  direct_cta: 'Got it. Here\'s what I suggest: let\'s set up a call to go over your specific situation and see if this is a fit. Worst case, you get some free insights. Best case, we map out a plan to solve this. What do you think?'
+  direct_cta: 'Compris. Voici ce que je suggère : organisons un appel pour examiner votre situation spécifique et voir si cela correspond. Au pire, vous obtiendrez des conseils gratuits. Au mieux, nous établirons un plan pour résoudre ce problème. Qu\'en pensez-vous ?'
 };
 
 export const VALUE_TEMPLATES = {
-  results_focused: 'Here\'s what I\'ve seen work: when someone in your situation {takes specific action}, they usually see {specific result} within {timeframe}. Would that kind of result be valuable to you?',
+  results_focused: 'Voici ce que j\'ai vu fonctionner : quand quelqu\'un dans votre situation {takes specific action}, il voit généralement {specific result} en {timeframe}. Est-ce que ce genre de résultat aurait de la valeur pour vous ?',
   
-  case_study: 'I had a client in a similar spot. They were {pain point}, and after {timeframe}, they {specific outcome}. Would you like to hear how they did it?',
+  case_study: 'J\'ai eu un client dans une situation similaire. Il avait {pain point}, et après {timeframe}, il a obtenu {specific outcome}. Aimeriez-vous savoir comment il a fait ?',
   
-  framework: 'The way I approach this is simple: {3-step framework}. Does that approach make sense for what you\'re dealing with?'
+  framework: 'Ma façon d\'aborder cela est simple : {3-step framework}. Est-ce que cette approche vous semble logique par rapport à ce que vous vivez ?'
 };
 
 /**
- * Generate personalized message from template
+ * Générer un message personnalisé à partir d'un modèle
  * 
- * @param {string} template - Template string with {placeholders}
- * @param {Object} variables - Key-value pairs to replace placeholders
- * @returns {string} Personalized message
+ * @param {string} template - Chaîne de modèle avec des {placeholders}
+ * @param {Object} variables - Paires clé-valeur pour remplacer les placeholders
+ * @returns {string} Message personnalisé
  */
 export function generatePersonalizedMessage(template, variables) {
   let message = template;
@@ -63,29 +63,29 @@ export function generatePersonalizedMessage(template, variables) {
     message = message.replace(placeholder, value);
   }
 
-  // Remove any unreplaced placeholders
-  message = message.replace(/\{[^}]+\}/g, '[specific detail]');
+  // Supprimer les placeholders non remplacés
+  message = message.replace(/\{[^}]+\}/g, '[détail spécifique]');
 
   return message;
 }
 
 /**
- * Get empathy message based on pain type
+ * Obtenir un message d'empathie basé sur le type de douleur
  */
 export function getEmpathyMessage(painType) {
   const empathyMap = {
-    'fitness': 'I know how frustrating it can be when you\'re putting in effort but not seeing results.',
-    'business': 'Building a business is hard, especially when you feel like you\'re doing everything alone.',
-    'relationship': 'Relationship challenges can feel isolating. You\'re not alone in this.',
-    'career': 'Career transitions are stressful, especially when you\'re not sure what the next step is.',
-    'default': 'I hear you. That sounds really challenging.'
+    'fitness': 'Je sais à quel point il peut être frustrant de faire des efforts sans voir de résultats.',
+    'business': 'Construire une entreprise est difficile, surtout quand on a l\'impression de tout faire seul(e).',
+    'relationship': 'Les défis relationnels peuvent être isolants. Vous n\'êtes pas seul(e) là-dedans.',
+    'career': 'Les transitions de carrière sont stressantes, surtout quand on ne sait pas quelle est la prochaine étape.',
+    'default': 'Je vous entends. Cela semble vraiment difficile.'
   };
 
   return empathyMap[painType] || empathyMap.default;
 }
 
 /**
- * Get qualification question based on missing info
+ * Obtenir une question de qualification basée sur les informations manquantes
  */
 export function getQualificationQuestion(missingInfo) {
   const qualificationMap = {
