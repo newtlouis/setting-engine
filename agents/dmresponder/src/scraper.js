@@ -40,41 +40,70 @@ export async function scrapeConversation(url) {
     console.log('Logging in with human-like behavior...');
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
     
-    // Type username naturally
     await page.type('input[name="username"]', username, { delay: randomDelay(50, 150) });
-    await page.waitForTimeout(randomDelay(500, 1200)); // Pause after typing username
-
-    // Type password naturally
+    await page.waitForTimeout(randomDelay(500, 1200));
     await page.type('input[name="password"]', password, { delay: randomDelay(50, 150) });
-    await page.waitForTimeout(randomDelay(200, 1000)); // Pause before clicking login
     await page.click('button[type="submit"]');
+    
     await page.waitForNavigation({ waitUntil: 'networkidle' });
     console.log('Login successful.');
-    
-    await page.waitForTimeout(randomDelay(1500, 3000)); // Pause after login success
+
+    // --- POPUP HANDLING: "Save your login info?" ---
+    try {
+      console.log('Checking for "Save Info" popup...');
+      const notNowButton = page.locator('text=Not Now').or(page.locator('button:has-text("Not Now")'));
+      await notNowButton.click({ timeout: 5000 }); // 5 second timeout
+      console.log('Dismissed "Save Info" popup.');
+    } catch (error) {
+      console.log('No "Save Info" popup appeared, continuing.');
+    }
+
+    await page.waitForTimeout(randomDelay(1500, 3000));
 
     console.log(`Navigating to conversation: ${url}`);
     await page.goto(url, { waitUntil: 'networkidle' });
 
-    console.log('Extracting messages...');
-    const messageSelector = 'div[role="listitem"]'; // This selector is fragile
-    await page.waitForSelector(messageSelector, { timeout: 15000 });
+    // --- POPUP HANDLING: "Turn on Notifications?" ---
+    try {
+      console.log('Checking for "Notifications" popup...');
+      const notNowButton = page.locator('button:has-text("Not Now")');
+      await notNowButton.click({ timeout: 5000 });
+      console.log('Dismissed "Notifications" popup.');
+    } catch (error) {
+      console.log('No "Notifications" popup appeared, continuing.');
+    }
 
+    // --- HUMAN-LIKE SCROLLING ---
+    console.log('Simulating a quick scroll to read history...');
+    const messageSelector = 'div[role="listitem"]';
+    await page.waitForSelector(messageSelector, { timeout: 15000 });
+    await page.evaluate(() => {
+      const messagePane = document.querySelector('div[role="listitem"]').parentElement.parentElement;
+      if (messagePane) {
+        messagePane.scrollTop = 0; // Scroll to top
+      }
+    });
+    await page.waitForTimeout(randomDelay(800, 1500));
+    await page.evaluate(() => {
+      const messagePane = document.querySelector('div[role="listitem"]').parentElement.parentElement;
+      if (messagePane) {
+        messagePane.scrollTop = messagePane.scrollHeight; // Scroll to bottom
+      }
+    });
+    await page.waitForTimeout(randomDelay(500, 1000));
+
+
+    console.log('Extracting messages...');
     const loggedInUsername = username.toLowerCase();
 
     const conversationHistory = await page.evaluate((loggedInUser) => {
       const messages = [];
-      // This logic is highly dependent on Instagram's current DOM structure and may break.
       document.querySelectorAll('div[role="listitem"]').forEach(item => {
         const textElement = item.querySelector('div[dir="auto"]');
         if (!textElement || textElement.innerText.trim() === '') return;
-
         const text = textElement.innerText;
-        
-        // A simple heuristic: messages aligned to the right are from the logged-in user.
         const isAssistant = item.closest('div[style*="align-self: flex-end"]') !== null;
         const role = isAssistant ? 'assistant' : 'user';
-        
         messages.push({ role, text });
       });
       return messages;
@@ -87,7 +116,7 @@ export async function scrapeConversation(url) {
     console.error('An error occurred during scraping:', error.message);
     await page.screenshot({ path: 'error_screenshot.png' });
     console.log('A screenshot was saved as error_screenshot.png.');
-    await browser.close(); // Close browser on error
+    await browser.close();
     throw new Error('Could not retrieve the conversation from the URL.');
   }
 }
@@ -100,11 +129,8 @@ export async function scrapeConversation(url) {
 export async function fillMessageAndLeaveOpen(page, message) {
   try {
     console.log('Typing suggested response into the browser...');
-    
     const messageBoxSelector = 'textarea[placeholder*="Message"]';
     await page.waitForSelector(messageBoxSelector, { timeout: 10000 });
-    
-    // Type the message with a natural delay to mimic human behavior
     await page.type(messageBoxSelector, message, { delay: randomDelay(80, 160) });
     
     console.log('\n✅ The message has been typed for you in the browser window.');
