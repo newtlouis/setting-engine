@@ -8,6 +8,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /**
+ * Generates a random delay between a min and max value.
+ * @param {number} min Minimum delay in milliseconds.
+ * @param {number} max Maximum delay in milliseconds.
+ * @returns {number} A random delay value.
+ */
+const randomDelay = (min, max) => Math.random() * (max - min) + min;
+
+/**
  * Launches a browser, logs into Instagram, navigates to a conversation URL,
  * and scrapes the message history.
  *
@@ -29,13 +37,21 @@ export async function scrapeConversation(url) {
   try {
     await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle' });
 
-    console.log('Logging in...');
+    console.log('Logging in with human-like behavior...');
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
-    await page.fill('input[name="username"]', username);
-    await page.fill('input[name="password"]', password);
+    
+    // Type username naturally
+    await page.type('input[name="username"]', username, { delay: randomDelay(50, 150) });
+    await page.waitForTimeout(randomDelay(500, 1200)); // Pause after typing username
+
+    // Type password naturally
+    await page.type('input[name="password"]', password, { delay: randomDelay(50, 150) });
+    await page.waitForTimeout(randomDelay(200, 1000)); // Pause before clicking login
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle' });
     console.log('Login successful.');
+    
+    await page.waitForTimeout(randomDelay(1500, 3000)); // Pause after login success
 
     console.log(`Navigating to conversation: ${url}`);
     await page.goto(url, { waitUntil: 'networkidle' });
@@ -85,12 +101,11 @@ export async function fillMessageAndLeaveOpen(page, message) {
   try {
     console.log('Typing suggested response into the browser...');
     
-    // This selector targets the message input area. It's highly likely to change.
     const messageBoxSelector = 'textarea[placeholder*="Message"]';
     await page.waitForSelector(messageBoxSelector, { timeout: 10000 });
     
     // Type the message with a natural delay to mimic human behavior
-    await page.type(messageBoxSelector, message, { delay: 100 });
+    await page.type(messageBoxSelector, message, { delay: randomDelay(80, 160) });
     
     console.log('\n✅ The message has been typed for you in the browser window.');
     console.log('   Please review it, then press "Send" manually.');
