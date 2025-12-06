@@ -89,7 +89,8 @@ export async function fillMessageAndLeaveOpen(page, message) {
     const messageBoxSelector = 'textarea[placeholder*="Message"]';
     await page.waitForSelector(messageBoxSelector, { timeout: 10000 });
     
-    await page.fill(messageBoxSelector, message);
+    // Type the message with a natural delay to mimic human behavior
+    await page.type(messageBoxSelector, message, { delay: 100 });
     
     console.log('\n✅ The message has been typed for you in the browser window.');
     console.log('   Please review it, then press "Send" manually.');
