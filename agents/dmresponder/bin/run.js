@@ -17,7 +17,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { generateResponse } from '../src/engine.js';
-import { scrapeConversation } from '../src/scraper.js';
+import { scrapeConversation, fillMessageAndLeaveOpen } from '../src/scraper.js';
 import { createInterface } from 'readline';
 import {
   initDB,
@@ -69,10 +69,14 @@ program
       let leadContext = null;
       let businessContext = null;
       let currentUsername = null;
+      let page, browser; // To hold the browser session
 
       // URL mode: scrape the conversation first
       if (options.url) {
-        conversationHistory = await scrapeConversation(options.url);
+        const scrapeResult = await scrapeConversation(options.url);
+        conversationHistory = scrapeResult.conversationHistory;
+        page = scrapeResult.page;
+        browser = scrapeResult.browser;
         
       // Database mode: load by username
       } else if (options.username) {
@@ -135,7 +139,13 @@ program
         console.log(`Response saved to database for @${currentUsername}\n`);
       }
 
-      console.log('Remember to review and personalize before sending!\n');
+      // If in URL mode, fill the response in the browser
+      if (options.url && page) {
+        await fillMessageAndLeaveOpen(page, response.next_message);
+      } else {
+        console.log('Remember to review and personalize before sending!\n');
+      }
+
 
     } catch (error) {
       console.error('\nERROR:', error.message);
