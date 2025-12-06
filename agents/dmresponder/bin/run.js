@@ -17,6 +17,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { generateResponse } from '../src/engine.js';
+import { scrapeConversation } from '../src/scraper.js';
 import { createInterface } from 'readline';
 import {
   initDB,
@@ -39,6 +40,7 @@ program
   .version('1.0.0');
 
 program
+  .option('--url <url>', 'Scrape conversation history from an Instagram DM URL')
   .option('-c, --conversation <file>', 'Path to conversation_history.json')
   .option('-l, --lead <file>', 'Path to lead_context.json (optional)')
   .option('-b, --business <file>', 'Path to business_context.json (optional)')
@@ -68,8 +70,12 @@ program
       let businessContext = null;
       let currentUsername = null;
 
+      // URL mode: scrape the conversation first
+      if (options.url) {
+        conversationHistory = await scrapeConversation(options.url);
+        
       // Database mode: load by username
-      if (options.username) {
+      } else if (options.username) {
         currentUsername = options.username;
         const result = await handleDatabaseMode(options);
         conversationHistory = result.conversationHistory;
