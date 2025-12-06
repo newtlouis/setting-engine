@@ -3,12 +3,9 @@
  */
 
 import { chromium } from 'playwright';
-import { fileURLToPath } from 'url';
-import { join, dirname } from 'path';
+import dotenv from 'dotenv';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const CONTEXT_PATH = join(__dirname, '..', '.playwright_context');
+dotenv.config();
 
 /**
  * Scrapes a conversation from a given Instagram DM URL.
@@ -16,56 +13,82 @@ const CONTEXT_PATH = join(__dirname, '..', '.playwright_context');
  * @returns {Promise<Array<{role: 'user' | 'assistant', text: string}>>} The conversation history.
  */
 export async function scrapeConversation(url) {
-  console.log('Launching browser to scrape conversation...');
+  const username = process.env.INSTAGRAM_USERNAME;
+  const password = process.env.INSTAGRAM_PASSWORD;
 
-  const browser = await chromium.launch({ headless: false }); // Headless false for first login
-  const context = await browser.newContext({ storageState: CONTEXT_PATH });
-  const page = await context.newPage();
+  if (!username || !password) {
+    throw new Error('INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD must be set in your .env file.');
+  }
+
+  console.log('Launching browser to scrape conversation...');
+  const browser = await chromium.launch({ headless: false }); // Set to true for production
+  const page = await browser.newPage();
 
   try {
-    await page.goto(url, { waitUntil: 'networkidle' });
+    // Go to login page first
+    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle' });
 
-    // Check if login is needed
-    if (page.url().includes('login')) {
-      console.log('Login required. Please log in to your Instagram account in the browser window.');
-      console.log('After you have successfully logged in and are on the DM page, press Enter here to continue...');
-      await new Promise(resolve => process.stdin.once('data', resolve));
-      // Save the authentication state for future runs
-      await context.storageState({ path: CONTEXT_PATH });
-      console.log('Authentication state saved.');
-    }
+    // Perform login
+    console.log('Logging in...');
+    await page.waitForSelector('input[name="username"]', { timeout: 10000 });
+    await page.fill('input[name="username"]', username);
+    await page.fill('input[name="password"]', password);
+    await page.click('button[type="submit"]');
+    
+    // Wait for navigation to complete after login
+    await page.waitForNavigation({ waitUntil: 'networkidle' });
+    console.log('Login successful.');
+
+    // Now, navigate to the target DM conversation
+    console.log(`Navigating to conversation: ${url}`);
+    await page.goto(url, { waitUntil: 'networkidle' });
 
     console.log('Extracting messages...');
     
-    // This is a placeholder selector. Instagram's selectors can be complex and change often.
-    // This will need to be updated with the correct, stable selector for DM messages.
+    // This selector is critical and may change. It targets the container for each message.
     const messageSelector = 'div[role="listitem"]';
     await page.waitForSelector(messageSelector, { timeout: 15000 });
 
-    const conversationHistory = await page.evaluate(() => {
-        const messages = [];
-        // This selector logic is highly dependent on Instagram's current DOM structure.
-        // It assumes messages sent by the user have a specific alignment or class.
-        const myUsername = document.querySelector('header a[href="/_username_/"]')?.href.split('/').filter(Boolean).pop(); // This needs to be dynamically found
-        
-        document.querySelectorAll('div[role="listitem"]').forEach(item => {
-            const text = item.innerText;
-            // This is a simplified way to determine the role. A more robust method is needed.
-            const isAssistant = item.style.alignSelf === 'flex-end'; // Example logic
-            
-            messages.push({
-                role: isAssistant ? 'assistant' : 'user',
-                text: text,
-            });
-        });
-        return messages;
+    // Get the logged-in user's username to differentiate messages
+    const loggedInUsername = await page.evaluate(() => {
+      const profileLink = document.querySelector('header a[role="link"]');
+      if (!profileLink) return null;
+      const href = profileLink.getAttribute('href');
+      // Extracts username from a URL like '/username/'
+      return href.split('/').filter(Boolean)[0];
     });
+
+    if (!loggedInUsername) {
+      console.warn("Could not determine the logged-in user's username. Message roles might be inaccurate.");
+    }
+
+    const conversationHistory = await page.evaluate((loggedInUser) => {
+      const messages = [];
+      // This selector logic is highly dependent on Instagram's current DOM structure.
+      document.querySelectorAll('div[role="listitem"]').forEach(item => {
+        const textElement = item.querySelector('span'); // Assuming text is in a span
+        if (!textElement) return;
+
+        const text = textElement.innerText;
+        
+        // Determine role by finding the profile picture link and checking the username
+        const profilePicLink = item.querySelector('a[href*="/p/"]')?.parentElement?.previousElementSibling?.querySelector('a');
+        const messageUsername = profilePicLink?.href.split('/').filter(Boolean).pop();
+        
+        const role = (messageUsername === loggedInUser) ? 'assistant' : 'user';
+        
+        messages.push({ role, text });
+      });
+      return messages;
+    }, loggedInUsername);
 
     console.log(`Scraped ${conversationHistory.length} messages.`);
     return conversationHistory;
 
   } catch (error) {
     console.error('Failed to scrape conversation:', error.message);
+    await page.screenshot({ path: 'error_screenshot.png' });
+    console.log('A screenshot was saved as error_screenshot.png to help with debugging.');
     throw new Error('Could not retrieve the conversation from the URL.');
   } finally {
     await browser.close();
