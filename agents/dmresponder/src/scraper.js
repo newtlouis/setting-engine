@@ -22,17 +22,19 @@ const randomDelay = (min, max) => Math.random() * (max - min) + min;
  * @param {string} url The URL of the Instagram DM conversation.
  * @returns {Promise<{conversationHistory: Array, page: import('playwright').Page, browser: import('playwright').Browser}>}
  */
-export async function scrapeConversation(url) {
+export async function scrapeConversation(url, options = {}) {
   const username = process.env.INSTAGRAM_USERNAME;
   const password = process.env.INSTAGRAM_PASSWORD;
-
+  const headless = options.headless ?? false;
+ 
   if (!username || !password) {
     throw new Error('INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD must be set in your .env file.');
   }
-
+ 
   console.log('Launching browser...');
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless });
   const page = await browser.newPage();
+
 
   try {
     await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle' });

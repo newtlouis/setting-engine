@@ -261,12 +261,38 @@ export async function getConversationSummary(username) {
   };
 }
 
-export default {
-  initDB,
-  getLeadWithContext,
-  getConversationHistory,
-  addMessage,
-  updateConversationStage,
-  getActiveConversations,
-  getConversationSummary
-};
+export async function getTrackedDmThreads(filters = {}) {
+  await initDB();
+  if (!dbFunctions?.getDmThreads) return [];
+  return dbFunctions.getDmThreads(filters);
+}
+
+export async function setDmThreadStatus(username, status, updates = {}) {
+  await initDB();
+  if (!dbFunctions?.updateDmThreadStatus) return;
+  return dbFunctions.updateDmThreadStatus(username, status, updates);
+}
+
+export function parseThreadMetadata(rawMetadata) {
+  if (!rawMetadata) return {};
+  if (typeof rawMetadata === 'object') return rawMetadata;
+  try {
+    return JSON.parse(rawMetadata);
+  } catch (error) {
+    return {};
+  }
+}
+ 
+ export default {
+   initDB,
+   getLeadWithContext,
+   getConversationHistory,
+   addMessage,
+   updateConversationStage,
+   getActiveConversations,
+   getConversationSummary,
+   getTrackedDmThreads,
+   setDmThreadStatus,
+   parseThreadMetadata
+ };
+

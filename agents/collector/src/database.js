@@ -674,6 +674,34 @@ export function getDmThreadByUsername(username) {
   return db.prepare('SELECT * FROM dm_threads WHERE username = ?').get(username);
 }
 
+export function getDmThreads(filters = {}) {
+  let query = `
+    SELECT dt.*, l.status as lead_status, l.conversation_stage, l.total_messages_sent, l.total_messages_received
+    FROM dm_threads dt
+    JOIN leads l ON dt.lead_id = l.id
+    WHERE 1=1
+  `;
+  const params = [];
+  if (filters.statuses && filters.statuses.length > 0) {
+    const placeholders = filters.statuses.map(() => '?').join(',');
+    query += ` AND dt.last_status IN (${placeholders})`;
+    params.push(...filters.statuses);
+  }
+  if (filters.onlyWithUrl) {
+    query += " AND dt.dm_url IS NOT NULL AND dt.dm_url <> ''";
+  }
+  if (filters.username) {
+    query += ' AND dt.username = ?';
+    params.push(filters.username);
+  }
+  query += ' ORDER BY dt.updated_at DESC';
+  if (filters.limit) {
+    query += ' LIMIT ?';
+    params.push(filters.limit);
+  }
+  return db.prepare(query).all(...params);
+}
+
 // ============================================
 // STATISTICS
 // ============================================

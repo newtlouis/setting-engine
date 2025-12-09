@@ -5,12 +5,14 @@
   "type": "module",
   "main": "src/engine.js",
   "bin": {
-    "dmresponder": "./bin/run.js"
+    "dmresponder": "./bin/run.js",
+    "dmresponder-cron": "./bin/cron.js"
   },
   "scripts": {
     "start": "node bin/run.js",
     "test": "node --test tests/*.test.js",
-    "dev": "node --watch bin/run.js"
+    "dev": "node --watch bin/run.js",
+    "cron": "node bin/cron.js"
   },
   "keywords": [
     "instagram",

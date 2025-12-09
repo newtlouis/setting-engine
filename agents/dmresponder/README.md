@@ -123,6 +123,23 @@ Options:
   --help                      Display help
 ```
 
+### Cron Watcher (Automated Polling)
+
+Once the Outreach agent saves DM URLs into the shared database/Excel file, you can let the DM Responder check for new replies automatically.
+
+```
+# Run once (ideal for a cron job every 5 minutes)
+node bin/cron.js --limit 3 --statuses message_ready,awaiting_reply
+
+# Or via npm
+npm run cron -- --limit 3
+```
+
+- Requires `INSTAGRAM_USERNAME` and `INSTAGRAM_PASSWORD` in `.env` so the watcher can log in headlessly.
+- Headless mode is default; pass `--show-browser` to watch the automation.
+- Suggestions are saved as JSON files under `output/suggestions/` (configurable via `--output-dir`).
+- Each processed thread updates the `dm_threads` table with the latest status plus metadata (last check, last suggestion path), so other agents or dashboards can read the same source of truth.
+
 ## 📊 Input Format
 
 ### conversation_history.json
