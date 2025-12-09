@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 export const CONFIG = {
   // Database path (shared with collector)
   DB_PATH: process.env.DB_PATH || path.join(__dirname, '..', '..', 'collector', 'permanent-data', 'leads.db'),
+  CRM_OUTPUT_DIR: process.env.CRM_OUTPUT_DIR || path.join(__dirname, '..', '..', 'collector', 'output'),
+  CRM_TRACKING_ENABLED: process.env.CRM_TRACKING_ENABLED !== 'false',
   
   // Rate limiting - CRITICAL for avoiding detection
   MIN_DELAY_BETWEEN_DMS: parseInt(process.env.MIN_DELAY_BETWEEN_DMS, 10) || 60000,  // 1 minute minimum

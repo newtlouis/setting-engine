@@ -16,7 +16,8 @@ export class ExcelCRM {
     this.workbook = new ExcelJS.Workbook();
     this.existingData = {
       prospects: new Map(),      // username -> prospect data
-      comments: new Set()        // username:post_url:comment_text -> exists
+      comments: new Set(),       // username:post_url:comment_text -> exists
+      conversations: new Map()   // username -> conversation row number
     };
   }
 
@@ -80,8 +81,11 @@ export class ExcelCRM {
       { header: 'Value', key: 'value', width: 20 }
     ];
 
+    // Sheet 4: Conversation tracking
+    const conversationsSheet = this.ensureConversationsSheet();
+ 
     // Add header styling
-    [prospectsSheet, historySheet, analyticsSheet].forEach(sheet => {
+    [prospectsSheet, historySheet, analyticsSheet, conversationsSheet].forEach(sheet => {
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true, size: 12 };
       headerRow.fill = {
@@ -93,7 +97,32 @@ export class ExcelCRM {
     });
   }
 
+  ensureConversationsSheet() {
+    let sheet = this.workbook.getWorksheet('Conversations');
+    if (!sheet) {
+      sheet = this.workbook.addWorksheet('Conversations');
+      sheet.columns = [
+        { header: 'Username', key: 'username', width: 20 },
+        { header: 'DM URL', key: 'dm_url', width: 45 },
+        { header: 'Message Preview', key: 'message_preview', width: 60 },
+        { header: 'Status', key: 'status', width: 18 },
+        { header: 'Typed At', key: 'typed_at', width: 24 },
+        { header: 'Last Reply At', key: 'last_reply_at', width: 24 }
+      ];
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, size: 12 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      headerRow.alignment = { horizontal: 'center' };
+    }
+    return sheet;
+  }
+ 
   /**
+
    * Load existing data into memory for deduplication
    */
   async loadExistingData() {
@@ -125,6 +154,19 @@ export class ExcelCRM {
           if (username && postUrl && commentDate) {
             const key = `${username}:${postUrl}:${commentDate}`;
             this.existingData.comments.add(key);
+          }
+        }
+      });
+    }
+
+    // Ensure conversations sheet exists and load cache
+    const conversationsSheet = this.ensureConversationsSheet();
+    if (conversationsSheet) {
+      conversationsSheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          const username = row.getCell(1).value;
+          if (username) {
+            this.existingData.conversations.set(username, rowNumber);
           }
         }
       });
@@ -259,10 +301,41 @@ export class ExcelCRM {
     return stats;
   }
 
+  async recordConversationEntry(entry) {
+    if (!entry?.username) {
+      throw new Error('Username is required to record a conversation entry');
+    }
+    const sheet = this.ensureConversationsSheet();
+    const username = entry.username;
+    const rowNumber = await this.findConversationRow(sheet, username);
+    const typedAt = entry.typedAt || new Date().toISOString();
+    if (rowNumber) {
+      const row = sheet.getRow(rowNumber);
+      if (entry.dmUrl) row.getCell(2).value = entry.dmUrl;
+      if (entry.messagePreview) row.getCell(3).value = entry.messagePreview;
+      if (entry.status) row.getCell(4).value = entry.status;
+      row.getCell(5).value = typedAt;
+      if (entry.lastReplyAt) row.getCell(6).value = entry.lastReplyAt;
+      row.commit();
+    } else {
+      const row = sheet.addRow({
+        username,
+        dm_url: entry.dmUrl || '',
+        message_preview: entry.messagePreview || '',
+        status: entry.status || 'message_ready',
+        typed_at: typedAt,
+        last_reply_at: entry.lastReplyAt || ''
+      });
+      row.commit();
+      this.existingData.conversations.set(username, row.number);
+    }
+  }
+ 
   /**
    * Find row number for a prospect
    */
   async findProspectRow(sheet, username) {
+
     let rowNumber = null;
     sheet.eachRow((row, num) => {
       if (row.getCell(1).value === username) { // Column A
@@ -272,7 +345,24 @@ export class ExcelCRM {
     return rowNumber;
   }
 
+  async findConversationRow(sheet, username) {
+    if (this.existingData.conversations.has(username)) {
+      return this.existingData.conversations.get(username);
+    }
+    let rowNumber = null;
+    sheet.eachRow((row, num) => {
+      if (num > 1 && row.getCell(1).value === username) {
+        rowNumber = num;
+      }
+    });
+    if (rowNumber) {
+      this.existingData.conversations.set(username, rowNumber);
+    }
+    return rowNumber;
+  }
+ 
   /**
+
    * Calculate engagement score based on comment patterns
    * 
    * Enhanced algorithm considering:

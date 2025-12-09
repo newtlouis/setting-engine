@@ -417,7 +417,8 @@ export async function checkProfileContactable(username) {
 export async function sendDMToUserInNewTab(username, message, options = {}) {
   const {
     dryRun = true,  // In new flow, dryRun means "type but don't send"
-    onProgress = null
+    onProgress = null,
+    onConversationReady = null
   } = options;
   
   const result = {
@@ -482,12 +483,23 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     result.success = true;
     result.tabKeptOpen = true;
     result.dryRun = dryRun;
+    const dmUrl = newTab.url();
+    result.dmUrl = dmUrl;
+
+    if (onConversationReady) {
+      try {
+        await onConversationReady({ username, dmUrl, message, typedAt: result.timestamp });
+      } catch (callbackError) {
+        console.error(`onConversationReady failed for @${username}:`, callbackError.message);
+      }
+    }
     
     // Track this tab
     messageTabs.push({
       username,
       page: newTab,
       message,
+      dmUrl,
       timestamp: result.timestamp
     });
     
@@ -642,7 +654,8 @@ export async function batchSendDMs(page, targets, options = {}) {
     dryRun = true,  // In new flow, always "types but doesn't send"
     maxPerSession = CONFIG.MAX_DMS_PER_SESSION,
     onProgress = null,
-    onComplete = null
+    onComplete = null,
+    onConversationReady = null
   } = options;
   
   const results = {
@@ -715,7 +728,8 @@ export async function batchSendDMs(page, targets, options = {}) {
     
     const result = await sendDMToUserInNewTab(target.username, target.message, {
       dryRun: true,  // Always just type, don't send
-      onProgress
+      onProgress,
+      onConversationReady
     });
     
     results.details.push(result);

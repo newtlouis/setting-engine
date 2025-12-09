@@ -9,10 +9,12 @@
  */
 
 import path from 'path';
+import { mkdir } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { CONFIG, OUTREACH_CRITERIA } from './config.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
 import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
+import { ExcelCRM } from '../../collector/src/excel_writer.js';
 
 // Import database from collector (shared)
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +23,21 @@ const __dirname = path.dirname(__filename);
 // Dynamic import for database (ESM compatibility)
 let db = null;
 let dbFunctions = null;
+let excelTrackerInstance = null;
+
+async function getExcelTracker() {
+  if (!CONFIG.CRM_TRACKING_ENABLED) {
+    return null;
+  }
+  if (excelTrackerInstance) {
+    return excelTrackerInstance;
+  }
+  await mkdir(CONFIG.CRM_OUTPUT_DIR, { recursive: true });
+  const tracker = new ExcelCRM(CONFIG.CRM_OUTPUT_DIR);
+  await tracker.load();
+  excelTrackerInstance = tracker;
+  return excelTrackerInstance;
+}
 
 async function loadDatabase() {
   if (dbFunctions) return dbFunctions;
@@ -242,10 +259,41 @@ export async function runOutreach(options = {}) {
     message: m.message,
     leadId: m.lead.id
   }));
+
+  const recordConversationMetadata = async ({ username, dmUrl, message, typedAt }) => {
+    try {
+      await loadDatabase();
+      const preview = (message || '').trim();
+      const messagePreview = preview.length > 280 ? `${preview.slice(0, 277)}...` : preview;
+      if (dbFunctions?.upsertDmThread) {
+        dbFunctions.upsertDmThread({
+          username,
+          dm_url: dmUrl,
+          last_message_preview: messagePreview,
+          last_status: 'message_ready',
+          typed_at: typedAt || new Date().toISOString()
+        });
+      }
+      const tracker = await getExcelTracker();
+      if (tracker) {
+        await tracker.recordConversationEntry({
+          username,
+          dmUrl,
+          messagePreview,
+          status: 'message_ready',
+          typedAt: typedAt || new Date().toISOString()
+        });
+        await tracker.save();
+      }
+    } catch (error) {
+      console.error(`Failed to record conversation metadata for @${username}:`, error.message);
+    }
+  };
   
   // Process leads with multi-tab workflow
   const results = await batchSendDMs(page, targets, {
     dryRun: true,  // Always type, never auto-send in new flow
+    onConversationReady: recordConversationMetadata,
     onComplete: async (result) => {
       // Track in database (mark as pending, not sent yet)
       if (result.success && result.tabKeptOpen) {

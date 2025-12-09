@@ -136,6 +136,23 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       FOREIGN KEY (lead_id) REFERENCES leads(id)
     );
     
+    -- Conversation threads table: stores DM URLs and metadata
+    CREATE TABLE IF NOT EXISTS dm_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      dm_url TEXT,
+      last_message_preview TEXT,
+      last_status TEXT,
+      typed_at TEXT,
+      last_reply_at TEXT,
+      metadata TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(lead_id),
+      UNIQUE(username)
+    );
+    
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
@@ -145,6 +162,8 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_dm_threads_status ON dm_threads(last_status);
+    CREATE INDEX IF NOT EXISTS idx_dm_threads_username ON dm_threads(username);
   `);
   
   console.log(`📦 Database initialized: ${dbPath}`);
@@ -582,6 +601,77 @@ export function getConversation(leadId) {
     WHERE lead_id = ? 
     ORDER BY sent_at ASC
   `).all(leadId);
+}
+
+// ============================================
+// DM THREAD OPERATIONS
+// ============================================
+
+export function upsertDmThread(thread) {
+  if (!thread || !thread.username) {
+    throw new Error('Username is required to upsert DM thread');
+  }
+  let lead = getLeadByUsername(thread.username);
+  if (!lead) {
+    lead = upsertLead({
+      username: thread.username,
+      profile_url: thread.profile_url || `https://www.instagram.com/${thread.username}/`
+    });
+  }
+  const stmt = db.prepare(`
+    INSERT INTO dm_threads (
+      lead_id, username, dm_url, last_message_preview, last_status, typed_at, metadata
+    ) VALUES (
+      @lead_id, @username, @dm_url, @last_message_preview, @last_status, @typed_at, @metadata
+    )
+    ON CONFLICT(lead_id) DO UPDATE SET
+      dm_url = COALESCE(@dm_url, dm_url),
+      last_message_preview = COALESCE(@last_message_preview, last_message_preview),
+      last_status = COALESCE(@last_status, last_status),
+      typed_at = COALESCE(@typed_at, typed_at),
+      metadata = COALESCE(@metadata, metadata),
+      updated_at = datetime('now')
+    RETURNING *
+  `);
+  const metadataValue = thread.metadata === undefined
+    ? null
+    : (typeof thread.metadata === 'string' ? thread.metadata : JSON.stringify(thread.metadata));
+  return stmt.get({
+    lead_id: lead.id,
+    username: thread.username,
+    dm_url: thread.dm_url || null,
+    last_message_preview: thread.last_message_preview || null,
+    last_status: thread.last_status || null,
+    typed_at: thread.typed_at || null,
+    metadata: metadataValue
+  });
+}
+
+export function updateDmThreadStatus(username, status, updates = {}) {
+  if (!username) {
+    throw new Error('Username is required to update DM thread status');
+  }
+  const stmt = db.prepare(`
+    UPDATE dm_threads SET
+      last_status = COALESCE(@last_status, last_status),
+      last_reply_at = COALESCE(@last_reply_at, last_reply_at),
+      metadata = COALESCE(@metadata, metadata),
+      updated_at = datetime('now')
+    WHERE username = @username
+  `);
+  const metadataValue = updates.metadata === undefined
+    ? null
+    : (typeof updates.metadata === 'string' ? updates.metadata : JSON.stringify(updates.metadata));
+  return stmt.run({
+    username,
+    last_status: status || null,
+    last_reply_at: updates.last_reply_at || null,
+    metadata: metadataValue
+  });
+}
+
+export function getDmThreadByUsername(username) {
+  return db.prepare('SELECT * FROM dm_threads WHERE username = ?').get(username);
 }
 
 // ============================================
