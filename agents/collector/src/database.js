@@ -371,6 +371,31 @@ export function updateLeadProfile(username, profileData) {
   });
 }
 
+/**
+ * Mark a lead as private
+ */
+export function markLeadPrivate(username) {
+  return db.prepare(`
+    UPDATE leads SET
+      is_private = 1,
+      updated_at = datetime('now')
+    WHERE username = ?
+  `).run(username);
+}
+
+/**
+ * Mark a lead as generally uncontactable (e.g. no button)
+ * We set status to 'rejected' or a specific status to filter them out
+ */
+export function markLeadUncontactable(username) {
+  return db.prepare(`
+    UPDATE leads SET
+      status = 'not_contactable',
+      updated_at = datetime('now')
+    WHERE username = ?
+  `).run(username);
+}
+
 // ============================================
 // COMMENT OPERATIONS
 // ============================================

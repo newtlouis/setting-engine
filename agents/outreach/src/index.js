@@ -224,108 +224,175 @@ export async function runOutreach(options = {}) {
     limit = CONFIG.MAX_DMS_PER_SESSION,
     niche = 'fitness',
     topic = 'their goals',
-    dryRun = true,  // In new flow, this is always "type but don't auto-send"
+    dryRun = true,
     userDataDir = './browser-data'
   } = options;
+  
+  /* DEFENSIVE CODING: Cast params */
+  const cleanLimit = Number(limit) || 10;
   
   console.log('\n========================================');
   console.log('   OUTREACH (Multi-Tab Mode)');
   console.log('========================================\n');
+  console.log(`   Target: ${cleanLimit} succesful messages typed/ready.`);
   console.log('   Messages will be typed but NOT sent automatically.');
-  console.log('   Each contactable profile opens in a new tab.');
-  console.log('   Review and send manually, then close browser.\n');
   
-  // Get candidates
-  const leads = await getOutreachCandidates({ limit, ...options });
+  // Initialize browser once
+  let browserObj = null;
   
-  if (leads.length === 0) {
-    console.log('No eligible leads found.');
-    return { success: false, reason: 'no_leads' };
-  }
+  let successfulCount = 0;
+  let attempts = 0;
+  const maxAttempts = cleanLimit * 3; // Safety break to prevent infinite loops
   
-  // Generate messages
-  const messages = generateOutreachMessages(leads, { niche, topic });
-  
-  // Filter out invalid messages
-  const validMessages = messages.filter(m => m.validation.valid);
-  const invalidMessages = messages.filter(m => !m.validation.valid);
-  
-  if (invalidMessages.length > 0) {
-    console.log(`Skipping ${invalidMessages.length} leads with invalid messages:`);
-    invalidMessages.forEach(m => {
-      console.log(`   @${m.lead.username}: ${m.validation.issues.join(', ')}`);
-    });
-    console.log('');
-  }
-  
-  if (validMessages.length === 0) {
-    console.log('No valid messages to send.');
-    return { success: false, reason: 'no_valid_messages' };
-  }
-  
-  // Initialize browser
-  const { browser, page } = await initBrowser({ userDataDir });
-  
-  // Prepare targets
-  const targets = validMessages.map(m => ({
-    username: m.lead.username,
-    message: m.message,
-    leadId: m.lead.id
-  }));
-
-  const recordConversationMetadata = async ({ username, dmUrl, message, typedAt }) => {
-    try {
-      await loadDatabase();
-      const preview = (message || '').trim();
-      const messagePreview = preview.length > 280 ? `${preview.slice(0, 277)}...` : preview;
-      if (dbFunctions?.upsertDmThread) {
-        dbFunctions.upsertDmThread({
-          username,
-          dm_url: dmUrl,
-          last_message_preview: messagePreview,
-          last_status: 'message_ready',
-          typed_at: typedAt || new Date().toISOString()
-        });
-      }
-      const tracker = await getExcelTracker();
-      if (tracker) {
-        await tracker.recordConversationEntry({
-          username,
-          dmUrl,
-          messagePreview,
-          status: 'message_ready',
-          typedAt: typedAt || new Date().toISOString()
-        });
-        await tracker.save();
-      }
-    } catch (error) {
-      console.error(`Failed to record conversation metadata for @${username}:`, error.message);
-    }
+  let batchResults = {
+    attempted: 0,
+    successful: 0,
+    failed: 0,
+    skipped: 0,
+    blocked: false,
+    tabsOpen: 0,
+    details: []
   };
-  
-  // Process leads with multi-tab workflow
-  const results = await batchSendDMs(page, targets, {
-    dryRun: true,  // Always type, never auto-send in new flow
-    onConversationReady: recordConversationMetadata,
-    onComplete: async (result) => {
-      // Track in database (mark as pending, not sent yet)
-      if (result.success && result.tabKeptOpen) {
-        await loadDatabase();
+
+  try {
+    // Loop until we reach the target limit or hit max safety attempts
+    while (successfulCount < cleanLimit && attempts < maxAttempts) {
         
-        const target = targets.find(t => t.username === result.username);
-        if (target) {
-          // Mark lead as having message ready (but not sent)
-          db.prepare(`
-            UPDATE leads SET 
-              status = 'message_ready',
-              conversation_stage = 'pending_send'
-            WHERE username = ?
-          `).run(result.username);
+        const remaining = cleanLimit - successfulCount;
+        console.log(`\n--- Batch Progress: ${successfulCount}/${cleanLimit} ready (Need ${remaining} more) ---`);
+        
+        // Fetch a bit more than needed to account for likely skips
+        // e.g. if need 1, fetch 3. If need 5, fetch 8.
+        const fetchLimit = remaining + Math.ceil(remaining * 0.5) + 2;
+        
+        const leads = await getOutreachCandidates({ 
+            ...options, 
+            limit: fetchLimit,
+            excludeContacted: true // CRITICAL: Ensure we don't fetch the same ones
+        });
+
+        if (leads.length === 0) {
+            console.log('   No more eligible leads found in database.');
+            break;
         }
-      }
+        
+        console.log(`   Fetched batch of ${leads.length} candidates.`);
+
+        // Generate messages for this batch
+        const messages = generateOutreachMessages(leads, { niche, topic });
+        
+        // Filter valid
+        const validMessages = messages.filter(m => m.validation.valid);
+        
+        if (validMessages.length === 0) {
+            console.log('   No valid messages generated for this batch. Continuing...');
+            attempts++; 
+            continue; // Go to next loop to fetch more
+        }
+        
+        const targets = validMessages.map(m => ({
+            username: m.lead.username,
+            message: m.message,
+            leadId: m.lead.id
+        }));
+
+        // Initialize browser if not already done
+        if (!browserObj) {
+             browserObj = await initBrowser({ userDataDir });
+        }
+        
+        // Run batch for this chunk
+        // We pass the *remaining* count as maxPerSession for this specific call
+        // BUT we need `batchSendDMs` to NOT close the browser
+        const results = await batchSendDMs(browserObj.page, targets, {
+            dryRun: true,
+            maxPerSession: remaining, // Only try to fill the gap
+            onConversationReady: async ({ username, dmUrl, message, typedAt }) => {
+                // Same metadata recording logic...
+                 try {
+                  await loadDatabase();
+                  const preview = (message || '').trim();
+                  const messagePreview = preview.length > 280 ? `${preview.slice(0, 277)}...` : preview;
+                  if (dbFunctions?.upsertDmThread) {
+                    dbFunctions.upsertDmThread({
+                      username,
+                      dm_url: dmUrl,
+                      last_message_preview: messagePreview,
+                      last_status: 'message_ready',
+                      typed_at: typedAt || new Date().toISOString()
+                    });
+                  }
+                  const tracker = await getExcelTracker();
+                  if (tracker) {
+                    await tracker.recordConversationEntry({
+                      username,
+                      dmUrl,
+                      messagePreview,
+                      status: 'message_ready',
+                      typedAt: typedAt || new Date().toISOString()
+                    });
+                    await tracker.save();
+                  }
+                } catch (error) {
+                  console.error(`Failed to record conversation metadata for @${username}:`, error.message);
+                }
+            },
+            onComplete: async (result) => {
+                // Update global counters
+                batchResults.attempted++;
+                attempts++;
+                
+                if (result.success && result.tabKeptOpen) {
+                    successfulCount++;
+                    batchResults.successful++;
+                    batchResults.tabsOpen++;
+                    batchResults.details.push(result);
+                    
+                    // Mark as pending send
+                     await loadDatabase();
+                     db.prepare(`
+                        UPDATE leads SET 
+                          status = 'message_ready',
+                          conversation_stage = 'pending_send'
+                        WHERE username = ?
+                      `).run(result.username);
+                } else if (result.skipped) {
+                    batchResults.skipped++;
+                    // UPDATE DB Status so we don't fetch again!
+                     await loadDatabase();
+                     if (result.error && (result.error.includes('private') || result.error === 'private_account_no_contact')) {
+                         console.log(`   ✨ Marking @${result.username} as PRIVATE in DB.`);
+                         dbFunctions.markLeadPrivate(result.username);
+                     } else {
+                         console.log(`   ✨ Marking @${result.username} as NOT CONTACTABLE in DB.`);
+                         dbFunctions.markLeadUncontactable(result.username);
+                     }
+                } else {
+                    batchResults.failed++;
+                     // Also mark failed to avoid immediate retry loops? 
+                     // Maybe safest to mark as 'skipped' or specific error status
+                }
+            }
+        });
+
+        if (results.blocked) {
+            batchResults.blocked = true;
+            batchResults.blockReason = results.blockReason;
+            console.log('   🛑 Block detected. Halting outreach loop.');
+            break;
+        }
+
+        // Small break between chunks if we are continuing
+        if (successfulCount < cleanLimit) {
+            await new Promise(r => setTimeout(r, 2000));
+        }
     }
-  });
   
+  } catch (err) {
+      console.error('Fatal error in outreach loop:', err);
+  }
+  
+  // Cleanup
   // If we have tabs open, wait for user to finish
   const openTabs = getOpenMessageTabs();
   if (openTabs.length > 0) {
@@ -335,7 +402,7 @@ export async function runOutreach(options = {}) {
     await closeBrowser();
   }
   
-  return results;
+  return batchResults;
 }
 
 /**
