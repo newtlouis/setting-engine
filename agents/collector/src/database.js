@@ -396,6 +396,19 @@ export function markLeadUncontactable(username) {
   `).run(username);
 }
 
+/**
+ * Mark a lead as failed (technical error)
+ */
+export function markLeadFailed(username, reason) {
+  return db.prepare(`
+    UPDATE leads SET
+      status = 'failed_outreach',
+      notes = ?,
+      updated_at = datetime('now')
+    WHERE username = ?
+  `).run(reason || 'unknown_error', username);
+}
+
 // ============================================
 // COMMENT OPERATIONS
 // ============================================

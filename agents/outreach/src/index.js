@@ -369,8 +369,18 @@ export async function runOutreach(options = {}) {
                      }
                 } else {
                     batchResults.failed++;
-                     // Also mark failed to avoid immediate retry loops? 
-                     // Maybe safest to mark as 'skipped' or specific error status
+                    
+                    // CRITICAL FIX: Mark failing leads (e.g. timeout, no popup)
+                    // so we don't pick them up again in the next while-loop iteration
+                    if (result.error) {
+                        console.log(`   ⚠️  Marking @${result.username} as FAILED in DB (Reason: ${result.error})`);
+                        try {
+                            await loadDatabase();
+                            dbFunctions.markLeadFailed(result.username, result.error);
+                        } catch (dbErr) {
+                            console.error(`      Failed to mark lead as failed: ${dbErr.message}`);
+                        }
+                    }
                 }
             }
         });
