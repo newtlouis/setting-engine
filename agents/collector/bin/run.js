@@ -13,8 +13,6 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { runCollector } from '../src/index.js';
 import { createInterface } from 'readline';
-import { spawn } from 'child_process';
-import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,7 +35,6 @@ program
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('--headless', 'Run in headless mode (NOT RECOMMENDED - may trigger detection)', false)
   .option('--skip-qualify', 'Skip post pre-qualification (scrape all discovered posts)', false)
-  .option('--only-scrape', 'Only perform scraping, skip save/build/open steps', false)
   .action(async (options) => {
     try {
       console.log('🚀 Instagram Collector Agent starting...\n');
@@ -103,28 +100,6 @@ program
 
       await runCollector(config);
 
-      // Perform post-processing if not skipped
-      if (!options.onlyScrape) {
-        console.log('\n🔄 Post-processing data...');
-        
-        // 1. Save to database
-        console.log('   → Saving to database...');
-        await runCommand('npm', ['run', 'save-comments']);
-        
-        // 2. Build Excel
-        console.log('   → Building Excel report...');
-        await runCommand('npm', ['run', 'build-final-db']);
-        
-        // 3. Open Excel file
-        const excelPath = join(__dirname, '..', 'output', 'instagram_final_database.xlsx');
-        if (existsSync(excelPath)) {
-            console.log('\n📂 Opening Excel file...');
-            openFile(excelPath);
-        } else {
-            console.log('\n⚠️  Excel file not found, skipping open.');
-        }
-      }
-
       console.log('\n✅ Collection complete!');
       console.log(`📁 Output saved to: ${options.output}/`);
       
@@ -136,39 +111,5 @@ program
       process.exit(1);
     }
   });
-
-// Helper to run a command
-function runCommand(command, args = []) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      cwd: join(__dirname, '..'),
-      stdio: 'inherit',
-      shell: true
-    });
-    
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Command ${command} ${args.join(' ')} failed with code ${code}`));
-    });
-    
-    proc.on('error', (err) => reject(err));
-  });
-}
-
-// Helper to open file (cross-platform)
-function openFile(filePath) {
-  const platform = process.platform;
-  let command;
-  
-  if (platform === 'darwin') command = 'open';
-  else if (platform === 'win32') command = 'start';
-  else command = 'xdg-open';
-  
-  spawn(command, [filePath], { 
-    detached: true, 
-    stdio: 'ignore',
-    shell: true 
-  }).unref();
-}
 
 program.parse();

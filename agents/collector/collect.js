@@ -155,7 +155,7 @@ async function main() {
         process.exit(1);
       }
       
-      const scrapeArgs = ['run', 'scrape', '--'];
+      const scrapeArgs = ['run', 'scrape-core', '--'];
       
       if (options.hashtags?.length) {
         scrapeArgs.push('-t', ...options.hashtags);
@@ -165,7 +165,6 @@ async function main() {
       }
       scrapeArgs.push('--max-posts', options.maxPosts);
       scrapeArgs.push('--max-comments', options.maxComments);
-      scrapeArgs.push('--only-scrape'); // Prevent recursive post-processing
       
       await runCommand('npm', scrapeArgs);
     }

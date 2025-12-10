@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node bin/run.js",
-    "scrape": "node bin/run.js",
+    "scrape": "node collect.js",
+    "scrape-core": "node bin/run.js",
     "save-comments": "node append-to-master.js",
     "build-final-db": "node build-final-excel.js",
     "collect": "node collect.js",

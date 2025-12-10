@@ -48,16 +48,62 @@ cd agents/collector
 ### 1. Collector Agent (Recherche et Scraping)
 *Emplacement : `agents/collector`*
 
-**Lancer un scraping (Mode complet)**
-Scrape des posts à partir de hashtags et de profils concurrents.
+**Commande Principale (Pipeline Complet)**
+Lance le scraping, sauvegarde en base de données, génère le rapport Excel et l'ouvre automatiquement.
 ```bash
-npm run scrape -- --hashtags fitness,coach --target-prospects 20
+npm run scrape -- [options]
 ```
 
-**Options utiles :**
-- `--mode both` (par défaut) : Scrape hashtags ET profils.
-- `--resume` : Reprend le scraping là où il s'est arrêté.
-- `--headless` : Lance le navigateur sans interface visible (non recommandé pour éviter la détection).
+**Exemples d'utilisation :**
+```bash
+# Recherche par hashtags (Fitness, Yoga)
+npm run scrape -- -t fitness yoga --max-posts 20
+
+# Recherche par profils concurrents
+npm run scrape -- -p https://instagram.com/competitor1/ --max-posts 10
+
+# Mode mixte (Hashtags + Profils)
+npm run scrape -- -t fitness -p competitor1 --max-posts 10
+
+# Obtenir uniquement les profils enrichis pour les leads existants
+npm run scrape -- --only-profiles
+```
+
+**Arguments Disponibles (`npm run scrape`) :**
+
+| Argument | Description | Défaut |
+|----------|-------------|--------|
+| `-t, --hashtags <tags...>` | Liste de hashtags (séparés par espace). | Aucun |
+| `-p, --profiles <urls...>` | Liste d'URLs de profils concurrents. | Aucun |
+| `--max-posts <number>` | Nombre max de posts à scraper par source. | `10` |
+| `--max-comments <number>` | Nombre max de commentaires par post. | `50` |
+| `--scrape-profiles` | Active le scraping enrichi des profils trouvés. | `false` |
+| `--max-profile-age <hours>` | Age max avant re-scraping d'un profil (heures). | `168` (7 jours) |
+| `--no-scrape` | Saute l'étape de scraping (traite les données existantes). | `false` |
+| `--no-save` | Ne sauvegarde pas en base de données. | `false` |
+| `--no-build` | Ne génère pas le fichier Excel. | `false` |
+| `--no-open` | N'ouvre pas le fichier Excel à la fin. | `false` |
+
+**Commandes Avancées / Maintenance :**
+
+- **Scraper uniquement (Sans BDD/Excel) :**
+  Utilisé pour le débogage ou si vous voulez juste les fichiers CSV bruts.
+  ```bash
+  npm run scrape-core -- -t fitness --max-posts 5
+  ```
+
+- **Générer l'Excel manuellement :**
+  Si vous avez déjà des données en base et voulez juste refaire le fichier Excel.
+  ```bash
+  npm run build-final-db
+  # Ou via le pipeline :
+  npm run scrape -- --only-build
+  ```
+
+- **Sauvegarder et générer sans scraper :**
+  ```bash
+  npm run scrape -- --only-save-build
+  ```
 
 ### 2. Outreach Agent (Premier Contact)
 *Emplacement : `agents/outreach`*
