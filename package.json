@@ -1,0 +1,25 @@
+{
+    "name": "instagram-lead-engine-root",
+    "version": "1.0.0",
+    "description": "Root workspace for Instagram Lead Engine",
+    "private": true,
+    "type": "module",
+    "workspaces": [
+        "agents/collector",
+        "agents/outreach",
+        "agents/dm-responder"
+    ],
+    "scripts": {
+        "ui": "cd agents/collector && npm run ui",
+        "scrape": "cd agents/collector && npm run scrape",
+        "send": "cd agents/outreach && npm run send",
+        "reply": "cd agents/dm-responder && npm run reply",
+        "postinstall": "npm install --workspaces"
+    },
+    "author": "Louis",
+    "license": "ISC",
+    "dependencies": {
+        "better-sqlite3": "^12.5.0",
+        "express": "^5.2.1"
+    }
+}

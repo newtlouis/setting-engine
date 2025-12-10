@@ -9,74 +9,67 @@
  * Template categories based on lead warmth and context
  */
 export const TEMPLATES = {
-  // For leads who showed pain/frustration in comments
+  // Leads expressing struggle (pain)
   pain_based: [
     {
-      id: 'pain_empathy',
-      template: `Hey {{firstName}}! I saw your comment on that post about {{topic}} - sounds like you're dealing with some real challenges there. I work with people going through the same thing. Would love to hear more about what you're struggling with if you're open to it!`,
+      id: 'pain_empathy_fr',
+      template: `Salut {{firstName}}, ton commentaire sur {{topic}} m'a interpellé. C'est pas évident comme situation... Tu tiens le coup ?`,
       variables: ['firstName', 'topic'],
       tone: 'empathetic',
       best_for: ['expressing_pain', 'frustrated']
     },
     {
-      id: 'pain_solution',
-      template: `Hey! Noticed your comment about {{painPoint}}. I've helped a lot of people work through exactly that. No pitch - just curious what you've tried so far?`,
-      variables: ['painPoint'],
-      tone: 'helpful',
+      id: 'pain_support_fr',
+      template: `Hello {{firstName}}, j'ai lu ce que tu disais sur la dépendance affective. Je connais bien ce sujet, courage à toi !`,
+      variables: ['firstName'],
+      tone: 'supportive',
       best_for: ['seeking_advice', 'stuck']
     }
   ],
   
-  // For leads who asked questions in comments
+  // Leads engaging/asking questions
   question_based: [
     {
-      id: 'question_answer',
-      template: `Hey {{firstName}}! Saw your question about {{topic}}. Great question btw. The short answer is {{shortAnswer}}... but there's more to it. Happy to share what's worked for me if you're interested!`,
-      variables: ['firstName', 'topic', 'shortAnswer'],
-      tone: 'helpful',
+      id: 'question_curiosity_fr',
+      template: `Salut {{firstName}}, ta question sur la confiance en soi est super pertinente. C'est un sujet qui te préoccupe en ce moment ?`,
+      variables: ['firstName'],
+      tone: 'curious',
       best_for: ['asking_question', 'curious']
     },
     {
-      id: 'question_curiosity',
-      template: `Hey! Your question about {{topic}} caught my eye - it's something I get asked a lot. Mind if I ask what made you curious about that?`,
-      variables: ['topic'],
-      tone: 'curious',
+      id: 'question_direct_fr',
+      template: `Hello {{firstName}}, je rebondis sur ta question. J'aide justement des personnes à dépasser ça. Tu as déjà testé des méthodes ?`,
+      variables: ['firstName'],
+      tone: 'helpful',
       best_for: ['asking_question']
     }
   ],
   
-  // For leads who showed interest/engagement
+  // High engagement leads
   engagement_based: [
     {
-      id: 'engagement_connection',
-      template: `Hey {{firstName}}! I noticed you're super engaged in the {{niche}} space. Love your energy. What's your current focus/goal?`,
-      variables: ['firstName', 'niche'],
+      id: 'engagement_common_fr',
+      template: `Salut {{firstName}}, je vois qu'on suit les mêmes comptes de dev perso. Au plaisir d'échanger !`,
+      variables: ['firstName'],
       tone: 'friendly',
       best_for: ['high_engagement', 'active']
-    },
-    {
-      id: 'engagement_value',
-      template: `Hey! Saw you commenting on {{creatorName}}'s post. I share similar content - thought you might find some of it helpful. What's your biggest challenge with {{topic}} right now?`,
-      variables: ['creatorName', 'topic'],
-      tone: 'value-first',
-      best_for: ['medium_engagement']
     }
   ],
   
-  // Generic templates (use sparingly)
+  // Generic / Fallback
   generic: [
     {
-      id: 'generic_intro',
-      template: `Hey {{firstName}}! Noticed your comment and thought I'd reach out. I help people with {{topic}} - would love to connect if that's something you're working on!`,
-      variables: ['firstName', 'topic'],
+      id: 'generic_intro_fr',
+      template: `Salut {{firstName}}, je suis tombé sur ton profil via les commentaires. Je partage pas mal de conseils sur la confiance en soi, ça pourrait t'intéresser !`,
+      variables: ['firstName'],
       tone: 'friendly',
       best_for: ['any']
     },
     {
-      id: 'generic_question',
-      template: `Hey! Quick question - what's your biggest challenge with {{topic}} right now? Curious because I work with people on exactly that.`,
-      variables: ['topic'],
-      tone: 'curious',
+      id: 'generic_short_fr',
+      template: `Hello {{firstName}}, simple petit message pour t'envoyer de la force dans ton parcours ! 💪`,
+      variables: ['firstName'],
+      tone: 'supportive',
       best_for: ['any']
     }
   ]
@@ -93,16 +86,16 @@ export function selectTemplate(lead, comments = []) {
   // Analyze comments to determine intent
   const commentTexts = comments.map(c => c.comment_text || '').join(' ').toLowerCase();
   
-  // Check for pain signals
+  // Check for pain signals (FRENCH)
   const painSignals = [
-    'struggling', 'help', 'frustrated', 'stuck', "can't", 'lost', 
-    'problem', 'issue', 'failing', 'need advice', 'any tips'
+    'dur', 'difficile', 'triste', 'peur', 'angoisse', 'seul', 
+    'besoin d\'aide', 'marre', 'fatigué', 'dépendance', 'toxique',
+    'struggling', 'help' // Keep a few English ones just in case
   ];
   const hasPainSignals = painSignals.some(signal => commentTexts.includes(signal));
   
   // Check for questions
-  const hasQuestion = commentTexts.includes('?') || 
-    /how (do|can|should)|what (is|are|should)|why (is|do)|where (can|do)/i.test(commentTexts);
+  const hasQuestion = commentTexts.includes('?');
   
   // Select category
   let category;
@@ -110,16 +103,16 @@ export function selectTemplate(lead, comments = []) {
   
   if (hasPainSignals) {
     category = 'pain_based';
-    reasoning = 'Lead expressed pain/frustration in comments';
+    reasoning = 'Lead expressed pain/frustration (FR signals detected)';
   } else if (hasQuestion) {
     category = 'question_based';
-    reasoning = 'Lead asked questions in comments';
-  } else if (lead.engagement_level === 'HIGH' || (lead.total_comments && lead.total_comments >= 3)) {
+    reasoning = 'Lead asked questions';
+  } else if (lead.engagement_level === 'HIGH') {
     category = 'engagement_based';
     reasoning = 'Lead has high engagement level';
   } else {
     category = 'generic';
-    reasoning = 'Using generic template (no strong signals detected)';
+    reasoning = 'Using generic short template';
   }
   
   // Select random template from category
@@ -247,8 +240,8 @@ export function validateMessage(message) {
     issues.push(`Message too long: ${message.length} chars (max 1000)`);
   }
   
-  if (message.length < 20) {
-    issues.push('Message too short (min 20 chars)');
+  if (message.length < 10) {
+    issues.push('Message too short (min 10 chars)');
   }
   
   // Check for unfilled placeholders

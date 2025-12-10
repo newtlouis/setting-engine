@@ -187,32 +187,11 @@ async function main() {
       });
     }
     
-    // Step 4: Build Excel
-    if (steps.build) {
-      await runCommand('npm', ['run', 'build-final-db']);
-    }
-    
-    // Step 5: Open Excel
-    if (steps.open && steps.build) {
-      const excelPath = join(__dirname, 'output', 'instagram_final_database.xlsx');
-      
-      try {
-        await fs.access(excelPath);
-        console.log(`\n${'─'.repeat(60)}`);
-        console.log('▶ Opening Excel file...');
-        console.log('─'.repeat(60));
-        openFile(excelPath);
-        console.log(`   📂 Opened: ${excelPath}`);
-      } catch {
-        console.log('\n⚠️  Excel file not found, skipping open');
-      }
-    }
-    
-    // Summary
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    // DASHBOARD NOTICE
     console.log(`\n${'═'.repeat(60)}`);
-    console.log('✅ Pipeline completed successfully!');
-    console.log(`   Total time: ${duration}s`);
+    console.log('✅ Pipeline completed!');
+    console.log('   Data saved to SQLite database.');
+    console.log('   👉 Run "npm run ui" to view your leads in the Dashboard.');
     console.log('═'.repeat(60));
     
   } catch (error) {

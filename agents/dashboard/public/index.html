@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Lead Engine | Stats</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Base Variables (Premium Dark) */
+        :root {
+            --bg-dark: #0f1115;
+            --bg-card: #161b22;
+            --bg-input: #0d1117;
+            --border: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+            --gradient: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-filter {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-filter.active, .btn-filter:hover {
+            background: #1f242c;
+            color: var(--text-primary);
+            border-color: var(--accent);
+        }
+
+        /* Table */
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: #1c2128;
+            padding: 12px 24px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        td {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+
+        /* Badges */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-success { background: rgba(63, 185, 80, 0.15); color: #56d364; }
+        .badge-warning { background: rgba(210, 153, 34, 0.15); color: #e3b341; }
+        .badge-danger { background: rgba(248, 81, 73, 0.15); color: #ff7b72; }
+        .badge-neutral { background: rgba(110, 118, 129, 0.15); color: #8b949e; }
+
+        .lead-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #30363d;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="header">
+        <div class="logo">
+            <h1>Instagram Lead Engine</h1>
+        </div>
+        <div class="actions">
+            <!-- Buttons if needed -->
+        </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-total">-</div>
+            <div class="stat-label">Total Leads</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-new" style="color: var(--accent);">-</div>
+            <div class="stat-label">To Contact</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-contacted" style="color: var(--warning);">-</div>
+            <div class="stat-label">Sent / Ready</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-qualified" style="color: var(--success);">-</div>
+            <div class="stat-label">Qualified</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-failed" style="color: var(--error);">-</div>
+            <div class="stat-label">Failed/Private</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="controls">
+        <button class="btn-filter active" onclick="loadLeads('all')">All</button>
+        <button class="btn-filter" onclick="loadLeads('new')">New</button>
+        <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
+        <button class="btn-filter" onclick="loadLeads('qualified')">Qualified</button>
+        <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Status</th>
+                    <th>Engagement</th>
+                    <th>Comments</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="leadsTableBody">
+                <tr>
+                    <td colspan="5" class="loading">Loading data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
