@@ -126,6 +126,40 @@ export function extractPostMetadata(postElement) {
   return {};
 }
 
+
+/**
+ * Type text into an input field in a human-like manner
+ * 
+ * @param {Page} page - Playwright page object
+ * @param {string} selector - Selector for the input field
+ * @param {string} text - Text to type
+ */
+async function typeHumanLike(page, selector, text) {
+  await page.focus(selector);
+  
+  // Initial hesitation
+  await delay(Math.random() * 500 + 200);
+  
+  let charsTyped = 0;
+  
+  for (const char of text) {
+    // Variable typing speed (30ms - 150ms)
+    // Faster for common letters, slower for others (simulated by random)
+    const typingDelay = Math.random() * 120 + 30;
+    
+    await page.keyboard.type(char, { delay: typingDelay });
+    charsTyped++;
+    
+    // Micro-pauses every 3-7 characters (simulating thinking or repositioning)
+    if (Math.random() > 0.8 || (charsTyped % (Math.floor(Math.random() * 4) + 3) === 0)) {
+      await delay(Math.random() * 400 + 100);
+    }
+  }
+  
+  // Final pause after finishing field
+  await delay(Math.random() * 500 + 200);
+}
+
 /**
  * Auto-login to Instagram using credentials from environment variables
  * 
@@ -234,12 +268,12 @@ export async function autoLoginInstagram(page, username, password) {
     
     // Fill username
     console.log('   → Entering username...');
-    await page.fill('input[name="username"]', username);
+    await typeHumanLike(page, 'input[name="username"]', username);
     await delay(500 + Math.random() * 500);
     
     // Fill password
     console.log('   → Entering password...');
-    await page.fill('input[name="password"]', password);
+    await typeHumanLike(page, 'input[name="password"]', password);
     await delay(500 + Math.random() * 500);
     
     // Click login button - use force click to bypass any overlays

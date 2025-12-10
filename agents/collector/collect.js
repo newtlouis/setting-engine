@@ -165,6 +165,7 @@ async function main() {
       }
       scrapeArgs.push('--max-posts', options.maxPosts);
       scrapeArgs.push('--max-comments', options.maxComments);
+      scrapeArgs.push('--only-scrape'); // Prevent recursive post-processing
       
       await runCommand('npm', scrapeArgs);
     }
