@@ -67,6 +67,19 @@ export async function getOutreachCandidates(options = {}) {
   
   await loadDatabase();
   
+  /* DEFENSIVE CODING: Cast params to expected types to avoid SQLite datatype mismatch */
+  const cleanMinScore = Number(minEngagementScore) || 0;
+  const cleanMinFollowers = Number(minFollowers) || 0;
+  const cleanMaxFollowers = Number(maxFollowers) || 1000000;
+  const cleanLimit = Number(limit) || 10;
+  
+  if (process.env.DEBUG) {
+    console.log('DEBUG: Outreach Params:', { 
+        cleanMinScore, cleanMinFollowers, cleanMaxFollowers, cleanLimit, 
+        originalLimit: limit 
+    });
+  }
+
   // Build query with filters
   let query = `
     SELECT l.*, 
@@ -78,7 +91,7 @@ export async function getOutreachCandidates(options = {}) {
       AND (l.followers_count IS NULL OR l.followers_count <= ?)
   `;
   
-  const params = [minEngagementScore, minFollowers, maxFollowers];
+  const params = [cleanMinScore, cleanMinFollowers, cleanMaxFollowers];
   
   if (excludePrivate) {
     query += ' AND (l.is_private IS NULL OR l.is_private = 0)';
@@ -101,7 +114,7 @@ export async function getOutreachCandidates(options = {}) {
     LIMIT ?
   `;
   
-  params.push(limit);
+  params.push(cleanLimit);
   
   const leads = db.prepare(query).all(...params);
   
