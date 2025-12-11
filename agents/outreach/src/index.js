@@ -58,11 +58,7 @@ async function loadDatabase() {
 export async function getOutreachCandidates(options = {}) {
   const {
     limit = 10,
-    minEngagementScore = OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE,
-    minFollowers = OUTREACH_CRITERIA.MIN_FOLLOWERS,
-    maxFollowers = OUTREACH_CRITERIA.MAX_FOLLOWERS,
-    excludePrivate = OUTREACH_CRITERIA.EXCLUDE_PRIVATE,
-    excludeContacted = true
+    minEngagementScore = OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE
   } = options;
   
   await loadDatabase();
@@ -87,15 +83,13 @@ export async function getOutreachCandidates(options = {}) {
     FROM leads l
     WHERE 1=1
       AND l.engagement_score >= ?
-      AND (l.followers_count IS NULL OR l.followers_count >= ?)
-      AND (l.followers_count IS NULL OR l.followers_count <= ?)
   `;
   
-  const params = [cleanMinScore, cleanMinFollowers, cleanMaxFollowers];
+  const params = [cleanMinScore];
   
-  if (excludePrivate) {
-    query += ' AND (l.is_private IS NULL OR l.is_private = 0)';
-  }
+  // if (excludePrivate) { // Removed
+  //   query += ' AND (l.is_private IS NULL OR l.is_private = 0)'; // Removed
+  // } // Removed
   
   if (excludeContacted) {
     query += " AND l.status = 'new'";
@@ -361,8 +355,8 @@ export async function runOutreach(options = {}) {
                     // UPDATE DB Status so we don't fetch again!
                      await loadDatabase();
                      if (result.error && (result.error.includes('private') || result.error === 'private_account_no_contact')) {
-                         console.log(`   ✨ Marking @${result.username} as PRIVATE in DB.`);
-                         dbFunctions.markLeadPrivate(result.username);
+                         console.log(`   ✨ Marking @${result.username} as FAILED (Private Account) in DB.`);
+                         dbFunctions.markLeadFailed(result.username, 'Private Account');
                      } else {
                          console.log(`   ✨ Marking @${result.username} as NOT CONTACTABLE in DB.`);
                          dbFunctions.markLeadUncontactable(result.username);

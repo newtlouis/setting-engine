@@ -41,7 +41,7 @@ app.get('/api/stats', (req, res) => {
             new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new'").get().c,
             qualified: db.prepare("SELECT COUNT(*) as c FROM leads WHERE conversation_stage = 'qualified'").get().c,
             contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready')").get().c,
-            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' OR is_private = 1").get().c
+            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach'").get().c
         };
         res.json(stats);
     } catch (err) {
@@ -57,9 +57,9 @@ app.get('/api/leads', (req, res) => {
         
         // Build dynamic query
         let sql = `
-            SELECT id, username, full_name,
-                   followers_count, engagement_score, 
-                   status, conversation_stage, is_private,
+            SELECT id, username,
+                   engagement_score, 
+                   status, conversation_stage,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE 1=1
@@ -72,7 +72,7 @@ app.get('/api/leads', (req, res) => {
             } else if (status === 'contacted') {
                 sql += " AND status IN ('message_sent', 'message_ready')";
             } else if (status === 'failed') {
-                 sql += " AND (status = 'failed_outreach' OR is_private = 1)";
+                 sql += " AND status = 'failed_outreach'";
             } else {
                 sql += " AND status = ?";
                 params.push(status);
@@ -101,7 +101,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'conversation_stage', 'notes', 'email', 'full_name'];
+        const allowedFields = ['status', 'conversation_stage', 'notes', 'email'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {

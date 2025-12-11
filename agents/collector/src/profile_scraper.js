@@ -248,16 +248,21 @@ export async function scrapeProfileData(page, username, saveToDb = true) {
       return data;
     });
 
-    // Parse follower count to number
-    profileData.followers_count = parseFollowerCount(extractedData.followers);
-    profileData.following_count = parseFollowerCount(extractedData.following);
-    profileData.posts_count = parseFollowerCount(extractedData.posts);
-    profileData.is_verified = extractedData.isVerified;
-    profileData.is_business = extractedData.isBusiness;
+    // Simplified extraction (columns removed)
+    // The initial profileData object is already defined at the start of scrapeProfileData
+    // We will update it with minimal fields from extractedData
     profileData.is_private = extractedData.isPrivate;
-    profileData.bio = extractedData.bio;
-    profileData.external_url = extractedData.externalUrl;
-    profileData.full_name = extractedData.fullName;
+    profileData.profile_scraped_at = new Date().toISOString();
+
+    // Clear other fields that are no longer being extracted
+    profileData.followers_count = null;
+    profileData.following_count = null;
+    profileData.posts_count = null;
+    profileData.is_verified = false;
+    profileData.is_business = false;
+    profileData.bio = '';
+    profileData.external_url = '';
+    profileData.full_name = '';
 
     // Save to database if requested
     if (saveToDb && !profileData.scrape_error) {

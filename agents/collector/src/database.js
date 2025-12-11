@@ -40,35 +40,17 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
-      full_name TEXT,
-      profile_url TEXT,
-      
-      -- Profile data (from scraping)
-      followers_count INTEGER,
-      following_count INTEGER,
-      posts_count INTEGER,
-      is_verified INTEGER DEFAULT 0,
-      is_business INTEGER DEFAULT 0,
-      is_private INTEGER DEFAULT 0,
-      bio TEXT,
-      external_url TEXT,
-      profile_scraped_at TEXT,
-      
-      -- Engagement metrics (calculated)
+      engagement_score REAL DEFAULT 0,
       total_comments INTEGER DEFAULT 0,
-      engagement_score INTEGER DEFAULT 0,
-      engagement_level TEXT DEFAULT 'LOW',
-      avg_comment_quality REAL DEFAULT 0,
-      
-      -- Outreach status
-      status TEXT DEFAULT 'new',  -- new, contacted, replied, qualified, converted, rejected
-      first_message_sent_at TEXT,
-      last_contact_at TEXT,
-      
-      -- Conversation tracking
-      conversation_stage TEXT DEFAULT 'none',  -- none, initial, rapport, qualifying, pitching, closing
       total_messages_sent INTEGER DEFAULT 0,
       total_messages_received INTEGER DEFAULT 0,
+      
+      -- Outreach status
+      status TEXT DEFAULT 'new',
+      conversation_stage TEXT DEFAULT 'none',
+      first_message_sent_at TEXT,
+      last_contact_at TEXT,
+      profile_url TEXT,
       
       -- Lead qualification
       warmth TEXT DEFAULT 'cold',  -- cold, warm, hot
@@ -201,52 +183,81 @@ export function closeDatabase() {
  * @param {Object} lead - Lead data
  * @returns {Object} Inserted/updated lead with id
  */
-export function upsertLead(lead) {
-  const stmt = db.prepare(`
+export function saveLeads(leadsData) {
+  // Prepare bulk insert statement
+  const insert = db.prepare(`
     INSERT INTO leads (
-      username, full_name, profile_url,
-      followers_count, following_count, posts_count,
-      is_verified, is_business, is_private,
-      bio, external_url, profile_scraped_at,
-      last_seen_at, updated_at
+      username, profile_url,
+      scraped_at
     ) VALUES (
-      @username, @full_name, @profile_url,
-      @followers_count, @following_count, @posts_count,
-      @is_verified, @is_business, @is_private,
-      @bio, @external_url, @profile_scraped_at,
-      datetime('now'), datetime('now')
+      @username, @profile_url,
+      datetime('now')
     )
     ON CONFLICT(username) DO UPDATE SET
-      full_name = COALESCE(@full_name, full_name),
-      profile_url = COALESCE(@profile_url, profile_url),
-      followers_count = COALESCE(@followers_count, followers_count),
-      following_count = COALESCE(@following_count, following_count),
-      posts_count = COALESCE(@posts_count, posts_count),
-      is_verified = COALESCE(@is_verified, is_verified),
-      is_business = COALESCE(@is_business, is_business),
-      is_private = COALESCE(@is_private, is_private),
-      bio = COALESCE(@bio, bio),
-      external_url = COALESCE(@external_url, external_url),
-      profile_scraped_at = COALESCE(@profile_scraped_at, profile_scraped_at),
-      last_seen_at = datetime('now'),
-      updated_at = datetime('now')
-    RETURNING *
+      scraped_at = datetime('now')
+  `); // Minimal update now since we don't have scraped profile data columns
+
+  const insertComment = db.prepare(`
+    INSERT INTO comments (
+      lead_id, post_url, comment_text, posted_at, is_owner, is_spam
+    ) VALUES (
+      @lead_id, @post_url, @comment_text, @posted_at, @is_owner, @is_spam
+    )
   `);
-  
-  return stmt.get({
-    username: lead.username,
-    full_name: lead.full_name || null,
-    profile_url: lead.profile_url || null,
-    followers_count: lead.followers_count || null,
-    following_count: lead.following_count || null,
-    posts_count: lead.posts_count || null,
-    is_verified: lead.is_verified ? 1 : 0,
-    is_business: lead.is_business ? 1 : 0,
-    is_private: lead.is_private ? 1 : 0,
-    bio: lead.bio || null,
-    external_url: lead.external_url || null,
-    profile_scraped_at: lead.profile_scraped_at || null
+
+  const updateLeadStats = db.prepare(`
+    UPDATE leads SET 
+      total_comments = (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0),
+      last_comment_date = datetime('now'),
+      warmth = CASE 
+        WHEN (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0) >= 3 THEN 'hot'
+        WHEN (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0) >= 1 THEN 'warm'
+        ELSE 'cold'
+      END,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `);
+
+  const insertTransaction = db.transaction((leads) => {
+    let newLeads = 0;
+    
+    for (const lead of leads) {
+      if (!lead.username) continue; // Skip invalid
+
+      try {
+        // Insert/Update Lead
+        insert.run({
+          username: lead.username,
+          profile_url: lead.profileUrl || `https://instagram.com/${lead.username}`
+        });
+        
+        // Get lead ID
+        const leadId = db.prepare('SELECT id FROM leads WHERE username = ?').get(lead.username).id;
+        
+        // Insert Comment
+        if (lead.comment) {
+             insertComment.run({
+                lead_id: leadId,
+                post_url: lead.postUrl,
+                comment_text: lead.comment,
+                posted_at: lead.postedAt || new Date().toISOString(),
+                is_owner: 0, 
+                is_spam: 0   
+             });
+        }
+
+        // Update Stats
+        updateLeadStats.run(leadId);
+
+        newLeads++;
+      } catch (err) {
+        console.error(`Error saving lead ${lead.username}: ${err.message}`);
+      }
+    }
+    return newLeads;
   });
+
+  return insertTransaction(leadsData);
 }
 
 /**
@@ -340,47 +351,9 @@ export function updateLeadStatus(username, status) {
 /**
  * Update lead profile data
  */
+// Obsolete - functionality removed by request
 export function updateLeadProfile(username, profileData) {
-  const stmt = db.prepare(`
-    UPDATE leads SET
-      followers_count = @followers_count,
-      following_count = @following_count,
-      posts_count = @posts_count,
-      is_verified = @is_verified,
-      is_business = @is_business,
-      is_private = @is_private,
-      bio = @bio,
-      external_url = @external_url,
-      full_name = @full_name,
-      profile_scraped_at = datetime('now'),
-      updated_at = datetime('now')
-    WHERE username = @username
-  `);
-  
-  return stmt.run({
-    username,
-    followers_count: profileData.followers_count,
-    following_count: profileData.following_count,
-    posts_count: profileData.posts_count,
-    is_verified: profileData.is_verified ? 1 : 0,
-    is_business: profileData.is_business ? 1 : 0,
-    is_private: profileData.is_private ? 1 : 0,
-    bio: profileData.bio || null,
-    external_url: profileData.external_url || null,
-    full_name: profileData.full_name || null
-  });
-}
-
-/**
- * Mark a lead as private
- */
-export function markLeadPrivate(username) {
-  return db.prepare(`
-    UPDATE leads SET
-      is_private = 1,
-      updated_at = datetime('now')
-    WHERE username = ?
-  `).run(username);
+  return; 
 }
 
 /**

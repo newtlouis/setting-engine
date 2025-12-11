@@ -178,18 +178,12 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
     selectedTemplate = selectTemplate(lead, comments);
   }
   
-  // Extract first name from full_name or username
-  let firstName = '';
-  if (lead.full_name) {
-    firstName = lead.full_name.split(' ')[0];
-  } else {
-    // Capitalize username, remove underscores/numbers
-    firstName = lead.username
+  // Extract first name from username (full_name removed)
+  let firstName = lead.username
       .replace(/[_0-9]+/g, ' ')
       .trim()
       .split(' ')[0];
-    firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-  }
+  firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
   
   // Extract pain point from most recent comment
   let painPoint = 'what you mentioned';

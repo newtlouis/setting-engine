@@ -66,9 +66,9 @@ async function loadLeads(filter) {
             } else if (lead.status === 'new') {
                 badgeClass = 'badge-neutral';
                 statusText = 'New';
-            } else if (lead.status === 'failed_outreach' || lead.is_private) {
+            } else if (lead.status === 'failed_outreach') {
                 badgeClass = 'badge-danger'; 
-                statusText = lead.is_private ? 'Private' : 'Failed';
+                statusText = 'Failed';
             }
             
             tr.innerHTML = `
@@ -77,7 +77,6 @@ async function loadLeads(filter) {
                         <div class="avatar" style="background: #30363d; display: flex; align-items: center; justify-content: center;">👤</div>
                         <div>
                             <div style="font-weight: 600;">@${lead.username}</div>
-                            <div style="font-size: 11px; color: #8b949e;">${lead.followers_count?.toLocaleString() || 0} followers</div>
                         </div>
                     </div>
                 </td>

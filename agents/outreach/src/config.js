@@ -65,15 +65,13 @@ export const CONFIG = {
   }
 };
 
-// Lead selection criteria for outreach
+// Default outreach criteria
 export const OUTREACH_CRITERIA = {
   // Minimum requirements
   MIN_ENGAGEMENT_SCORE: parseInt(process.env.MIN_ENGAGEMENT_SCORE, 10) || 0,  // Default 0 to include all
-  MIN_FOLLOWERS: parseInt(process.env.MIN_FOLLOWERS, 10) || 0,                 // Default 0 to include all
-  MAX_FOLLOWERS: parseInt(process.env.MAX_FOLLOWERS, 10) || 1000000,           // Default 1M
+  // Removed followers/private criteria
   
   // Exclude
-  EXCLUDE_PRIVATE: process.env.EXCLUDE_PRIVATE !== 'false',   // Default: exclude private accounts
   EXCLUDE_BUSINESS: process.env.EXCLUDE_BUSINESS === 'true',  // Default: include business accounts
   EXCLUDE_VERIFIED: process.env.EXCLUDE_VERIFIED === 'true',  // Default: include verified
   
