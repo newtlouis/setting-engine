@@ -313,7 +313,6 @@ export function updateLeadEngagement(username, metrics) {
     UPDATE leads SET
       total_comments = @total_comments,
       engagement_score = @engagement_score,
-      avg_comment_quality = @avg_comment_quality,
       updated_at = datetime('now')
     WHERE username = @username
   `);
@@ -321,8 +320,7 @@ export function updateLeadEngagement(username, metrics) {
   return stmt.run({
     username,
     total_comments: metrics.total_comments,
-    engagement_score: metrics.engagement_score,
-    avg_comment_quality: metrics.avg_comment_quality
+    engagement_score: metrics.engagement_score
   });
 }
 

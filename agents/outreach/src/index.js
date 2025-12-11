@@ -284,12 +284,33 @@ export async function runOutreach(options = {}) {
         // Generate messages for this batch
         const messages = generateOutreachMessages(leads, { niche, topic });
         
+        // Handle Invalid Messages: Mark them as failed so we don't infinite loop on them
+        const invalidMessages = messages.filter(m => !m.validation.valid);
+        if (invalidMessages.length > 0) {
+            console.log(`   ⚠️  Marking ${invalidMessages.length} leads as failed due to message validation errors.`);
+            for (const inv of invalidMessages) {
+                const reason = `Validation Error: ${inv.validation.issues.join(', ')}`;
+                try {
+                     await loadDatabase();
+                     dbFunctions.markLeadFailed(inv.lead.username, reason);
+                } catch (err) {
+                    console.error(`Failed to mark validation error for ${inv.lead.username}: ${err.message}`);
+                }
+            }
+        }
+        
         // Filter valid
         const validMessages = messages.filter(m => m.validation.valid);
         
         if (validMessages.length === 0) {
             console.log('   No valid messages generated for this batch. Continuing...');
             attempts++; 
+            
+            // If we fetched fewer than requested, we are at the end of the list anyway
+            if (leads.length < fetchLimit) {
+                 console.log('   ℹ️  End of available leads reached.');
+                 break;
+            }
             continue; // Go to next loop to fetch more
         }
         
@@ -397,6 +418,12 @@ export async function runOutreach(options = {}) {
 
         // Small break between chunks if we are continuing
         if (successfulCount < cleanLimit) {
+            // STOP CONDITION: If we fetched fewer items than the limit, we've exhausted the database
+            if (leads.length < fetchLimit) {
+                console.log('   ℹ️  End of available leads reached. Stopping early.');
+                break;
+            }
+            
             await new Promise(r => setTimeout(r, 2000));
         }
     }
