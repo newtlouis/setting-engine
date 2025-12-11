@@ -87,7 +87,18 @@ async function loadLeads(filter) {
                 </td>
                 <td>${lead.comment_count}</td>
                  <td>
-                    <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">View Profile &nearr;</a>
+                     <div style="display: flex; gap: 8px; align-items: center;">
+                        <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
+                        
+                        <!-- Quick Actions -->
+                        ${lead.status === 'new' ? 
+                            `<button onclick="updateLead('${lead.username}', {status: 'message_ready'})" style="padding: 4px 8px; background: #238636; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 11px;">Add to Queue</button>` 
+                            : ''}
+                            
+                        ${lead.conversation_stage !== 'qualified' ? 
+                            `<button onclick="updateLead('${lead.username}', {conversation_stage: 'qualified'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">Qualify</button>` 
+                            : ''}
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -95,5 +106,28 @@ async function loadLeads(filter) {
         
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="5" class="loading" style="color: var(--error)">Error loading data: ${e.message}</td></tr>`;
+    }
+}
+
+async function updateLead(username, updates) {
+    if (!confirm(`Update ${username}?`)) return;
+    
+    try {
+        const res = await fetch(`/api/leads/${username}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        
+        if (res.ok) {
+            // Refresh logic - simplified recharge
+            loadStats();
+            loadLeads(currentFilter);
+        } else {
+            alert('Update failed');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Error updating lead');
     }
 }

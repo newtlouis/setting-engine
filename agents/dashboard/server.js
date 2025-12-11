@@ -94,8 +94,38 @@ app.get('/api/leads', (req, res) => {
     }
 });
 
-// POST /api/leads/:username/status
+// PATCH /api/leads/:username
+app.patch('/api/leads/:username', (req, res) => {
+    try {
+        const { username } = req.params;
+        const updates = req.body;
+        
+        // Allowed fields to update
+        const allowedFields = ['status', 'conversation_stage', 'notes', 'email', 'full_name'];
+        const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
+        
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field]);
+        
+        // Add updated_at
+        const sql = `UPDATE leads SET ${setClause}, updated_at = datetime('now') WHERE username = ?`;
+        
+        db.prepare(sql).run(...values, username);
+        
+        res.json({ success: true, username, updates });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/leads/:username/status (Legacy support)
 app.post('/api/leads/:username/status', (req, res) => {
+    // ... forward to patch logic if needed, but keeping for now
+    // ... (existing code for this endpoint is fine to leave or replace)
     try {
         const { username } = req.params;
         const { status, stage } = req.body;
