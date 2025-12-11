@@ -176,10 +176,8 @@ async function handleDatabaseMode(options) {
   console.log(`Lead: @${username}`);
   console.log(`  Status: ${leadContext.status}`);
   console.log(`  Stage: ${leadContext.conversation_stage || 'initial'}`);
-  console.log(`  Engagement: ${leadContext.engagement_level}`);
-  if (leadContext.bio) {
-    console.log(`  Bio: ${leadContext.bio.substring(0, 60)}...`);
-  }
+  console.log(`  Engagement: ${leadContext.warmth} (Score: ${leadContext.engagement_score})`);
+  // Bio removed
   if (leadContext.pain_points.length > 0) {
     console.log(`  Pain points: ${leadContext.pain_points.join(', ')}`);
   }

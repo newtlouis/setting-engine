@@ -55,20 +55,21 @@ export async function getLeadWithContext(username) {
   const comments = dbFunctions.getCommentsForLead(lead.id);
   
   // Build lead context object (compatible with existing leadContext format)
+  // Build lead context object (compatible with existing leadContext format)
   const context = {
     username: lead.username,
     profile_url: lead.profile_url,
-    full_name: lead.full_name,
+    // full_name removed
     
     // Profile data
-    followers_count: lead.followers_count,
-    bio: lead.bio,
-    is_verified: lead.is_verified === 1,
-    is_business: lead.is_business === 1,
-    is_private: lead.is_private === 1,
+    followers_count: 0, // removed from DB
+    bio: '[Bio not scraped]', // removed from DB
+    is_verified: false,
+    is_business: false,
+    is_private: false,
     
     // Engagement
-    engagement_level: lead.engagement_level,
+    engagement_level: lead.warmth, // Mapping warmth to engagement_level for compatibility
     engagement_score: lead.engagement_score,
     total_comments: lead.total_comments,
     
@@ -249,15 +250,15 @@ export async function getConversationSummary(username) {
   
   return {
     username: lead.username,
-    full_name: lead.full_name,
+    // full_name removed
     status: lead.status,
     stage: lead.conversation_stage,
     message_count: messages.length,
     last_message: messages.length > 0 ? messages[messages.length - 1] : null,
-    engagement_level: lead.engagement_level,
+    engagement_level: lead.warmth, // mapped
     warmth: lead.warmth,
     pain_points: context?.pain_points || [],
-    bio_excerpt: lead.bio ? lead.bio.substring(0, 100) + '...' : null
+    bio_excerpt: null // bio removed
   };
 }
 
