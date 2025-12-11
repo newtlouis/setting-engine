@@ -27,9 +27,44 @@ let messageTabs = [];    // Tabs with typed messages (kept open)
 /**
  * Wait for a random delay between min and max
  */
+/**
+ * Wait for a random delay between min and max
+ */
 function delay(min, max) {
   const ms = Math.floor(Math.random() * (max - min + 1)) + min;
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Type text with human-like variations
+ * - Variable speeds
+ * - Pauses on punctuation/spaces
+ * - Occasional micro-pauses
+ */
+async function typeHumanLike(page, text) {
+  // Use for...of to correctly iterate over Unicode code points (preserving emojis)
+  for (const char of text) {
+    
+    // Base delay: faster for common letters, slower for symbols
+    let charDelay = 30 + Math.random() * 50;
+    
+    // Longer pauses for punctuation
+    if (['.', '!', '?', '\n'].includes(char)) {
+      charDelay += Math.random() * 400 + 200; 
+    } else if ([',', ';', ':'].includes(char)) {
+      charDelay += Math.random() * 200 + 100;
+    } else if (char === ' ') {
+      charDelay += Math.random() * 50 + 20;
+    }
+    
+    // Occasional "thinking" pause (1% chance)
+    if (Math.random() < 0.01) {
+      charDelay += Math.random() * 1000 + 500;
+    }
+    
+    await page.keyboard.type(char);
+    await delay(charDelay * 0.8, charDelay * 1.2);
+  }
 }
 
 /**
@@ -326,10 +361,7 @@ export async function sendMessage(page, message, dryRun = true) {
     await delay(300, 500);
     
     // Type message with human-like delays
-    // For contenteditable, we use keyboard.type which handles it properly
-    for (const char of message) {
-      await page.keyboard.type(char, { delay: 30 + Math.random() * 50 });
-    }
+    await typeHumanLike(page, message);
     
     await delay(500, 1000);
     
@@ -547,9 +579,7 @@ async function typeMessageOnly(page, message) {
     await delay(300, 500);
     
     // Type message with human-like delays
-    for (const char of message) {
-      await page.keyboard.type(char, { delay: 30 + Math.random() * 50 });
-    }
+    await typeHumanLike(page, message);
     
     await delay(300, 500);
     
@@ -684,48 +714,11 @@ export async function batchSendDMs(page, targets, options = {}) {
     
     console.log(`   [${i + 1}/${targets.length}] @${target.username}`);
     
-    // Step 1: Check if profile is contactable (using working tab)
-    if (onProgress) onProgress('checking', target.username);
-    console.log(`      Checking profile...`);
+    // DIRECT TAB OPENING (Optimized Flow)
+    // We open a new tab immediately. If it's valid, we keep it. If not, the function closes it.
+    console.log(`      Opening new tab for @${target.username}...`);
     
-    const checkResult = await checkProfileContactable(target.username, target.profileUrl);
-    
-    // Check for blocks
-    const blockStatus = await detectBlock(getWorkingPage());
-    if (blockStatus.blocked) {
-      console.log(`   BLOCKED: ${blockStatus.reason}. Stopping.`);
-      results.blocked = true;
-      results.blockReason = blockStatus.reason;
-      break;
-    }
-    
-    if (!checkResult.canContact) {
-      // Not contactable - skip (working tab already moved on)
-      results.skipped++;
-      results.details.push({
-        username: target.username,
-        success: false,
-        skipped: true,
-        error: checkResult.error,
-        timestamp: new Date().toISOString()
-      });
-      console.log(`      → SKIPPED: ${checkResult.error}`);
-      
-      if (onComplete) {
-        onComplete({ username: target.username, skipped: true, error: checkResult.error });
-      }
-      
-      // Short delay before next check
-      if (i < targets.length - 1) {
-        const waitTime = 2000 + Math.random() * 3000;  // 2-5 seconds
-        console.log(`      Waiting ${Math.round(waitTime/1000)}s...`);
-        await delay(waitTime, waitTime + 500);
-      }
-      continue;
-    }
-    
-    // Step 2: Contactable! Open new tab and type message
-    console.log(`      ✓ Can contact - opening new tab...`);
+    if (onProgress) onProgress('opening_tab', target.username);
     
     const result = await sendDMToUserInNewTab(target.username, target.message, {
       dryRun: true,  // Always just type, don't send
@@ -734,21 +727,39 @@ export async function batchSendDMs(page, targets, options = {}) {
       profileUrl: target.profileUrl
     });
     
-    results.details.push(result);
+    // Check if we hit a rate limit/block during the attempt
+    if (result.error && (result.error.includes('rate_limit') || result.error.includes('challenge'))) {
+       console.log(`   BLOCKED: ${result.error}. Stopping.`);
+       results.blocked = true;
+       results.blockReason = result.error;
+       break;
+    }
     
-    if (result.success && result.tabKeptOpen) {
-      results.successful++;
-      results.tabsOpen++;
-      successfulCount++;
-      console.log(`      ✓ Message typed - tab #${results.tabsOpen} kept open`);
+    if (result.skipped) {
+       // Private account or no contact button
+       results.skipped++;
+       results.details.push(result);
+       console.log(`      → SKIPPED: ${result.error}`);
+       if (onComplete) onComplete(result);
+    } else if (result.success && result.tabKeptOpen) {
+       // Success!
+       results.successful++;
+       results.tabsOpen++;
+       successfulCount++;
+       results.details.push(result);
+       console.log(`      ✓ Message typed - tab #${results.tabsOpen} kept open`);
+       if (onComplete) onComplete(result);
     } else {
-      results.failed++;
-      console.log(`      ✗ FAILED: ${result.error}`);
+       // General failure
+       results.failed++;
+       results.details.push(result);
+       console.log(`      ✗ FAILED: ${result.error}`);
+       if (onComplete) onComplete(result);
     }
     
-    if (onComplete) {
-      onComplete(result);
-    }
+    // Logic handled above
+    
+    // Logic handled above
     
     // Rate limiting delay (longer since we did more interaction)
     if (i < targets.length - 1 && successfulCount < maxPerSession) {

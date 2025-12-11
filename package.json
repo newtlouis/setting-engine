@@ -7,13 +7,13 @@
     "workspaces": [
         "agents/collector",
         "agents/outreach",
-        "agents/dm-responder"
+        "agents/dmresponder"
     ],
     "scripts": {
         "ui": "cd agents/collector && npm run ui",
         "scrape": "cd agents/collector && npm run scrape",
         "send": "cd agents/outreach && npm run send",
-        "reply": "cd agents/dm-responder && npm run reply",
+        "reply": "cd agents/dmresponder && npm run reply",
         "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
         "postinstall": "npm install --workspaces"
     },
