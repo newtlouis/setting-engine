@@ -58,20 +58,19 @@ async function loadDatabase() {
 export async function getOutreachCandidates(options = {}) {
   const {
     limit = 10,
-    minEngagementScore = OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE
+    minEngagementScore = OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE,
+    targetStatus = 'new'
   } = options;
   
   await loadDatabase();
   
   /* DEFENSIVE CODING: Cast params to expected types to avoid SQLite datatype mismatch */
   const cleanMinScore = Number(minEngagementScore) || 0;
-  const cleanMinFollowers = Number(minFollowers) || 0;
-  const cleanMaxFollowers = Number(maxFollowers) || 1000000;
   const cleanLimit = Number(limit) || 10;
   
   if (process.env.DEBUG) {
     console.log('DEBUG: Outreach Params:', { 
-        cleanMinScore, cleanMinFollowers, cleanMaxFollowers, cleanLimit, 
+        cleanMinScore, cleanLimit, targetStatus,
         originalLimit: limit 
     });
   }
@@ -87,13 +86,23 @@ export async function getOutreachCandidates(options = {}) {
   
   const params = [cleanMinScore];
   
-  // if (excludePrivate) { // Removed
-  //   query += ' AND (l.is_private IS NULL OR l.is_private = 0)'; // Removed
-  // } // Removed
-  
-  if (excludeContacted) {
-    query += " AND l.status = 'new'";
+  // Status Filtering
+  if (targetStatus === 'new') {
+      query += " AND l.status = 'new'";
+  } else if (targetStatus === 'failed') {
+      query += " AND l.status = 'failed_outreach'";
+  } else if (targetStatus === 'qualified') {
+      query += " AND l.conversation_stage = 'qualified'";
+  } else if (targetStatus === 'contacted') {
+      query += " AND l.status IN ('message_sent', 'message_ready', 'contacted', 'replied')";
+  } else if (targetStatus !== 'all') {
+      query += " AND l.status = ?";
+      params.push(targetStatus);
   }
+  
+  // Note: excludeContacted logic is effectively replaced by targetStatus='new' default
+  // but if explicit exclusion is needed for custom queries, it can be added here.
+  // For now, targetStatus handles the primary filtering.
   
   // Order by engagement and warmth
   query += `
@@ -185,7 +194,7 @@ export async function previewOutreach(options = {}) {
     
     console.log(`--- Lead ${i + 1}: @${lead.username} ---`);
     console.log(`   Followers: ${lead.followers_count || 'unknown'}`);
-    console.log(`   Engagement: ${lead.engagement_level} (score: ${lead.engagement_score})`);
+    console.log(`   Engagement: ${lead.warmth} (score: ${lead.engagement_score})`);
     console.log(`   Comments: ${lead.total_comments || 0}`);
     console.log(`   Template: ${template_category}`);
     console.log(`   Reasoning: ${reasoning}`);
@@ -262,7 +271,7 @@ export async function runOutreach(options = {}) {
         const leads = await getOutreachCandidates({ 
             ...options, 
             limit: fetchLimit,
-            excludeContacted: true // CRITICAL: Ensure we don't fetch the same ones
+            // excludeContacted is handled by targetStatus in options
         });
 
         if (leads.length === 0) {
@@ -434,10 +443,10 @@ export async function getOutreachStats() {
     `).get(OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE).count,
     
     by_engagement: db.prepare(`
-      SELECT engagement_level, COUNT(*) as count 
+      SELECT warmth as level, COUNT(*) as count 
       FROM leads 
       WHERE status = 'new'
-      GROUP BY engagement_level
+      GROUP BY warmth
     `).all()
   };
   

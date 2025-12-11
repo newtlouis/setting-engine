@@ -138,7 +138,6 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-    CREATE INDEX IF NOT EXISTS idx_leads_engagement ON leads(engagement_level);
     CREATE INDEX IF NOT EXISTS idx_leads_warmth ON leads(warmth);
     CREATE INDEX IF NOT EXISTS idx_comments_lead_id ON comments(lead_id);
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
@@ -286,11 +285,6 @@ export function getLeads(filters = {}) {
     params.status = filters.status;
   }
   
-  if (filters.engagement_level) {
-    query += ' AND engagement_level = @engagement_level';
-    params.engagement_level = filters.engagement_level;
-  }
-  
   if (filters.warmth) {
     query += ' AND warmth = @warmth';
     params.warmth = filters.warmth;
@@ -319,7 +313,6 @@ export function updateLeadEngagement(username, metrics) {
     UPDATE leads SET
       total_comments = @total_comments,
       engagement_score = @engagement_score,
-      engagement_level = @engagement_level,
       avg_comment_quality = @avg_comment_quality,
       updated_at = datetime('now')
     WHERE username = @username
@@ -329,7 +322,6 @@ export function updateLeadEngagement(username, metrics) {
     username,
     total_comments: metrics.total_comments,
     engagement_score: metrics.engagement_score,
-    engagement_level: metrics.engagement_level,
     avg_comment_quality: metrics.avg_comment_quality
   });
 }
@@ -735,9 +727,9 @@ export function getStats() {
   `).all();
   
   stats.leads_by_engagement = db.prepare(`
-    SELECT engagement_level, COUNT(*) as count 
+    SELECT warmth as level, COUNT(*) as count 
     FROM leads 
-    GROUP BY engagement_level
+    GROUP BY warmth
   `).all();
   
   stats.comments_by_source = db.prepare(`
@@ -774,7 +766,6 @@ function calculateEngagementMetrics(comments) {
     return {
       total_comments: 0,
       engagement_score: 0,
-      engagement_level: 'LOW',
       avg_comment_quality: 0
     };
   }

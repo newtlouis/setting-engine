@@ -107,7 +107,7 @@ export function selectTemplate(lead, comments = []) {
   } else if (hasQuestion) {
     category = 'question_based';
     reasoning = 'Lead asked questions';
-  } else if (lead.engagement_level === 'HIGH') {
+  } else if (lead.warmth === 'hot' || lead.engagement_score >= 5) {
     category = 'engagement_based';
     reasoning = 'Lead has high engagement level';
   } else {

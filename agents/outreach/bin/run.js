@@ -25,14 +25,13 @@ program
 
 program
   .option('-m, --mode <mode>', 'Operation mode: preview, send, status', 'preview')
-  .option('-l, --limit <number>', 'Number of leads to process', parseInt, 5)
+  .option('-l, --limit <number>', 'Number of leads to process', parseInt, 10)
+  .option('-s, --status <status>', 'Target lead status (new, failed, qualified, contacted)', 'new')
   .option('-n, --niche <niche>', 'Your niche/industry for templates', 'fitness')
   .option('-t, --topic <topic>', 'Topic to reference in messages', 'their goals')
   .option('--live', 'Actually send messages (dangerous!)', false)
   .option('--browser-data <path>', 'Path to browser data directory', './browser-data')
   .option('--min-engagement <score>', 'Minimum engagement score (uses .env default)', parseInt)
-  .option('--min-followers <count>', 'Minimum follower count (uses .env default)', parseInt)
-  .option('--max-followers <count>', 'Maximum follower count (uses .env default)', parseInt)
   .parse();
 
 const opts = program.opts();
@@ -85,8 +84,7 @@ async function handlePreview() {
     niche: opts.niche,
     topic: opts.topic,
     minEngagementScore: opts.minEngagement,
-    minFollowers: opts.minFollowers,
-    maxFollowers: opts.maxFollowers
+    targetStatus: opts.status
   });
   
   console.log('\nTo send these messages, run:');
@@ -112,8 +110,7 @@ async function handleSend() {
     dryRun,
     userDataDir: opts.browserData,
     minEngagementScore: opts.minEngagement,
-    minFollowers: opts.minFollowers,
-    maxFollowers: opts.maxFollowers
+    targetStatus: opts.status
   });
   
   console.log('\n--- Results ---');
@@ -149,7 +146,7 @@ async function handleStatus() {
   if (stats.by_engagement && stats.by_engagement.length > 0) {
     console.log('\nBy engagement level:');
     stats.by_engagement.forEach(row => {
-      console.log(`   ${row.engagement_level}: ${row.count}`);
+      console.log(`   ${row.level}: ${row.count}`);
     });
   }
   
@@ -165,8 +162,7 @@ async function handleList() {
   const leads = await getOutreachCandidates({
     limit: opts.limit,
     minEngagementScore: opts.minEngagement,
-    minFollowers: opts.minFollowers,
-    maxFollowers: opts.maxFollowers
+    targetStatus: opts.status
   });
   
   if (leads.length === 0) {
@@ -179,7 +175,7 @@ async function handleList() {
   leads.forEach((lead, i) => {
     console.log(`${i + 1}. @${lead.username}`);
     console.log(`   Followers: ${lead.followers_count || 'unknown'}`);
-    console.log(`   Engagement: ${lead.engagement_level} (${lead.engagement_score})`);
+    console.log(`   Engagement: ${lead.warmth} (score: ${lead.engagement_score})`);
     console.log(`   Comments: ${lead.total_comments || 0}`);
     console.log(`   Bio: ${lead.bio ? lead.bio.substring(0, 80) + '...' : 'N/A'}`);
     console.log('');
