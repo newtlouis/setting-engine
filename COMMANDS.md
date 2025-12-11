@@ -75,11 +75,19 @@ npm run send -- --status failed_outreach --limit 5
 
 Aide à rédiger des réponses contextuelles grâce à l'IA.
 
-**Commande Interactive :**
+**Mode Interactif**
+Lance l'interface pour générer des réponses aux messages reçus.
 ```bash
 npm run reply -- --interactive
 ```
 *Le script vous demandera de coller le message du prospect et vous proposera une réponse.*
+
+**Mode Automatique (Cron)**
+Vérifie les nouveaux messages des leads suivis et génère des suggestions.
+```bash
+npm run reply:auto
+```
+*Note : Cela visitera les profils via leur URL DM stockée en base.*
 
 **Options :**
 - `--list` : Affiche les conversations actives nécessitant une attention.
