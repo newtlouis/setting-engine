@@ -187,13 +187,13 @@ export function saveLeads(leadsData) {
   const insert = db.prepare(`
     INSERT INTO leads (
       username, profile_url,
-      scraped_at
+      last_seen_at
     ) VALUES (
       @username, @profile_url,
       datetime('now')
     )
     ON CONFLICT(username) DO UPDATE SET
-      scraped_at = datetime('now')
+      last_seen_at = datetime('now')
   `); // Minimal update now since we don't have scraped profile data columns
 
   const insertComment = db.prepare(`
@@ -379,6 +379,23 @@ export function markLeadFailed(username, reason) {
 // ============================================
 
 /**
+ * Internal helper to upsert a singleton lead
+ */
+function upsertLead(lead) {
+  const stmt = db.prepare(`
+    INSERT INTO leads (username, profile_url, last_seen_at)
+    VALUES (@username, @profile_url, datetime('now'))
+    ON CONFLICT(username) DO UPDATE SET last_seen_at = datetime('now')
+    RETURNING *
+  `);
+  
+  return stmt.get({
+    username: lead.username,
+    profile_url: lead.profile_url || `https://instagram.com/${lead.username}`
+  });
+}
+
+/**
  * Insert a comment (check for duplicates)
  * 
  * @param {Object} comment - Comment data
@@ -390,7 +407,6 @@ export function insertComment(comment) {
   if (!lead) {
     lead = upsertLead({
       username: comment.username,
-      full_name: comment.full_name,
       profile_url: comment.profile_url
     });
   }
