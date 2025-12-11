@@ -316,6 +316,7 @@ export async function runOutreach(options = {}) {
         
         const targets = validMessages.map(m => ({
             username: m.lead.username,
+            profileUrl: m.lead.profile_url, // Use stored URL
             message: m.message,
             leadId: m.lead.id
         }));

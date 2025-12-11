@@ -171,8 +171,8 @@ function getWorkingPage() {
  * @param {string} username - Instagram username
  * @returns {Promise<{success: boolean, canContact: boolean, error?: string}>}
  */
-export async function goToProfile(page, username) {
-  const profileUrl = `https://www.instagram.com/${username}/`;
+export async function goToProfile(page, username, targetUrl = null) {
+  const profileUrl = targetUrl || `https://www.instagram.com/${username}/`;
   
   try {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
@@ -370,7 +370,7 @@ export async function sendMessage(page, message, dryRun = true) {
  * @param {string} username - Instagram username
  * @returns {Promise<Object>} Result with canContact boolean
  */
-export async function checkProfileContactable(username) {
+export async function checkProfileContactable(username, targetUrl = null) {
   const page = getWorkingPage();
   
   const result = {
@@ -380,7 +380,7 @@ export async function checkProfileContactable(username) {
   };
   
   try {
-    const navResult = await goToProfile(page, username);
+    const navResult = await goToProfile(page, username, targetUrl);
     
     if (!navResult.success) {
       result.error = navResult.error;
@@ -418,7 +418,8 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
   const {
     dryRun = true,  // In new flow, dryRun means "type but don't send"
     onProgress = null,
-    onConversationReady = null
+    onConversationReady = null,
+    profileUrl = null
   } = options;
   
   const result = {
@@ -438,7 +439,7 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     if (onProgress) onProgress('opening_tab', username);
     newTab = await createNewTab();
     
-    const navResult = await goToProfile(newTab, username);
+    const navResult = await goToProfile(newTab, username, profileUrl);
     result.steps.push({ step: 'navigate', ...navResult });
     
     if (!navResult.success) {
@@ -687,7 +688,7 @@ export async function batchSendDMs(page, targets, options = {}) {
     if (onProgress) onProgress('checking', target.username);
     console.log(`      Checking profile...`);
     
-    const checkResult = await checkProfileContactable(target.username);
+    const checkResult = await checkProfileContactable(target.username, target.profileUrl);
     
     // Check for blocks
     const blockStatus = await detectBlock(getWorkingPage());
@@ -729,7 +730,8 @@ export async function batchSendDMs(page, targets, options = {}) {
     const result = await sendDMToUserInNewTab(target.username, target.message, {
       dryRun: true,  // Always just type, don't send
       onProgress,
-      onConversationReady
+      onConversationReady,
+      profileUrl: target.profileUrl
     });
     
     results.details.push(result);
