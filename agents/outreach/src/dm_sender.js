@@ -555,8 +555,9 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     
     if (existingCheck.hasMessages) {
       result.skipped = true;
-      result.error = 'already_messaged';
-      console.log(`      ⏭️  Skipping @${username}: already has ${existingCheck.messageCount} message(s)`);
+      result.existingConversation = true; // Flag for caller to update status
+      result.messageCount = existingCheck.messageCount;
+      console.log(`      💬 @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
       await newTab.close().catch(() => {});
       return result;
     }

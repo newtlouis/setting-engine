@@ -22,8 +22,8 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
-// New simplified statuses: outreach, responding, replied, failed
-const DEFAULT_STATUSES = ['outreach', 'responding', 'failed'];
+// New simplified statuses: outreach, conversation, failed
+const DEFAULT_STATUSES = ['outreach', 'conversation', 'failed'];
 
 /**
  * Find messages in scraped list that are not in DB history
@@ -188,7 +188,7 @@ async function processThread(thread, options) {
       
       await markThread(
         username,
-        'responding',
+        'conversation',
         thread.metadata,
         {
           last_checked_at: new Date().toISOString(),

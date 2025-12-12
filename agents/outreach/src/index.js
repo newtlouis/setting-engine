@@ -92,7 +92,7 @@ export async function getOutreachCandidates(options = {}) {
   } else if (targetStatus === 'failed') {
       query += " AND l.status = 'failed'";
   } else if (targetStatus === 'contacted') {
-      query += " AND l.status IN ('outreach', 'responding', 'replied')";
+      query += " AND l.status IN ('outreach', 'conversation')";
   } else if (targetStatus !== 'all') {
       query += " AND l.status = ?";
       params.push(targetStatus);
@@ -383,7 +383,17 @@ export async function runOutreach(options = {}) {
                     batchResults.skipped++;
                     // UPDATE DB Status so we don't fetch again!
                      await loadDatabase();
-                     if (result.error && (result.error.includes('private') || result.error === 'private_account_no_contact')) {
+                     
+                     // Check if this is an existing conversation (already has messages)
+                     if (result.existingConversation) {
+                         console.log(`   💬 Marking @${result.username} as CONVERSATION (${result.messageCount} existing messages)`);
+                         db.prepare(`
+                           UPDATE leads SET 
+                             status = 'conversation',
+                             updated_at = datetime('now')
+                           WHERE username = ?
+                         `).run(result.username);
+                     } else if (result.error && (result.error.includes('private') || result.error === 'private_account_no_contact')) {
                          console.log(`   ✨ Marking @${result.username} as FAILED (Private Account) in DB.`);
                          dbFunctions.markLeadFailed(result.username, 'Private Account');
                      } else {
