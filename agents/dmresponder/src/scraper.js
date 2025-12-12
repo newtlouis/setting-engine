@@ -340,6 +340,7 @@ async function typeMessageOnly(page, message) {
 /**
  * Scrape all visible messages from the DM conversation
  * Uses Instagram's "Double tap to like" button as reliable message container
+ * Detects role by looking for "Open the profile page" link (only in received messages)
  * 
  * @param {Page} page - Playwright page with DM view open
  * @returns {Promise<Array<{role: string, text: string}>>} Array of messages
@@ -353,7 +354,6 @@ export async function scrapeConversationMessages(page) {
       const result = [];
       
       // Find all message containers using the "Double tap to like" button
-      // This is a reliable indicator of a message bubble
       const messageButtons = document.querySelectorAll('[role="button"][aria-label*="Double tap"]');
       
       messageButtons.forEach(button => {
@@ -367,33 +367,45 @@ export async function scrapeConversationMessages(page) {
         // Skip UI elements
         if (text.includes('Message...') || text.includes('Votre message')) return;
         if (text === 'Seen' || text === 'Vu' || text === 'Active now') return;
+        if (text === 'Envoyer' || text === 'Send') return;
         
-        // Determine role by checking alignment of message container
-        // "My" messages (assistant) align right, "Their" messages (user) align left
-        let isAssistant = false;
-        let p = button.parentElement;
-        let depth = 0;
-        const MAX_DEPTH = 15;
+        // ----- ROLE DETECTION -----
+        // Key insight: Messages FROM the prospect have a profile link as a SIBLING
+        // at some parent level. We need to check siblings, not child search.
         
-        while (p && depth < MAX_DEPTH) {
-          const style = window.getComputedStyle(p);
+        let isUser = false;
+        
+        // Walk up parents and at each level, check SIBLINGS for profile link
+        let currentEl = button;
+        for (let depth = 0; depth < 8; depth++) {
+          const parent = currentEl.parentElement;
+          if (!parent) break;
           
-          // Check for right alignment (sent messages)
-          if (style.alignSelf === 'flex-end' || style.alignItems === 'flex-end') {
-            isAssistant = true;
-            break;
-          }
-          if (style.justifyContent === 'flex-end') {
-            isAssistant = true;
-            break;
+          // Check siblings of currentEl (not children of parent which includes currentEl)
+          const siblings = Array.from(parent.children);
+          for (const sibling of siblings) {
+            if (sibling === currentEl) continue; // Skip self
+            
+            // Check if this sibling contains a profile link
+            const profileLink = sibling.querySelector('a[aria-label*="Open the profile page"]');
+            if (profileLink) {
+              isUser = true;
+              break;
+            }
+            
+            // Also check if the sibling IS the profile link
+            if (sibling.matches && sibling.matches('a[aria-label*="Open the profile page"]')) {
+              isUser = true;
+              break;
+            }
           }
           
-          p = p.parentElement;
-          depth++;
+          if (isUser) break;
+          currentEl = parent;
         }
         
         result.push({
-          role: isAssistant ? 'assistant' : 'user',
+          role: isUser ? 'user' : 'assistant',
           text: text
         });
       });
@@ -412,12 +424,13 @@ export async function scrapeConversationMessages(page) {
     
     console.log(`      Scraped ${deduped.length} messages from conversation`);
     
-    // Log preview for debugging
+    // Log preview for debugging - show roles clearly
     if (deduped.length > 0) {
-      console.log(`      Preview:`);
+      console.log(`      Preview (last 3):`);
       deduped.slice(-3).forEach(m => {
+        const icon = m.role === 'user' ? '👤' : '🤖';
         const preview = m.text.substring(0, 40) + (m.text.length > 40 ? '...' : '');
-        console.log(`        [${m.role}] ${preview}`);
+        console.log(`        ${icon} [${m.role}] ${preview}`);
       });
     }
     
