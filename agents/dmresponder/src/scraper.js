@@ -15,6 +15,53 @@ dotenv.config();
  */
 const randomDelay = (min, max) => Math.random() * (max - min) + min;
 
+import { createInterface } from 'readline';
+
+/**
+ * Checks for CAPTCHA presence and pauses execution for manual solving if detected.
+ * @param {import('playwright').Page} page 
+ */
+async function checkForCaptcha(page) {
+    try {
+        const captchaSelectors = [
+            'iframe[src*="google.com/recaptcha"]',
+            'iframe[src*="recaptcha"]',
+            'div:has-text("Security Check")',
+            'div:has-text("Vérifiez que vous n\'êtes pas un robot")',
+            'div:has-text("Verify you are not a robot")',
+            '#recaptcha_challenge_image',
+            'div[role="checkbox"]'
+        ];
+
+        let found = false;
+        for (const selector of captchaSelectors) {
+             if (await page.$(selector)) {
+                 found = true;
+                 break;
+             }
+        }
+
+        if (found) {
+            console.log('\n⚠️  CAPTCHA / SECURITY CHECK DETECTED! ⚠️');
+            console.log('An automated test has paused execution.');
+            console.log('👉 Please solve the CAPTCHA manually in the browser window.');
+            console.log('⌨️  Press ENTER in this terminal when you are done to continue...');
+            
+            await new Promise(resolve => {
+                const rl = createInterface({ input: process.stdin, output: process.stdout });
+                rl.question('', () => {
+                    rl.close();
+                    resolve();
+                });
+            });
+            console.log('Resuming automation...');
+            await page.waitForTimeout(2000);
+        }
+    } catch (e) {
+        // Ignore errors during check
+    }
+}
+
 /**
  * Launches a browser, logs into Instagram, navigates to a conversation URL,
  * and scrapes the message history.
@@ -97,13 +144,23 @@ export async function scrapeConversation(url, options = {}) {
 
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
     
+    await checkForCaptcha(page);
+
     await page.type('input[name="username"]', username, { delay: randomDelay(50, 150) });
     await page.waitForTimeout(randomDelay(500, 1200));
     await page.type('input[name="password"]', password, { delay: randomDelay(50, 150) });
     await page.click('button[type="submit"]');
+
+    // Wait for either navigation (success) or potential captcha
+    try {
+        await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 8000 });
+    } catch (e) {
+        console.log('Login navigation slow or blocked, checking for CAPTCHA...');
+    }
+
+    await checkForCaptcha(page); // Check again after submit
     
-    await page.waitForNavigation({ waitUntil: 'networkidle' });
-    console.log('Login successful.');
+    console.log('Login successful (or proceeded).');
 
     // --- POPUP HANDLING: "Save your login info?" ---
     try {
