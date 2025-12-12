@@ -22,7 +22,28 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
-const DEFAULT_STATUSES = ['message_ready', 'awaiting_reply', 'watching', 'error'];
+// New simplified statuses: outreach, responding, replied, failed
+const DEFAULT_STATUSES = ['outreach', 'responding', 'failed'];
+
+/**
+ * Find messages in scraped list that are not in DB history
+ * Uses text comparison to identify new messages
+ */
+function findNewMessages(scrapedMessages, dbHistory) {
+  if (!scrapedMessages || scrapedMessages.length === 0) return [];
+  if (!dbHistory || dbHistory.length === 0) return scrapedMessages;
+  
+  // Create a set of existing message texts for fast lookup
+  const existingTexts = new Set(dbHistory.map(m => m.text?.trim().toLowerCase()));
+  
+  // Filter scraped messages that don't exist in DB
+  const newMessages = scrapedMessages.filter(msg => {
+    const normalizedText = msg.text?.trim().toLowerCase();
+    return !existingTexts.has(normalizedText);
+  });
+  
+  return newMessages;
+}
 
 /**
  * Main entry point - NEW WORKFLOW
@@ -104,11 +125,14 @@ async function processThread(thread, options) {
   console.log(`\n--- Processing @${username} ---`);
   
   try {
-    // Get context from DB
+    // Step 1: Get existing conversation history from DB
     const existingHistory = await getConversationHistory(username);
     const leadContext = await getLeadWithContext(username);
     
-    // Generate response
+    console.log(`   Existing messages in DB: ${existingHistory.length}`);
+    
+    // Step 2: Generate response based on existing history
+    // (We'll refine this with scraped messages if needed)
     console.log(`   Generating response...`);
     const response = await generateResponse({
       conversationHistory: existingHistory,
@@ -132,30 +156,49 @@ async function processThread(thread, options) {
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     console.log(`   Suggestion saved: ${suggestionPath}`);
     
-    // Process in new tab
+    // Step 3: Process in new tab (opens DM, scrapes messages, types response)
     const result = await processLeadInNewTab(
       { username, profile_url: profileUrl },
       message
     );
     
     if (result.success) {
+      // Step 4: Save any NEW messages from the scraped conversation
+      const scrapedMessages = result.scrapedMessages || [];
+      
+      if (scrapedMessages.length > 0) {
+        console.log(`   Syncing ${scrapedMessages.length} scraped messages with DB...`);
+        
+        // Find messages that are not already in DB
+        const newMessages = findNewMessages(scrapedMessages, existingHistory);
+        
+        if (newMessages.length > 0) {
+          console.log(`   📥 ${newMessages.length} new message(s) to save.`);
+          for (const msg of newMessages) {
+            await addMessage(username, msg.role, msg.text);
+          }
+        } else {
+          console.log(`   No new messages to save.`);
+        }
+      }
+      
+      // Step 5: Save the message we just typed as 'assistant' message
+      console.log(`   💬 Saving sent message to DB...`);
+      await addMessage(username, 'assistant', message, response.message_type || 'generated');
+      
       await markThread(
         username,
-        'response_typed',
+        'responding',
         thread.metadata,
         {
           last_checked_at: new Date().toISOString(),
-          last_suggestion: {
-            file: suggestionPath,
-            generated_at: new Date().toISOString(),
-            stage: response.conversation_stage
-          }
+          last_message_preview: message.substring(0, 100)
         }
       );
       return { success: true };
     } else {
       console.log(`   ❌ Failed: ${result.error}`);
-      await markThread(username, 'error', thread.metadata, {
+      await markThread(username, 'failed', thread.metadata, {
         last_error: result.error,
         last_checked_at: new Date().toISOString()
       });
@@ -164,7 +207,7 @@ async function processThread(thread, options) {
     
   } catch (error) {
     console.error(`   ❌ Error: ${error.message}`);
-    await markThread(username, 'error', thread.metadata, {
+    await markThread(username, 'failed', thread.metadata, {
       last_error: error.message,
       last_checked_at: new Date().toISOString()
     });
@@ -187,9 +230,6 @@ async function saveSuggestion(username, response, outputDir) {
 }
 
 async function markThread(username, status, rawMetadata, additions = {}) {
-  const metadata = {
-    ...parseThreadMetadata(rawMetadata),
-    ...additions
-  };
-  await setDmThreadStatus(username, status, { metadata });
+  // Now just updates lead status directly
+  await setDmThreadStatus(username, status, additions);
 }

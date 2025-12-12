@@ -90,11 +90,9 @@ export async function getOutreachCandidates(options = {}) {
   if (targetStatus === 'new') {
       query += " AND l.status = 'new'";
   } else if (targetStatus === 'failed') {
-      query += " AND l.status = 'failed_outreach'";
-  } else if (targetStatus === 'qualified') {
-      query += " AND l.conversation_stage = 'qualified'";
+      query += " AND l.status = 'failed'";
   } else if (targetStatus === 'contacted') {
-      query += " AND l.status IN ('message_sent', 'message_ready', 'contacted', 'replied')";
+      query += " AND l.status IN ('outreach', 'responding', 'replied')";
   } else if (targetStatus !== 'all') {
       query += " AND l.status = ?";
       params.push(targetStatus);
@@ -343,7 +341,7 @@ export async function runOutreach(options = {}) {
                       username,
                       dm_url: dmUrl,
                       last_message_preview: messagePreview,
-                      last_status: 'message_ready',
+                      last_status: 'outreach',
                       typed_at: typedAt || new Date().toISOString()
                     });
                   }
@@ -353,7 +351,7 @@ export async function runOutreach(options = {}) {
                       username,
                       dmUrl,
                       messagePreview,
-                      status: 'message_ready',
+                      status: 'outreach',
                       typedAt: typedAt || new Date().toISOString()
                     });
                     await tracker.save();
@@ -377,10 +375,10 @@ export async function runOutreach(options = {}) {
                      await loadDatabase();
                      db.prepare(`
                         UPDATE leads SET 
-                          status = 'message_ready',
-                          conversation_stage = 'pending_send'
+                          status = 'outreach',
+                          dm_url = ?
                         WHERE username = ?
-                      `).run(result.username);
+                      `).run(result.dmUrl || null, result.username);
                 } else if (result.skipped) {
                     batchResults.skipped++;
                     // UPDATE DB Status so we don't fetch again!

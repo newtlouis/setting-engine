@@ -67,7 +67,7 @@ export async function runCollector(config) {
         
         // Fallback to manual login
         console.log('📱 Opening Instagram...');
-        await page.goto('https://www.instagram.com/accounts/login/', {
+        await page.goto('https://www.instagram.com/', {
           waitUntil: 'domcontentloaded',
           timeout: 60000
         });

@@ -337,6 +337,86 @@ async function typeMessageOnly(page, message) {
   }
 }
 
+/**
+ * Scrape all visible messages from the DM conversation
+ * 
+ * @param {Page} page - Playwright page with DM view open
+ * @returns {Promise<Array<{role: string, text: string}>>} Array of messages
+ */
+export async function scrapeConversationMessages(page) {
+  try {
+    // Wait a bit for messages to load
+    await delay(1000, 1500);
+    
+    const messages = await page.evaluate(() => {
+      const result = [];
+      
+      // Find all text nodes with dir="auto" (Instagram's way of marking user content)
+      const textNodes = Array.from(document.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
+      
+      // Filter to those likely in the message area (not header, not input placeholder)
+      textNodes.forEach(node => {
+        const text = node.innerText?.trim();
+        if (!text || text.length === 0) return;
+        
+        // Skip very short texts that are likely UI elements
+        if (text.length < 2) return;
+        
+        // Skip if it looks like a placeholder or UI text
+        if (text.includes('Message...') || text.includes('Votre message')) return;
+        if (text === 'Seen' || text === 'Vu' || text === 'Active now') return;
+        
+        // Determine role by checking parent alignment
+        // "My" messages (assistant) usually align right (flex-end)
+        // "Their" messages (user) usually align left
+        let isAssistant = false;
+        let p = node.parentElement;
+        let depth = 0;
+        const MAX_DEPTH = 20;
+        
+        while (p && depth < MAX_DEPTH) {
+          const style = window.getComputedStyle(p);
+          
+          if (style.alignSelf === 'flex-end' || style.alignItems === 'flex-end') {
+            isAssistant = true;
+            break;
+          }
+          if (style.flexDirection === 'row' && style.justifyContent === 'flex-end') {
+            isAssistant = true;
+            break;
+          }
+          
+          p = p.parentElement;
+          depth++;
+        }
+        
+        result.push({
+          role: isAssistant ? 'assistant' : 'user',
+          text: text
+        });
+      });
+      
+      return result;
+    });
+    
+    // Deduplicate consecutive identical messages
+    const deduped = [];
+    for (const msg of messages) {
+      const last = deduped[deduped.length - 1];
+      if (!last || last.text !== msg.text || last.role !== msg.role) {
+        deduped.push(msg);
+      }
+    }
+    
+    console.log(`      Scraped ${deduped.length} messages from conversation`);
+    return deduped;
+    
+  } catch (error) {
+    console.error('      Error scraping messages:', error.message);
+    return [];
+  }
+}
+
 // ============================================
 // MAIN WORKFLOW
 // ============================================
@@ -346,12 +426,13 @@ async function typeMessageOnly(page, message) {
  * 1. Open new tab
  * 2. Go to profile
  * 3. Click "Contacter"
- * 4. Type message
- * 5. Keep tab open for manual send
+ * 4. Scrape existing messages
+ * 5. Type message
+ * 6. Keep tab open for manual send
  * 
  * @param {Object} lead - Lead data (must have profile_url or username)
  * @param {string} message - Message to type
- * @returns {Promise<Object>} Result
+ * @returns {Promise<Object>} Result with scrapedMessages
  */
 export async function processLeadInNewTab(lead, message) {
   const username = lead.username || lead.profile_url?.split('/').filter(Boolean).pop();
@@ -362,6 +443,7 @@ export async function processLeadInNewTab(lead, message) {
     success: false,
     error: null,
     tabKeptOpen: false,
+    scrapedMessages: [],
     timestamp: new Date().toISOString()
   };
   
@@ -383,7 +465,11 @@ export async function processLeadInNewTab(lead, message) {
       return result;
     }
     
-    // Step 3: Type message
+    // Step 3: Scrape existing messages
+    console.log(`      Scraping conversation history...`);
+    result.scrapedMessages = await scrapeConversationMessages(tab);
+    
+    // Step 4: Type message
     console.log(`      Typing message...`);
     const typeResult = await typeMessageOnly(tab, message);
     

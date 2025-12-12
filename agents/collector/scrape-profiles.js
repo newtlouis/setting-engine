@@ -118,7 +118,7 @@ export async function scrapeProfilesForLeads(options = {}) {
         
         if (!loginSuccess) {
           console.log('\n⚠️  Auto-login failed. Please log in manually...\n');
-          await page.goto('https://www.instagram.com/accounts/login/', {
+          await page.goto('https://www.instagram.com/', {
             waitUntil: 'domcontentloaded',
             timeout: 60000
           });

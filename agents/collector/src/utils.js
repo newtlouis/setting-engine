@@ -173,7 +173,7 @@ export async function autoLoginInstagram(page, username, password) {
     console.log('🔐 Auto-login enabled, logging in to Instagram...');
     
     // Navigate to login page
-    await page.goto('https://www.instagram.com/accounts/login/', {
+    await page.goto('https://www.instagram.com/', {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });

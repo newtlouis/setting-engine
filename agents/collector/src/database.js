@@ -45,12 +45,12 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       total_messages_sent INTEGER DEFAULT 0,
       total_messages_received INTEGER DEFAULT 0,
       
-      -- Outreach status
+      -- Outreach status: new, outreach, responding, replied, failed, closed
       status TEXT DEFAULT 'new',
-      conversation_stage TEXT DEFAULT 'none',
       first_message_sent_at TEXT,
       last_contact_at TEXT,
       profile_url TEXT,
+      dm_url TEXT,
       
       -- Lead qualification
       warmth TEXT DEFAULT 'cold',  -- cold, warm, hot
@@ -118,23 +118,6 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       FOREIGN KEY (lead_id) REFERENCES leads(id)
     );
     
-    -- Conversation threads table: stores DM URLs and metadata
-    CREATE TABLE IF NOT EXISTS dm_threads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id INTEGER NOT NULL,
-      username TEXT NOT NULL,
-      dm_url TEXT,
-      last_message_preview TEXT,
-      last_status TEXT,
-      typed_at TEXT,
-      last_reply_at TEXT,
-      metadata TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(lead_id),
-      UNIQUE(username)
-    );
-    
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
@@ -143,8 +126,6 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
-    CREATE INDEX IF NOT EXISTS idx_dm_threads_status ON dm_threads(last_status);
-    CREATE INDEX IF NOT EXISTS idx_dm_threads_username ON dm_threads(username);
   `);
   
   console.log(`📦 Database initialized: ${dbPath}`);
@@ -621,102 +602,88 @@ export function getConversation(leadId) {
 }
 
 // ============================================
-// DM THREAD OPERATIONS
+// LEAD STATUS & DM URL OPERATIONS
 // ============================================
 
-export function upsertDmThread(thread) {
-  if (!thread || !thread.username) {
-    throw new Error('Username is required to upsert DM thread');
-  }
-  let lead = getLeadByUsername(thread.username);
-  if (!lead) {
-    lead = upsertLead({
-      username: thread.username,
-      profile_url: thread.profile_url || `https://www.instagram.com/${thread.username}/`
-    });
-  }
-  const stmt = db.prepare(`
-    INSERT INTO dm_threads (
-      lead_id, username, dm_url, last_message_preview, last_status, typed_at, metadata
-    ) VALUES (
-      @lead_id, @username, @dm_url, @last_message_preview, @last_status, @typed_at, @metadata
-    )
-    ON CONFLICT(lead_id) DO UPDATE SET
-      dm_url = COALESCE(@dm_url, dm_url),
-      last_message_preview = COALESCE(@last_message_preview, last_message_preview),
-      last_status = COALESCE(@last_status, last_status),
-      typed_at = COALESCE(@typed_at, typed_at),
-      metadata = COALESCE(@metadata, metadata),
-      updated_at = datetime('now')
-    RETURNING *
-  `);
-  const metadataValue = thread.metadata === undefined
-    ? null
-    : (typeof thread.metadata === 'string' ? thread.metadata : JSON.stringify(thread.metadata));
-  return stmt.get({
-    lead_id: lead.id,
-    username: thread.username,
-    dm_url: thread.dm_url || null,
-    last_message_preview: thread.last_message_preview || null,
-    last_status: thread.last_status || null,
-    typed_at: thread.typed_at || null,
-    metadata: metadataValue
-  });
-}
-
-export function updateDmThreadStatus(username, status, updates = {}) {
+/**
+ * Update lead status with optional dm_url
+ * New simplified statuses: new, outreach, responding, replied, failed, closed
+ */
+export function updateLeadDmStatus(username, status, dmUrl = null) {
   if (!username) {
-    throw new Error('Username is required to update DM thread status');
+    throw new Error('Username is required');
   }
   const stmt = db.prepare(`
-    UPDATE dm_threads SET
-      last_status = COALESCE(@last_status, last_status),
-      last_reply_at = COALESCE(@last_reply_at, last_reply_at),
-      metadata = COALESCE(@metadata, metadata),
+    UPDATE leads SET
+      status = COALESCE(@status, status),
+      dm_url = COALESCE(@dm_url, dm_url),
+      last_contact_at = datetime('now'),
       updated_at = datetime('now')
     WHERE username = @username
   `);
-  const metadataValue = updates.metadata === undefined
-    ? null
-    : (typeof updates.metadata === 'string' ? updates.metadata : JSON.stringify(updates.metadata));
   return stmt.run({
     username,
-    last_status: status || null,
-    last_reply_at: updates.last_reply_at || null,
-    metadata: metadataValue
+    status: status || null,
+    dm_url: dmUrl
   });
 }
 
-export function getDmThreadByUsername(username) {
-  return db.prepare('SELECT * FROM dm_threads WHERE username = ?').get(username);
-}
-
-export function getDmThreads(filters = {}) {
+/**
+ * Get leads for DM Responder (replaces getDmThreads)
+ * Filters by status and requires dm_url
+ */
+export function getLeadsForResponder(filters = {}) {
   let query = `
-    SELECT dt.*, l.status as lead_status, l.conversation_stage, l.total_messages_sent, l.total_messages_received
-    FROM dm_threads dt
-    JOIN leads l ON dt.lead_id = l.id
+    SELECT *
+    FROM leads
     WHERE 1=1
   `;
   const params = [];
+  
   if (filters.statuses && filters.statuses.length > 0) {
     const placeholders = filters.statuses.map(() => '?').join(',');
-    query += ` AND dt.last_status IN (${placeholders})`;
+    query += ` AND status IN (${placeholders})`;
     params.push(...filters.statuses);
   }
+  
   if (filters.onlyWithUrl) {
-    query += " AND dt.dm_url IS NOT NULL AND dt.dm_url <> ''";
+    query += " AND dm_url IS NOT NULL AND dm_url <> ''";
   }
+  
   if (filters.username) {
-    query += ' AND dt.username = ?';
+    query += ' AND username = ?';
     params.push(filters.username);
   }
-  query += ' ORDER BY dt.updated_at DESC';
+  
+  query += ' ORDER BY updated_at DESC';
+  
   if (filters.limit) {
     query += ' LIMIT ?';
     params.push(filters.limit);
   }
+  
   return db.prepare(query).all(...params);
+}
+
+// Legacy compatibility wrappers (to be removed after full migration)
+export function upsertDmThread(thread) {
+  console.warn('DEPRECATED: upsertDmThread - use updateLeadDmStatus instead');
+  const lead = upsertLead({
+    username: thread.username,
+    profile_url: thread.profile_url || `https://www.instagram.com/${thread.username}/`
+  });
+  updateLeadDmStatus(thread.username, thread.last_status, thread.dm_url);
+  return lead;
+}
+
+export function updateDmThreadStatus(username, status, updates = {}) {
+  console.warn('DEPRECATED: updateDmThreadStatus - use updateLeadDmStatus instead');
+  return updateLeadDmStatus(username, status, updates.dm_url);
+}
+
+export function getDmThreads(filters = {}) {
+  console.warn('DEPRECATED: getDmThreads - use getLeadsForResponder instead');
+  return getLeadsForResponder(filters);
 }
 
 // ============================================
