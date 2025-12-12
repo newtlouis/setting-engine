@@ -1,97 +1,163 @@
 /**
  * @file Manages browser automation with Playwright to scrape and interact with Instagram DMs.
+ * 
+ * WORKFLOW (like Outreach agent):
+ * - Uses persistent browser context (session saved to ./browser-data)
+ * - Single login, multiple tabs for each lead
+ * - Types response and leaves tab open for manual send
  */
 
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
+import { createInterface } from 'readline';
 
 dotenv.config();
 
-/**
- * Generates a random delay between a min and max value.
- * @param {number} min Minimum delay in milliseconds.
- * @param {number} max Maximum delay in milliseconds.
- * @returns {number} A random delay value.
- */
-const randomDelay = (min, max) => Math.random() * (max - min) + min;
+// ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+  HEADLESS: process.env.HEADLESS === 'true',
+  SLOW_MO: parseInt(process.env.SLOW_MO, 10) || 50,
+  PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 30000,
+  
+  SELECTORS: {
+    CONTACT_BUTTON: [
+      'div[role="button"]:has-text("Contacter")',
+      'div[role="button"]:has-text("Message")',
+      'button:has-text("Contacter")',
+      'button:has-text("Message")'
+    ],
+    MESSAGE_INPUT: [
+      'div[contenteditable="true"][role="textbox"]',
+      'div[aria-label*="message" i][contenteditable="true"]',
+      'div[aria-label*="Message" i][contenteditable="true"]',
+      'div[aria-placeholder*="message" i][contenteditable="true"]',
+      'div[data-lexical-editor="true"]'
+    ]
+  }
+};
 
-import { createInterface } from 'readline';
+// ============================================
+// BROWSER STATE (Module-level)
+// ============================================
+let browserContext = null;
+let workingPage = null;
+let messageTabs = [];
 
-/**
- * Checks for CAPTCHA presence and pauses execution for manual solving if detected.
- * @param {import('playwright').Page} page 
- */
-async function checkForCaptcha(page) {
-    try {
-        const captchaSelectors = [
-            'iframe[src*="google.com/recaptcha"]',
-            'iframe[src*="recaptcha"]',
-            'div:has-text("Security Check")',
-            'div:has-text("Vérifiez que vous n\'êtes pas un robot")',
-            'div:has-text("Verify you are not a robot")',
-            '#recaptcha_challenge_image',
-            'div[role="checkbox"]'
-        ];
-
-        let found = false;
-        for (const selector of captchaSelectors) {
-             if (await page.$(selector)) {
-                 found = true;
-                 break;
-             }
-        }
-
-        if (found) {
-            console.log('\n⚠️  CAPTCHA / SECURITY CHECK DETECTED! ⚠️');
-            console.log('An automated test has paused execution.');
-            console.log('👉 Please solve the CAPTCHA manually in the browser window.');
-            console.log('⌨️  Press ENTER in this terminal when you are done to continue...');
-            
-            await new Promise(resolve => {
-                const rl = createInterface({ input: process.stdin, output: process.stdout });
-                rl.question('', () => {
-                    rl.close();
-                    resolve();
-                });
-            });
-            console.log('Resuming automation...');
-            await page.waitForTimeout(2000);
-        }
-    } catch (e) {
-        // Ignore errors during check
-    }
+// ============================================
+// UTILITIES
+// ============================================
+function delay(min, max) {
+  const ms = Math.floor(Math.random() * (max - min + 1)) + min;
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Launches a browser, logs into Instagram, navigates to a conversation URL,
- * and scrapes the message history.
- *
- * @param {string} url The URL of the Instagram DM conversation.
- * @returns {Promise<{conversationHistory: Array, page: import('playwright').Page, browser: import('playwright').Browser}>}
+ * Type text with human-like variations
  */
-export async function scrapeConversation(url, options = {}) {
-  const username = process.env.INSTAGRAM_USERNAME;
-  const password = process.env.INSTAGRAM_PASSWORD;
-  const headless = options.headless ?? false;
- 
-  if (!username || !password) {
-    throw new Error('INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD must be set in your .env file.');
-  }
- 
-  console.log('Launching browser...');
-  const browser = await chromium.launch({ headless });
-  const page = await browser.newPage();
-
-
-  try {
-    await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle' });
-
-    console.log('Logging in with human-like behavior...');
+async function typeHumanLike(page, text) {
+  for (const char of text) {
+    let charDelay = 30 + Math.random() * 50;
     
-    // --- COOKIE POPUP HANDLING ---
-    // (Ported from collector/utils.js)
-    try {
-        console.log('Checking for cookie consent popup...');
+    if (['.', '!', '?', '\n'].includes(char)) {
+      charDelay += Math.random() * 400 + 200;
+    } else if ([',', ';', ':'].includes(char)) {
+      charDelay += Math.random() * 200 + 100;
+    } else if (char === ' ') {
+      charDelay += Math.random() * 50 + 20;
+    }
+    
+    if (Math.random() < 0.01) {
+      charDelay += Math.random() * 1000 + 500;
+    }
+    
+    await page.keyboard.type(char);
+    await delay(charDelay * 0.8, charDelay * 1.2);
+  }
+}
+
+// ============================================
+// BROWSER INIT & SESSION
+// ============================================
+
+/**
+ * Initialize browser with persistent session.
+ * Requires manual login on first run.
+ * 
+ * @param {Object} options
+ * @returns {Promise<{browser, page}>}
+ */
+export async function initBrowser(options = {}) {
+  const {
+    userDataDir = './browser-data',
+    headless = CONFIG.HEADLESS
+  } = options;
+  
+  console.log('\n=== Initializing Browser ===');
+  console.log(`   User data: ${userDataDir}`);
+  console.log(`   Headless: ${headless}`);
+  
+  const timeout = CONFIG.PAGE_TIMEOUT;
+  
+  browserContext = await chromium.launchPersistentContext(userDataDir, {
+    headless,
+    slowMo: CONFIG.SLOW_MO,
+    viewport: { width: 1280, height: 800 },
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    timeout
+  });
+  
+  messageTabs = [];
+  
+  workingPage = await browserContext.newPage();
+  workingPage.setDefaultTimeout(timeout);
+  
+  // Navigate to Instagram
+  console.log(`   Loading Instagram...`);
+  try {
+    await workingPage.goto('https://www.instagram.com/', { 
+      waitUntil: 'domcontentloaded',
+      timeout
+    });
+  } catch (error) {
+    console.log('   Slow connection, retrying...');
+    await delay(3000, 5000);
+    await workingPage.goto('https://www.instagram.com/', { 
+      waitUntil: 'domcontentloaded',
+      timeout: timeout * 2
+    });
+  }
+  await delay(2000, 3000);
+  
+  // Check if logged in
+  const isLoggedIn = await workingPage.evaluate(() => {
+    return !!(
+      document.querySelector('svg[aria-label="Home"]') ||
+      document.querySelector('a[href="/direct/inbox/"]') ||
+      document.querySelector('[aria-label="New post"]')
+    );
+  });
+  
+  if (!isLoggedIn) {
+    const username = process.env.INSTAGRAM_USERNAME;
+    const password = process.env.INSTAGRAM_PASSWORD;
+    
+    if (!username || !password) {
+      console.log('\n   ⚠️  MANUAL LOGIN REQUIRED');
+      console.log('   (Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login)');
+      console.log('   Please log in to Instagram in the browser window.');
+      console.log('   Press Enter in this terminal when done...');
+      
+      await new Promise(resolve => {
+        process.stdin.once('data', resolve);
+      });
+    } else {
+      console.log('   Logging in automatically...');
+      
+      // --- COOKIE POPUP HANDLING ---
+      try {
+        console.log('   Checking for cookie consent popup...');
         const cookieSelectors = [
           'button:has-text("Allow all cookies")',
           'button:has-text("Autoriser tous les cookies")',
@@ -104,257 +170,315 @@ export async function scrapeConversation(url, options = {}) {
         ];
 
         let cookieHandled = false;
-        
-        // 1. Try standard selectors
         for (const selector of cookieSelectors) {
-            try {
-                const button = await page.$(selector);
-                if (button && await button.isVisible()) {
-                    console.log(`Found cookie button: ${selector}`);
-                    await button.click();
-                    cookieHandled = true;
-                    await page.waitForTimeout(1000);
-                    break;
-                }
-            } catch (e) {
-                // Ignore
+          try {
+            const button = await workingPage.$(selector);
+            if (button && await button.isVisible()) {
+              console.log(`   Found cookie button: ${selector}`);
+              await button.click();
+              cookieHandled = true;
+              await delay(1000, 1500);
+              break;
             }
+          } catch (e) {
+            // Ignore
+          }
         }
 
-        // 2. Fallback: JavaScript click on text content
         if (!cookieHandled) {
-             console.log('Trying JS-based cookie click...');
-             await page.evaluate(() => {
-                 const buttons = Array.from(document.querySelectorAll('button'));
-                 const target = buttons.find(b => 
-                     b.innerText.includes('Allow all cookies') || 
-                     b.innerText.includes('Autoriser tous les cookies') ||
-                     b.innerText.includes('Decline optional cookies') || // Sometimes prefer decline to clear it
-                     b.innerText.includes('Refuser')
-                 );
-                 if (target) target.click();
-             });
-             await page.waitForTimeout(1000);
+          // Fallback: JavaScript click
+          await workingPage.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const target = buttons.find(b => 
+              b.innerText.includes('Allow all cookies') || 
+              b.innerText.includes('Autoriser tous les cookies') ||
+              b.innerText.includes('Decline optional cookies') ||
+              b.innerText.includes('Refuser')
+            );
+            if (target) target.click();
+          });
+          await delay(1000, 1500);
         }
-        
-    } catch (error) {
-        console.log('Cookie popup check failed (or none present):', error.message);
-    }
-    // ----------------------------
-
-    // Wait for username input (standard or split layout)
-    try {
-        await page.waitForSelector('input[name="username"]', { timeout: 10000 });
-    } catch (e) {
-        console.log('Username input not immediately found. Page might be loading or different layout. Waiting longer...');
-        await page.waitForTimeout(2000);
-        // Sometimes the split layout holds the form in a specific container
-    }
-    
-    await checkForCaptcha(page);
-
-    await page.type('input[name="username"]', username, { delay: randomDelay(50, 150) });
-    await page.waitForTimeout(randomDelay(500, 1200));
-    await page.type('input[name="password"]', password, { delay: randomDelay(50, 150) });
-    await page.click('button[type="submit"]');
-
-    // Wait for either navigation (success) or potential captcha
-    try {
-        await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 8000 });
-    } catch (e) {
-        console.log('Login navigation slow or blocked, checking for CAPTCHA...');
-    }
-
-    await checkForCaptcha(page); // Check again after submit
-    
-    console.log('Login successful (or proceeded).');
-
-    // --- POPUP HANDLING: "Save your login info?" ---
-    try {
-      console.log('Checking for "Save Info" popup...');
-      const notNowButton = page.locator('text=Not Now').or(page.locator('button:has-text("Not Now")'));
-      await notNowButton.click({ timeout: 5000 }); // 5 second timeout
-      console.log('Dismissed "Save Info" popup.');
-    } catch (error) {
-      console.log('No "Save Info" popup appeared, continuing.');
-    }
-
-    await page.waitForTimeout(randomDelay(1500, 3000));
-
-    console.log(`Navigating to URL: ${url}`);
-    try {
-        // networkidle is often too strict for Instagram profile pages
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForTimeout(2000); // Give it a moment to render
-    } catch (e) {
-        console.log('Navigation timeout (non-fatal if content loaded):', e.message);
-    }
-
-    // --- CHECK IF PROFILE PAGE OR DM ---
-    // If the URL does not contain "/direct/t/", assume it's a profile and try to click "Message"
-    if (!page.url().includes('/direct/t/')) {
-        console.log('URL appears to be a profile page. Attempting to click "Message" button...');
-        try {
-            // Wait for partial rendering
-            await page.waitForSelector('main', { timeout: 5000 }).catch(() => {});
-
-            // Scope search to the main content area to avoid clicking sidebar navigation
-            const mainContent = page.locator('main');
-
-            // Try various selectors for the "Message" button, prioritizing "Contacter"
-            // We search significantly inside 'main' to avoid global nav
-            const messageButtonSelectors = [
-                'button:has-text("Contacter")',
-                'div[role="button"]:has-text("Contacter")',
-                'button:has-text("Envoyer un message")', 
-                'div[role="button"]:has-text("Envoyer un message")',
-                'button:has-text("Message")',
-                'div[role="button"]:has-text("Message")' // Least specific last
-            ];
-            
-            let clicked = false;
-            for (const selector of messageButtonSelectors) {
-                // Check visible buttons inside main
-                const btn = mainContent.locator(selector).first();
-                if (await btn.count() > 0 && await btn.isVisible()) {
-                    console.log(`Found Profile Message button: ${selector}`);
-                    await btn.click();
-                    clicked = true;
-                    break;
-                }
-            }
-            
-            if (!clicked) {
-                console.log('Could not find explicit "Message" text. Checking for typical primary button location...');
-                // Fallback: often the first or second button in the header actions
-                // This is a last resort attempt
-            }
-
-            // After clicking "Contacter", just wait for the page to settle
-            // The DM view takes a moment to load
-            console.log('Waiting for DM view to settle...');
-            await page.waitForTimeout(5000); // Give Instagram 5 seconds to load the DM
-            console.log(`Current URL after click: ${page.url()}`);
-
-        } catch (error) {
-            console.log('Warning: Transition to DM might have failed or is slow:', error.message);
-        }
-    }
-
-    // Give a moment for any popups to appear, then dismiss if present
-    await page.waitForTimeout(1000);
-    
-    // Try to dismiss any popup that might block the view (notifications, save info, etc.)
-    try {
-        const dismissButtons = await page.$$('button:has-text("Not Now"), button:has-text("Plus tard"), button:has-text("Fermer")');
-        for (const btn of dismissButtons) {
-            if (await btn.isVisible()) {
-                await btn.click();
-                console.log('Dismissed a popup.');
-                await page.waitForTimeout(500);
-            }
-        }
-    } catch (e) {
-        // No popups, continue
-    }
-
-    // --- EXTRACTION ---
-    console.log('Extracting messages from the conversation...');
-    const loggedInUsername = username.toLowerCase();
-
-    const conversationHistory = await page.evaluate((loggedInUser) => {
-      const messages = [];
+      } catch (error) {
+        console.log('   Cookie popup check failed (or none present)');
+      }
+      // ----------------------------
       
-      // Strategy: Find all potential message text nodes using a stable attribute
-      // Instagram uses dir="auto" for user-generated text content
-      const textNodes = Array.from(document.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
-
-      textNodes.forEach(node => {
-        const text = node.innerText;
-        if (!text || text.trim() === '') return;
-
-        // Skip if this is likely not a message (e.g. input box, profile bio visible nearby)
-        // We can check if it's inside the message list container.
-        // Usually messages are in a scrollable container.
-        
-        // Determine Role:
-        // We traverse up to find a container that has specific alignment styles.
-        // "My" messages (assistant) usually align right (flex-end).
-        // "Their" messages (user) usually align left (flex-start).
-        
-        let isAssistant = false;
-        let p = node.parentElement;
-        let depth = 0;
-        const MAX_DEPTH = 15; // Don't go too high
-
-        while (p && depth < MAX_DEPTH) {
-            const style = window.getComputedStyle(p);
-            
-            // IG often uses align-self: flex-end for own messages in a flex column
-            if (style.alignSelf === 'flex-end' || style.alignItems === 'flex-end') {
-                isAssistant = true;
-                break;
-            }
-            // Sometimes it's a row with justify-content: flex-end
-            if (style.flexDirection === 'row' && style.justifyContent === 'flex-end') {
-                isAssistant = true;
-                break;
-            }
-            
-            p = p.parentElement;
-            depth++;
-        }
-        
-        // Filter out generic UI text if possible. 
-        // For now, we assume most dir="auto" in the main view are messages.
-        // We can filter by "Message..." placeholder if needed, but innerText usually captures value not placeholder.
-        
-        messages.push({ 
-            role: isAssistant ? 'assistant' : 'user', 
-            text: text 
-        });
-      });
-
-      // Deduplicate adjacent identical messages if needed, or rely on timestamp/order.
-      // The querySelectorAll returns in document order, which is time order.
+      // Wait for login form
+      try {
+        await workingPage.waitForSelector('input[name="username"]', { timeout: 10000 });
+      } catch (e) {
+        console.log('   Login form not found, waiting longer...');
+        await delay(2000, 3000);
+      }
       
-      return messages;
-    }, loggedInUsername);
+      // Type credentials
+      await workingPage.type('input[name="username"]', username, { delay: 50 + Math.random() * 100 });
+      await delay(500, 1000);
+      await workingPage.type('input[name="password"]', password, { delay: 50 + Math.random() * 100 });
+      await workingPage.click('button[type="submit"]');
+      
+      // Wait for login to complete
+      try {
+        await workingPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (e) {
+        console.log('   Login navigation slow, continuing...');
+      }
+      await delay(2000, 3000);
+      
+      // Handle "Save Login Info?" popup
+      try {
+        const notNowBtn = workingPage.locator('text=Not Now').or(workingPage.locator('button:has-text("Not Now")'));
+        await notNowBtn.click({ timeout: 5000 });
+        console.log('   Dismissed "Save Login" popup.');
+      } catch (e) {
+        // No popup
+      }
+      
+      console.log('   ✅ Login successful!');
+    }
+    
+    await workingPage.reload({ waitUntil: 'domcontentloaded' });
+    await delay(2000, 3000);
+  }
+  
+  console.log('   ✅ Browser ready\n');
+  
+  return { browser: browserContext, page: workingPage };
+}
 
-    console.log(`Scraped ${conversationHistory.length} messages.`);
-    return { conversationHistory, page, browser };
+/**
+ * Create a new tab
+ */
+async function createNewTab() {
+  if (!browserContext) {
+    throw new Error('Browser not initialized. Call initBrowser() first.');
+  }
+  const newPage = await browserContext.newPage();
+  newPage.setDefaultTimeout(CONFIG.PAGE_TIMEOUT);
+  return newPage;
+}
 
+// ============================================
+// PROFILE & DM ACTIONS
+// ============================================
+
+/**
+ * Navigate to profile and click "Contacter"
+ */
+async function goToProfileAndOpenDM(page, profileUrl) {
+  try {
+    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
+    await delay(2000, 3000);
+    
+    // Find and click Contact button
+    const selectors = CONFIG.SELECTORS.CONTACT_BUTTON;
+    
+    for (const selector of selectors) {
+      const button = await page.$(selector).catch(() => null);
+      if (button) {
+        const isVisible = await button.isVisible().catch(() => false);
+        if (isVisible) {
+          console.log(`      Found: ${selector}`);
+          await button.click();
+          await delay(2000, 3000);
+          return { success: true };
+        }
+      }
+    }
+    
+    return { success: false, error: 'no_contact_button' };
+    
   } catch (error) {
-    console.error('An error occurred during scraping:', error.message);
-    await page.screenshot({ path: 'error_screenshot.png' });
-    console.log('A screenshot was saved as error_screenshot.png.');
-    await browser.close();
-    throw new Error('Could not retrieve the conversation from the URL.');
+    return { success: false, error: error.message };
   }
 }
 
 /**
- * Types the suggested message into the DM input field and leaves the browser open.
- * @param {import('playwright').Page} page The active Playwright page.
- * @param {string} message The message to type.
+ * Find and focus the message input
+ */
+async function findMessageInput(page) {
+  const selectors = CONFIG.SELECTORS.MESSAGE_INPUT;
+  
+  for (const selector of selectors) {
+    const input = await page.$(selector).catch(() => null);
+    if (input) {
+      const isVisible = await input.isVisible().catch(() => false);
+      if (isVisible) {
+        return input;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Type message without sending
+ */
+async function typeMessageOnly(page, message) {
+  try {
+    const input = await findMessageInput(page);
+    
+    if (!input) {
+      return { success: false, error: 'message_input_not_found' };
+    }
+    
+    await input.click();
+    await delay(300, 500);
+    
+    await typeHumanLike(page, message);
+    
+    await delay(300, 500);
+    
+    return { success: true };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// MAIN WORKFLOW
+// ============================================
+
+/**
+ * Process a lead in a new tab:
+ * 1. Open new tab
+ * 2. Go to profile
+ * 3. Click "Contacter"
+ * 4. Type message
+ * 5. Keep tab open for manual send
+ * 
+ * @param {Object} lead - Lead data (must have profile_url or username)
+ * @param {string} message - Message to type
+ * @returns {Promise<Object>} Result
+ */
+export async function processLeadInNewTab(lead, message) {
+  const username = lead.username || lead.profile_url?.split('/').filter(Boolean).pop();
+  const profileUrl = lead.profile_url || `https://www.instagram.com/${username}/`;
+  
+  const result = {
+    username,
+    success: false,
+    error: null,
+    tabKeptOpen: false,
+    timestamp: new Date().toISOString()
+  };
+  
+  let tab = null;
+  
+  try {
+    console.log(`\n   📋 Processing @${username}`);
+    
+    // Step 1: Create new tab
+    tab = await createNewTab();
+    console.log(`      Opening new tab...`);
+    
+    // Step 2: Go to profile and click Contacter
+    const dmResult = await goToProfileAndOpenDM(tab, profileUrl);
+    
+    if (!dmResult.success) {
+      result.error = dmResult.error;
+      await tab.close().catch(() => {});
+      return result;
+    }
+    
+    // Step 3: Type message
+    console.log(`      Typing message...`);
+    const typeResult = await typeMessageOnly(tab, message);
+    
+    if (!typeResult.success) {
+      result.error = typeResult.error;
+      await tab.close().catch(() => {});
+      return result;
+    }
+    
+    // Success - keep tab open
+    result.success = true;
+    result.tabKeptOpen = true;
+    result.dmUrl = tab.url();
+    
+    messageTabs.push({
+      username,
+      page: tab,
+      message,
+      timestamp: result.timestamp
+    });
+    
+    console.log(`      ✅ Message typed! Tab kept open.`);
+    
+    return result;
+    
+  } catch (error) {
+    result.error = error.message;
+    if (tab) {
+      await tab.close().catch(() => {});
+    }
+    return result;
+  }
+}
+
+/**
+ * Get list of open message tabs
+ */
+export function getOpenMessageTabs() {
+  return messageTabs;
+}
+
+/**
+ * Wait for user to finish reviewing messages
+ */
+export async function waitForUserToFinish() {
+  const tabs = getOpenMessageTabs();
+  
+  if (tabs.length === 0) {
+    console.log('\n   No tabs with messages. Nothing to review.');
+    return;
+  }
+  
+  console.log('\n' + '='.repeat(50));
+  console.log(`   📨 ${tabs.length} message(s) ready for review`);
+  console.log('='.repeat(50));
+  console.log('   Review each tab, send manually, then press Enter here to close browser.\n');
+  
+  await new Promise(resolve => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('   Press Enter when done...', () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
+
+/**
+ * Close browser
+ */
+export async function closeBrowser() {
+  if (browserContext) {
+    await browserContext.close().catch(() => {});
+    browserContext = null;
+    workingPage = null;
+    messageTabs = [];
+    console.log('   Browser closed.');
+  }
+}
+
+// ============================================
+// LEGACY EXPORTS (for compatibility)
+// ============================================
+
+/**
+ * Scrape conversation - LEGACY, kept for compatibility
+ * Now just returns empty array since we process differently
+ */
+export async function scrapeConversation(url, options = {}) {
+  console.log('⚠️  scrapeConversation is deprecated. Use initBrowser + processLeadInNewTab instead.');
+  return { conversationHistory: [], page: null, browser: null };
+}
+
+/**
+ * Fill message and leave open - LEGACY
  */
 export async function fillMessageAndLeaveOpen(page, message) {
-  try {
-    console.log('Typing suggested response into the browser...');
-    const messageBoxSelector = 'textarea[placeholder*="Message"], textarea[placeholder*="Votre message"], div[contenteditable="true"], div[role="textbox"]';
-    await page.waitForSelector(messageBoxSelector, { timeout: 10000 });
-    // If it's a contenteditable div, we might need to click it first often
-    await page.click(messageBoxSelector); 
-    await page.type(messageBoxSelector, message, { delay: randomDelay(80, 160) });
-    
-    console.log('\n✅ The message has been typed for you in the browser window.');
-    console.log('   Please review it, then press "Send" manually.');
-    console.log('   Close the browser window when you are finished.');
-
-  } catch (error) {
-    console.error('Could not type the message into the input field:', error.message);
-    await page.screenshot({ path: 'error_typing_screenshot.png' });
-    console.log('A screenshot was saved as error_typing_screenshot.png.');
-    console.log('Please copy the message from the console and paste it manually.');
-  }
+  console.log('⚠️  fillMessageAndLeaveOpen is deprecated. Use processLeadInNewTab instead.');
 }

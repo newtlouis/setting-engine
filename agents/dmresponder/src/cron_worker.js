@@ -2,7 +2,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mkdir, writeFile } from 'fs/promises';
 import { generateResponse } from './engine.js';
-import { scrapeConversation } from './scraper.js';
+import { 
+  initBrowser, 
+  processLeadInNewTab, 
+  waitForUserToFinish, 
+  closeBrowser,
+  getOpenMessageTabs 
+} from './scraper.js';
 import {
   initDB,
   getTrackedDmThreads,
@@ -18,18 +24,26 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
 const DEFAULT_STATUSES = ['message_ready', 'awaiting_reply', 'watching', 'error'];
 
+/**
+ * Main entry point - NEW WORKFLOW
+ * 1. Init browser once
+ * 2. Process each lead in a new tab
+ * 3. Wait for user to review and send manually
+ */
 export async function runCronWatcher(options = {}) {
   await initDB();
-  const headless = options.headless !== false;
+  
   const statuses = Array.isArray(options.statuses) && options.statuses.length > 0
     ? options.statuses
     : DEFAULT_STATUSES;
   const limit = options.limit || 5;
+  
   const threads = await getTrackedDmThreads({
     statuses,
     onlyWithUrl: true,
     limit
   });
+  
   if (!threads || threads.length === 0) {
     console.log('No DM threads matched the criteria.');
     console.log('Criteria used:');
@@ -39,94 +53,123 @@ export async function runCronWatcher(options = {}) {
     return;
   }
 
-  console.log(`Processing ${threads.length} DM thread(s)...`);
-  for (const thread of threads) {
-    // eslint-disable-next-line no-await-in-loop
-    await processThread(thread, { headless, outputDir: options.outputDir || DEFAULT_OUTPUT_DIR });
+  console.log(`\n========================================`);
+  console.log(`   DM RESPONDER (Multi-Tab Mode)`);
+  console.log(`========================================`);
+  console.log(`   Found ${threads.length} conversation(s) to process`);
+  console.log(`   Messages will be typed but NOT sent automatically.\n`);
+  
+  let browser = null;
+  let successCount = 0;
+  
+  try {
+    // Step 1: Init browser (single login) - ALWAYS visible
+    browser = await initBrowser({ 
+      userDataDir: './browser-data',
+      headless: false // Always visible
+    });
+    
+    // Step 2: Process each thread
+    for (const thread of threads) {
+      const result = await processThread(thread, options);
+      if (result.success) {
+        successCount++;
+      }
+    }
+    
+    // Step 3: Wait for user to review
+    if (getOpenMessageTabs().length > 0) {
+      await waitForUserToFinish();
+    }
+    
+  } catch (error) {
+    console.error(`Fatal error: ${error.message}`);
+  } finally {
+    await closeBrowser();
   }
+  
+  console.log(`\n✅ Done! ${successCount}/${threads.length} messages prepared.`);
 }
 
+/**
+ * Process a single thread:
+ * 1. Get existing conversation history from DB
+ * 2. Generate response based on context
+ * 3. Open new tab, navigate to profile, type message
+ */
 async function processThread(thread, options) {
   const username = thread.username;
-  console.log(`\n--- Checking @${username} ---`);
-  let browser;
+  const profileUrl = thread.dm_url; // This is the profile URL
+  
+  console.log(`\n--- Processing @${username} ---`);
+  
   try {
+    // Get context from DB
     const existingHistory = await getConversationHistory(username);
-    const scrapeResult = await scrapeConversation(thread.dm_url, { headless: options.headless });
-    const scrapedHistory = scrapeResult.conversationHistory || [];
-    browser = scrapeResult.browser;
-
-    const newUserMessages = extractNewUserMessages(scrapedHistory, existingHistory);
-    if (newUserMessages.length === 0) {
-      console.log('No new user replies detected.');
-      await markThread(username, 'watching', thread.metadata, { last_checked_at: new Date().toISOString() });
-      return;
-    }
-
-    for (const message of newUserMessages) {
-      // eslint-disable-next-line no-await-in-loop
-      await addMessage(username, 'user', message.text);
-    }
-
-    const updatedHistory = await getConversationHistory(username);
     const leadContext = await getLeadWithContext(username);
-
+    
+    // Generate response
+    console.log(`   Generating response...`);
     const response = await generateResponse({
-      conversationHistory: updatedHistory,
+      conversationHistory: existingHistory,
       leadContext
     });
-
-    const suggestionPath = await saveSuggestion(username, response, options.outputDir);
-    console.log(`Suggestion saved to ${suggestionPath}`);
-
-    await markThread(
-      username,
-      'suggestion_ready',
-      thread.metadata,
-      {
-        last_checked_at: new Date().toISOString(),
-        last_user_message: newUserMessages[newUserMessages.length - 1].text,
-        last_suggestion: {
-          file: suggestionPath,
-          generated_at: new Date().toISOString(),
-          stage: response.conversation_stage
-        }
-      }
+    
+    const message = response.next_message || response.message || response.suggested_message;
+    
+    if (!message) {
+      console.log(`   ⚠️  No message generated.`);
+      await markThread(username, 'error', thread.metadata, {
+        last_error: 'No message generated',
+        last_checked_at: new Date().toISOString()
+      });
+      return { success: false };
+    }
+    
+    console.log(`   Message: "${message.substring(0, 50)}..."`);
+    
+    // Save suggestion to file
+    const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
+    console.log(`   Suggestion saved: ${suggestionPath}`);
+    
+    // Process in new tab
+    const result = await processLeadInNewTab(
+      { username, profile_url: profileUrl },
+      message
     );
+    
+    if (result.success) {
+      await markThread(
+        username,
+        'response_typed',
+        thread.metadata,
+        {
+          last_checked_at: new Date().toISOString(),
+          last_suggestion: {
+            file: suggestionPath,
+            generated_at: new Date().toISOString(),
+            stage: response.conversation_stage
+          }
+        }
+      );
+      return { success: true };
+    } else {
+      console.log(`   ❌ Failed: ${result.error}`);
+      await markThread(username, 'error', thread.metadata, {
+        last_error: result.error,
+        last_checked_at: new Date().toISOString()
+      });
+      return { success: false };
+    }
+    
   } catch (error) {
-    console.error(`Failed to process @${username}: ${error.message}`);
+    console.error(`   ❌ Error: ${error.message}`);
     await markThread(username, 'error', thread.metadata, {
       last_error: error.message,
       last_checked_at: new Date().toISOString()
     });
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
+    return { success: false };
   }
-}
-
-function extractNewUserMessages(scrapedHistory, storedHistory) {
-  if (!scrapedHistory || scrapedHistory.length === 0) {
-    return [];
-  }
-  if (!storedHistory || storedHistory.length === 0) {
-    return scrapedHistory.filter(msg => msg.role === 'user');
-  }
-  const lastStored = storedHistory[storedHistory.length - 1];
-  let startIndex = 0;
-  for (let i = scrapedHistory.length - 1; i >= 0; i -= 1) {
-    const candidate = scrapedHistory[i];
-    if (candidate.role === lastStored.role && candidate.text.trim() === (lastStored.text || '').trim()) {
-      startIndex = i + 1;
-      break;
-    }
-    if (i === 0) {
-      startIndex = 0;
-    }
-  }
-  const delta = scrapedHistory.slice(startIndex);
-  return delta.filter(msg => msg.role === 'user');
 }
 
 async function saveSuggestion(username, response, outputDir) {
