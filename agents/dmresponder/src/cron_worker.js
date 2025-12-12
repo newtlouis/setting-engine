@@ -4,6 +4,8 @@ import { mkdir, writeFile } from 'fs/promises';
 import { generateResponse } from './engine.js';
 import { 
   initBrowser, 
+  openDMAndScrape,
+  typeInOpenTab,
   processLeadInNewTab, 
   waitForUserToFinish, 
   closeBrowser,
@@ -22,8 +24,8 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
-// New simplified statuses: outreach, conversation, failed
-const DEFAULT_STATUSES = ['outreach', 'conversation', 'failed'];
+// DM Responder only processes leads with active conversations
+const DEFAULT_STATUSES = ['conversation'];
 
 /**
  * Find messages in scraped list that are not in DB history
@@ -113,29 +115,66 @@ export async function runCronWatcher(options = {}) {
 }
 
 /**
- * Process a single thread:
- * 1. Get existing conversation history from DB
- * 2. Generate response based on context
- * 3. Open new tab, navigate to profile, type message
+ * Process a single thread with CORRECT workflow:
+ * 1. Open DM and scrape messages first
+ * 2. Save any new messages to DB
+ * 3. Generate response with COMPLETE context (DB + scraped)
+ * 4. Type message in already-open tab
  */
 async function processThread(thread, options) {
   const username = thread.username;
-  const profileUrl = thread.dm_url; // This is the profile URL
+  const profileUrl = thread.profile_url || thread.dm_url || `https://www.instagram.com/${username}/`;
   
   console.log(`\n--- Processing @${username} ---`);
+  
+  let openTab = null;
   
   try {
     // Step 1: Get existing conversation history from DB
     const existingHistory = await getConversationHistory(username);
     const leadContext = await getLeadWithContext(username);
     
-    console.log(`   Existing messages in DB: ${existingHistory.length}`);
+    console.log(`   📚 Messages in DB: ${existingHistory.length}`);
     
-    // Step 2: Generate response based on existing history
-    // (We'll refine this with scraped messages if needed)
-    console.log(`   Generating response...`);
+    // Step 2: Open DM and scrape messages FIRST
+    console.log(`   🌐 Opening DM conversation...`);
+    const scrapeResult = await openDMAndScrape({ username, profile_url: profileUrl });
+    
+    if (!scrapeResult.success) {
+      console.log(`   ❌ Failed to open DM: ${scrapeResult.error}`);
+      await markThread(username, 'failed', thread.metadata, {
+        last_error: scrapeResult.error,
+        last_checked_at: new Date().toISOString()
+      });
+      return { success: false };
+    }
+    
+    openTab = scrapeResult.tab;
+    const scrapedMessages = scrapeResult.scrapedMessages || [];
+    
+    // Step 3: Save NEW scraped messages to DB
+    let updatedHistory = [...existingHistory];
+    
+    if (scrapedMessages.length > 0) {
+      console.log(`   🔍 Scraped ${scrapedMessages.length} messages from Instagram`);
+      
+      const newMessages = findNewMessages(scrapedMessages, existingHistory);
+      
+      if (newMessages.length > 0) {
+        console.log(`   📥 Saving ${newMessages.length} new message(s) to DB...`);
+        for (const msg of newMessages) {
+          await addMessage(username, msg.role, msg.text);
+          updatedHistory.push({ role: msg.role, text: msg.text });
+        }
+      } else {
+        console.log(`   ✓ DB is up to date`);
+      }
+    }
+    
+    // Step 4: Generate response with FULL context (including newly saved messages)
+    console.log(`   🤖 Generating response with ${updatedHistory.length} messages context...`);
     const response = await generateResponse({
-      conversationHistory: existingHistory,
+      conversationHistory: updatedHistory,
       leadContext
     });
     
@@ -143,70 +182,52 @@ async function processThread(thread, options) {
     
     if (!message) {
       console.log(`   ⚠️  No message generated.`);
-      await markThread(username, 'error', thread.metadata, {
+      await openTab.close().catch(() => {});
+      await markThread(username, 'failed', thread.metadata, {
         last_error: 'No message generated',
         last_checked_at: new Date().toISOString()
       });
       return { success: false };
     }
     
-    console.log(`   Message: "${message.substring(0, 50)}..."`);
+    console.log(`   💬 Response: "${message.substring(0, 50)}..."`);
     
     // Save suggestion to file
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
-    console.log(`   Suggestion saved: ${suggestionPath}`);
     
-    // Step 3: Process in new tab (opens DM, scrapes messages, types response)
-    const result = await processLeadInNewTab(
-      { username, profile_url: profileUrl },
-      message
-    );
+    // Step 5: Type message in the already-open tab
+    const typeResult = await typeInOpenTab(openTab, message);
     
-    if (result.success) {
-      // Step 4: Save any NEW messages from the scraped conversation
-      const scrapedMessages = result.scrapedMessages || [];
-      
-      if (scrapedMessages.length > 0) {
-        console.log(`   Syncing ${scrapedMessages.length} scraped messages with DB...`);
-        
-        // Find messages that are not already in DB
-        const newMessages = findNewMessages(scrapedMessages, existingHistory);
-        
-        if (newMessages.length > 0) {
-          console.log(`   📥 ${newMessages.length} new message(s) to save.`);
-          for (const msg of newMessages) {
-            await addMessage(username, msg.role, msg.text);
-          }
-        } else {
-          console.log(`   No new messages to save.`);
-        }
-      }
-      
-      // Step 5: Save the message we just typed as 'assistant' message
-      console.log(`   💬 Saving sent message to DB...`);
-      await addMessage(username, 'assistant', message, response.message_type || 'generated');
-      
-      await markThread(
-        username,
-        'conversation',
-        thread.metadata,
-        {
-          last_checked_at: new Date().toISOString(),
-          last_message_preview: message.substring(0, 100)
-        }
-      );
-      return { success: true };
-    } else {
-      console.log(`   ❌ Failed: ${result.error}`);
+    if (!typeResult.success) {
+      console.log(`   ❌ Failed to type: ${typeResult.error}`);
+      await openTab.close().catch(() => {});
       await markThread(username, 'failed', thread.metadata, {
-        last_error: result.error,
+        last_error: typeResult.error,
         last_checked_at: new Date().toISOString()
       });
       return { success: false };
     }
     
+    // Step 6: Save the typed message as 'assistant' message
+    console.log(`   💾 Saving typed message to DB...`);
+    await addMessage(username, 'assistant', message, response.message_type || 'generated');
+    
+    await markThread(
+      username,
+      'conversation',
+      thread.metadata,
+      {
+        last_checked_at: new Date().toISOString(),
+        last_message_preview: message.substring(0, 100)
+      }
+    );
+    
+    console.log(`   ✅ Ready! Tab open for manual send.`);
+    return { success: true };
+    
   } catch (error) {
     console.error(`   ❌ Error: ${error.message}`);
+    if (openTab) await openTab.close().catch(() => {});
     await markThread(username, 'failed', thread.metadata, {
       last_error: error.message,
       last_checked_at: new Date().toISOString()

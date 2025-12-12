@@ -339,6 +339,7 @@ async function typeMessageOnly(page, message) {
 
 /**
  * Scrape all visible messages from the DM conversation
+ * Uses Instagram's "Double tap to like" button as reliable message container
  * 
  * @param {Page} page - Playwright page with DM view open
  * @returns {Promise<Array<{role: string, text: string}>>} Array of messages
@@ -351,37 +352,38 @@ export async function scrapeConversationMessages(page) {
     const messages = await page.evaluate(() => {
       const result = [];
       
-      // Find all text nodes with dir="auto" (Instagram's way of marking user content)
-      const textNodes = Array.from(document.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
+      // Find all message containers using the "Double tap to like" button
+      // This is a reliable indicator of a message bubble
+      const messageButtons = document.querySelectorAll('[role="button"][aria-label*="Double tap"]');
       
-      // Filter to those likely in the message area (not header, not input placeholder)
-      textNodes.forEach(node => {
-        const text = node.innerText?.trim();
-        if (!text || text.length === 0) return;
+      messageButtons.forEach(button => {
+        // Find the text content inside this message
+        const textElement = button.querySelector('div[dir="auto"]');
+        if (!textElement) return;
         
-        // Skip very short texts that are likely UI elements
-        if (text.length < 2) return;
+        const text = textElement.innerText?.trim();
+        if (!text || text.length < 2) return;
         
-        // Skip if it looks like a placeholder or UI text
+        // Skip UI elements
         if (text.includes('Message...') || text.includes('Votre message')) return;
         if (text === 'Seen' || text === 'Vu' || text === 'Active now') return;
         
-        // Determine role by checking parent alignment
-        // "My" messages (assistant) usually align right (flex-end)
-        // "Their" messages (user) usually align left
+        // Determine role by checking alignment of message container
+        // "My" messages (assistant) align right, "Their" messages (user) align left
         let isAssistant = false;
-        let p = node.parentElement;
+        let p = button.parentElement;
         let depth = 0;
-        const MAX_DEPTH = 20;
+        const MAX_DEPTH = 15;
         
         while (p && depth < MAX_DEPTH) {
           const style = window.getComputedStyle(p);
           
+          // Check for right alignment (sent messages)
           if (style.alignSelf === 'flex-end' || style.alignItems === 'flex-end') {
             isAssistant = true;
             break;
           }
-          if (style.flexDirection === 'row' && style.justifyContent === 'flex-end') {
+          if (style.justifyContent === 'flex-end') {
             isAssistant = true;
             break;
           }
@@ -409,6 +411,16 @@ export async function scrapeConversationMessages(page) {
     }
     
     console.log(`      Scraped ${deduped.length} messages from conversation`);
+    
+    // Log preview for debugging
+    if (deduped.length > 0) {
+      console.log(`      Preview:`);
+      deduped.slice(-3).forEach(m => {
+        const preview = m.text.substring(0, 40) + (m.text.length > 40 ? '...' : '');
+        console.log(`        [${m.role}] ${preview}`);
+      });
+    }
+    
     return deduped;
     
   } catch (error) {
@@ -422,7 +434,79 @@ export async function scrapeConversationMessages(page) {
 // ============================================
 
 /**
- * Process a lead in a new tab:
+ * Open a DM conversation and scrape messages WITHOUT typing
+ * Use this to get messages first, then generate response, then type
+ * 
+ * @param {Object} lead - Lead data (must have profile_url or username)
+ * @returns {Promise<{success: boolean, tab: Page, scrapedMessages: Array, error?: string}>}
+ */
+export async function openDMAndScrape(lead) {
+  const username = lead.username || lead.profile_url?.split('/').filter(Boolean).pop();
+  const profileUrl = lead.profile_url || `https://www.instagram.com/${username}/`;
+  
+  const result = {
+    username,
+    success: false,
+    error: null,
+    tab: null,
+    scrapedMessages: [],
+    timestamp: new Date().toISOString()
+  };
+  
+  try {
+    console.log(`\n   📋 Opening DM for @${username}...`);
+    
+    // Step 1: Create new tab
+    result.tab = await createNewTab();
+    
+    // Step 2: Go to profile and click Contacter
+    const dmResult = await goToProfileAndOpenDM(result.tab, profileUrl);
+    
+    if (!dmResult.success) {
+      result.error = dmResult.error;
+      await result.tab.close().catch(() => {});
+      result.tab = null;
+      return result;
+    }
+    
+    // Step 3: Scrape existing messages
+    console.log(`      Scraping conversation history...`);
+    result.scrapedMessages = await scrapeConversationMessages(result.tab);
+    
+    result.success = true;
+    return result;
+    
+  } catch (error) {
+    console.error(`      Error: ${error.message}`);
+    result.error = error.message;
+    if (result.tab) {
+      await result.tab.close().catch(() => {});
+      result.tab = null;
+    }
+    return result;
+  }
+}
+
+/**
+ * Type a message in an already-open DM tab
+ * 
+ * @param {Page} tab - Playwright page with DM open
+ * @param {string} message - Message to type
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function typeInOpenTab(tab, message) {
+  console.log(`      Typing message...`);
+  const typeResult = await typeMessageOnly(tab, message);
+  
+  if (typeResult.success) {
+    console.log(`      ✅ Message typed! Waiting for manual send.`);
+  }
+  
+  return typeResult;
+}
+
+/**
+ * Process a lead in a new tab (LEGACY - still works):
  * 1. Open new tab
  * 2. Go to profile
  * 3. Click "Contacter"
