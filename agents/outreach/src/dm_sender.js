@@ -330,6 +330,54 @@ export async function clickMessageButton(page) {
 }
 
 /**
+ * Check if the DM conversation already has messages
+ * Prevents sending duplicate outreach messages
+ * 
+ * @param {Page} page - Playwright page with DM popup open
+ * @returns {Promise<{hasMessages: boolean, messageCount: number}>}
+ */
+export async function hasExistingMessages(page) {
+  try {
+    // Wait a moment for messages to load
+    await delay(500, 800);
+    
+    const result = await page.evaluate(() => {
+      // Look for message bubbles with dir="auto" containing text
+      const messageElements = document.querySelectorAll('div[dir="auto"]');
+      
+      let messageCount = 0;
+      
+      for (const el of messageElements) {
+        const text = el.innerText?.trim();
+        
+        // Skip empty, very short, or placeholder texts
+        if (!text || text.length < 3) continue;
+        if (text === 'Message...' || text === 'Votre message...') continue;
+        if (text === 'Seen' || text === 'Vu' || text === 'Active now') continue;
+        
+        // Check if it looks like a message (has parent with role="button" for double-tap)
+        const parentButton = el.closest('[role="button"][aria-label*="Double tap"]');
+        if (parentButton) {
+          messageCount++;
+        }
+      }
+      
+      return { hasMessages: messageCount > 0, messageCount };
+    });
+    
+    if (result.hasMessages) {
+      console.log(`      ⚠️  Conversation already has ${result.messageCount} message(s)!`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error('      Error checking existing messages:', error.message);
+    return { hasMessages: false, messageCount: 0 };
+  }
+}
+
+/**
  * Type and send a DM message in the popup
  * 
  * @param {Page} page - Playwright page
@@ -497,6 +545,18 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     
     if (!clickResult.success) {
       result.error = clickResult.error;
+      await newTab.close().catch(() => {});
+      return result;
+    }
+    
+    // Step 3.5: Check if conversation already has messages (prevent duplicate outreach)
+    const existingCheck = await hasExistingMessages(newTab);
+    result.steps.push({ step: 'check_existing', ...existingCheck });
+    
+    if (existingCheck.hasMessages) {
+      result.skipped = true;
+      result.error = 'already_messaged';
+      console.log(`      ⏭️  Skipping @${username}: already has ${existingCheck.messageCount} message(s)`);
       await newTab.close().catch(() => {});
       return result;
     }

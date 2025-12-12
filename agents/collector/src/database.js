@@ -329,12 +329,13 @@ export function updateLeadProfile(username, profileData) {
 
 /**
  * Mark a lead as generally uncontactable (e.g. no button)
- * We set status to 'rejected' or a specific status to filter them out
+ * Uses new simplified 'failed' status
  */
 export function markLeadUncontactable(username) {
   return db.prepare(`
     UPDATE leads SET
-      status = 'not_contactable',
+      status = 'failed',
+      notes = COALESCE(notes || ' | ', '') || 'Not contactable (no DM button)',
       updated_at = datetime('now')
     WHERE username = ?
   `).run(username);
@@ -342,11 +343,12 @@ export function markLeadUncontactable(username) {
 
 /**
  * Mark a lead as failed (technical error)
+ * Uses new simplified 'failed' status
  */
 export function markLeadFailed(username, reason) {
   return db.prepare(`
     UPDATE leads SET
-      status = 'failed_outreach',
+      status = 'failed',
       notes = ?,
       updated_at = datetime('now')
     WHERE username = ?
