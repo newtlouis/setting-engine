@@ -142,7 +142,14 @@ export async function scrapeConversation(url, options = {}) {
     }
     // ----------------------------
 
-    await page.waitForSelector('input[name="username"]', { timeout: 10000 });
+    // Wait for username input (standard or split layout)
+    try {
+        await page.waitForSelector('input[name="username"]', { timeout: 10000 });
+    } catch (e) {
+        console.log('Username input not immediately found. Page might be loading or different layout. Waiting longer...');
+        await page.waitForTimeout(2000);
+        // Sometimes the split layout holds the form in a specific container
+    }
     
     await checkForCaptcha(page);
 
@@ -174,8 +181,64 @@ export async function scrapeConversation(url, options = {}) {
 
     await page.waitForTimeout(randomDelay(1500, 3000));
 
-    console.log(`Navigating to conversation: ${url}`);
-    await page.goto(url, { waitUntil: 'networkidle' });
+    console.log(`Navigating to URL: ${url}`);
+    try {
+        // networkidle is often too strict for Instagram profile pages
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(2000); // Give it a moment to render
+    } catch (e) {
+        console.log('Navigation timeout (non-fatal if content loaded):', e.message);
+    }
+
+    // --- CHECK IF PROFILE PAGE OR DM ---
+    // If the URL does not contain "/direct/t/", assume it's a profile and try to click "Message"
+    if (!page.url().includes('/direct/t/')) {
+        console.log('URL appears to be a profile page. Attempting to click "Message" button...');
+        try {
+            // Wait for partial rendering
+            await page.waitForSelector('main', { timeout: 5000 }).catch(() => {});
+
+            // Scope search to the main content area to avoid clicking sidebar navigation
+            const mainContent = page.locator('main');
+
+            // Try various selectors for the "Message" button, prioritizing "Contacter"
+            // We search significantly inside 'main' to avoid global nav
+            const messageButtonSelectors = [
+                'button:has-text("Contacter")',
+                'div[role="button"]:has-text("Contacter")',
+                'button:has-text("Envoyer un message")', 
+                'div[role="button"]:has-text("Envoyer un message")',
+                'button:has-text("Message")',
+                'div[role="button"]:has-text("Message")' // Least specific last
+            ];
+            
+            let clicked = false;
+            for (const selector of messageButtonSelectors) {
+                // Check visible buttons inside main
+                const btn = mainContent.locator(selector).first();
+                if (await btn.count() > 0 && await btn.isVisible()) {
+                    console.log(`Found Profile Message button: ${selector}`);
+                    await btn.click();
+                    clicked = true;
+                    break;
+                }
+            }
+            
+            if (!clicked) {
+                console.log('Could not find explicit "Message" text. Checking for typical primary button location...');
+                // Fallback: often the first or second button in the header actions
+                // This is a last resort attempt
+            }
+
+            // Wait for navigation to DM inbox
+            console.log('Waiting for redirection to MD...');
+            await page.waitForNavigation({ url: '**/direct/t/**', timeout: 15000 });
+            console.log('Successfully navigated to DM conversation view.');
+
+        } catch (error) {
+            console.log('Failed to transition from profile to DM. Proceeding anyway (might fail)...', error.message);
+        }
+    }
 
     // --- POPUP HANDLING: "Turn on Notifications?" ---
     try {
