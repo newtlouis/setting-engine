@@ -37,7 +37,7 @@ export async function scrapeConversation(url, options = {}) {
 
 
   try {
-    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle' });
+    await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle' });
 
     console.log('Logging in with human-like behavior...');
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
