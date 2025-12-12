@@ -16,7 +16,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
-const DEFAULT_STATUSES = ['message_ready', 'awaiting_reply', 'watching'];
+const DEFAULT_STATUSES = ['message_ready', 'awaiting_reply', 'watching', 'error'];
 
 export async function runCronWatcher(options = {}) {
   await initDB();
@@ -32,6 +32,10 @@ export async function runCronWatcher(options = {}) {
   });
   if (!threads || threads.length === 0) {
     console.log('No DM threads matched the criteria.');
+    console.log('Criteria used:');
+    console.log(`  Statuses: ${statuses.join(', ')}`);
+    console.log(`  With DM URL: true`);
+    console.log(`  Limit: ${limit}`);
     return;
   }
 

@@ -40,6 +40,61 @@ export async function scrapeConversation(url, options = {}) {
     await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle' });
 
     console.log('Logging in with human-like behavior...');
+    
+    // --- COOKIE POPUP HANDLING ---
+    // (Ported from collector/utils.js)
+    try {
+        console.log('Checking for cookie consent popup...');
+        const cookieSelectors = [
+          'button:has-text("Allow all cookies")',
+          'button:has-text("Autoriser tous les cookies")',
+          'button:has-text("Allow essential and optional cookies")',
+          'button:has-text("Uniquement les cookies essentiels")',
+          'button._a9--._ap36._asz1', 
+          'button._a9--._a9_0',
+          'div[role="dialog"] button:has-text("Allow")',
+          'div[role="dialog"] button:has-text("Autoriser")'
+        ];
+
+        let cookieHandled = false;
+        
+        // 1. Try standard selectors
+        for (const selector of cookieSelectors) {
+            try {
+                const button = await page.$(selector);
+                if (button && await button.isVisible()) {
+                    console.log(`Found cookie button: ${selector}`);
+                    await button.click();
+                    cookieHandled = true;
+                    await page.waitForTimeout(1000);
+                    break;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // 2. Fallback: JavaScript click on text content
+        if (!cookieHandled) {
+             console.log('Trying JS-based cookie click...');
+             await page.evaluate(() => {
+                 const buttons = Array.from(document.querySelectorAll('button'));
+                 const target = buttons.find(b => 
+                     b.innerText.includes('Allow all cookies') || 
+                     b.innerText.includes('Autoriser tous les cookies') ||
+                     b.innerText.includes('Decline optional cookies') || // Sometimes prefer decline to clear it
+                     b.innerText.includes('Refuser')
+                 );
+                 if (target) target.click();
+             });
+             await page.waitForTimeout(1000);
+        }
+        
+    } catch (error) {
+        console.log('Cookie popup check failed (or none present):', error.message);
+    }
+    // ----------------------------
+
     await page.waitForSelector('input[name="username"]', { timeout: 10000 });
     
     await page.type('input[name="username"]', username, { delay: randomDelay(50, 150) });
