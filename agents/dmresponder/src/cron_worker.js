@@ -6,6 +6,7 @@ import {
   initBrowser, 
   openDMAndScrape,
   typeInOpenTab,
+  registerOpenTab,
   processLeadInNewTab, 
   waitForUserToFinish, 
   closeBrowser,
@@ -208,6 +209,9 @@ async function processThread(thread, options) {
       return { success: false };
     }
     
+    // Register this tab so it stays open for user review
+    registerOpenTab(username, openTab, message);
+    
     // Step 6: Save the typed message as 'assistant' message
     console.log(`   💾 Saving typed message to DB...`);
     await addMessage(username, 'assistant', message, response.message_type || 'generated');
@@ -223,7 +227,7 @@ async function processThread(thread, options) {
     );
     
     console.log(`   ✅ Ready! Tab open for manual send.`);
-    return { success: true };
+    return { success: true, tabKeptOpen: true };
     
   } catch (error) {
     console.error(`   ❌ Error: ${error.message}`);

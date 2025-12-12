@@ -609,6 +609,18 @@ export function getOpenMessageTabs() {
 }
 
 /**
+ * Register an open tab for tracking (used by cron_worker)
+ */
+export function registerOpenTab(username, tab, message) {
+  messageTabs.push({
+    username,
+    page: tab,
+    message,
+    timestamp: new Date().toISOString()
+  });
+}
+
+/**
  * Wait for user to finish reviewing messages
  */
 export async function waitForUserToFinish() {
