@@ -230,59 +230,94 @@ export async function scrapeConversation(url, options = {}) {
                 // This is a last resort attempt
             }
 
-            // Wait for navigation to DM inbox
-            console.log('Waiting for redirection to MD...');
-            await page.waitForNavigation({ url: '**/direct/t/**', timeout: 15000 });
-            console.log('Successfully navigated to DM conversation view.');
+            // After clicking "Contacter", just wait for the page to settle
+            // The DM view takes a moment to load
+            console.log('Waiting for DM view to settle...');
+            await page.waitForTimeout(5000); // Give Instagram 5 seconds to load the DM
+            console.log(`Current URL after click: ${page.url()}`);
 
         } catch (error) {
-            console.log('Failed to transition from profile to DM. Proceeding anyway (might fail)...', error.message);
+            console.log('Warning: Transition to DM might have failed or is slow:', error.message);
         }
     }
 
-    // --- POPUP HANDLING: "Turn on Notifications?" ---
+    // Give a moment for any popups to appear, then dismiss if present
+    await page.waitForTimeout(1000);
+    
+    // Try to dismiss any popup that might block the view (notifications, save info, etc.)
     try {
-      console.log('Checking for "Notifications" popup...');
-      const notNowButton = page.locator('button:has-text("Not Now")');
-      await notNowButton.click({ timeout: 5000 });
-      console.log('Dismissed "Notifications" popup.');
-    } catch (error) {
-      console.log('No "Notifications" popup appeared, continuing.');
+        const dismissButtons = await page.$$('button:has-text("Not Now"), button:has-text("Plus tard"), button:has-text("Fermer")');
+        for (const btn of dismissButtons) {
+            if (await btn.isVisible()) {
+                await btn.click();
+                console.log('Dismissed a popup.');
+                await page.waitForTimeout(500);
+            }
+        }
+    } catch (e) {
+        // No popups, continue
     }
 
-    // --- HUMAN-LIKE SCROLLING ---
-    console.log('Simulating a quick scroll to read history...');
-    const messageSelector = 'div[role="listitem"]';
-    await page.waitForSelector(messageSelector, { timeout: 15000 });
-    await page.evaluate(() => {
-      const messagePane = document.querySelector('div[role="listitem"]').parentElement.parentElement;
-      if (messagePane) {
-        messagePane.scrollTop = 0; // Scroll to top
-      }
-    });
-    await page.waitForTimeout(randomDelay(800, 1500));
-    await page.evaluate(() => {
-      const messagePane = document.querySelector('div[role="listitem"]').parentElement.parentElement;
-      if (messagePane) {
-        messagePane.scrollTop = messagePane.scrollHeight; // Scroll to bottom
-      }
-    });
-    await page.waitForTimeout(randomDelay(500, 1000));
-
-
-    console.log('Extracting messages...');
+    // --- EXTRACTION ---
+    console.log('Extracting messages from the conversation...');
     const loggedInUsername = username.toLowerCase();
 
     const conversationHistory = await page.evaluate((loggedInUser) => {
       const messages = [];
-      document.querySelectorAll('div[role="listitem"]').forEach(item => {
-        const textElement = item.querySelector('div[dir="auto"]');
-        if (!textElement || textElement.innerText.trim() === '') return;
-        const text = textElement.innerText;
-        const isAssistant = item.closest('div[style*="align-self: flex-end"]') !== null;
-        const role = isAssistant ? 'assistant' : 'user';
-        messages.push({ role, text });
+      
+      // Strategy: Find all potential message text nodes using a stable attribute
+      // Instagram uses dir="auto" for user-generated text content
+      const textNodes = Array.from(document.querySelectorAll('div[dir="auto"], span[dir="auto"]'));
+
+      textNodes.forEach(node => {
+        const text = node.innerText;
+        if (!text || text.trim() === '') return;
+
+        // Skip if this is likely not a message (e.g. input box, profile bio visible nearby)
+        // We can check if it's inside the message list container.
+        // Usually messages are in a scrollable container.
+        
+        // Determine Role:
+        // We traverse up to find a container that has specific alignment styles.
+        // "My" messages (assistant) usually align right (flex-end).
+        // "Their" messages (user) usually align left (flex-start).
+        
+        let isAssistant = false;
+        let p = node.parentElement;
+        let depth = 0;
+        const MAX_DEPTH = 15; // Don't go too high
+
+        while (p && depth < MAX_DEPTH) {
+            const style = window.getComputedStyle(p);
+            
+            // IG often uses align-self: flex-end for own messages in a flex column
+            if (style.alignSelf === 'flex-end' || style.alignItems === 'flex-end') {
+                isAssistant = true;
+                break;
+            }
+            // Sometimes it's a row with justify-content: flex-end
+            if (style.flexDirection === 'row' && style.justifyContent === 'flex-end') {
+                isAssistant = true;
+                break;
+            }
+            
+            p = p.parentElement;
+            depth++;
+        }
+        
+        // Filter out generic UI text if possible. 
+        // For now, we assume most dir="auto" in the main view are messages.
+        // We can filter by "Message..." placeholder if needed, but innerText usually captures value not placeholder.
+        
+        messages.push({ 
+            role: isAssistant ? 'assistant' : 'user', 
+            text: text 
+        });
       });
+
+      // Deduplicate adjacent identical messages if needed, or rely on timestamp/order.
+      // The querySelectorAll returns in document order, which is time order.
+      
       return messages;
     }, loggedInUsername);
 
@@ -306,8 +341,10 @@ export async function scrapeConversation(url, options = {}) {
 export async function fillMessageAndLeaveOpen(page, message) {
   try {
     console.log('Typing suggested response into the browser...');
-    const messageBoxSelector = 'textarea[placeholder*="Message"]';
+    const messageBoxSelector = 'textarea[placeholder*="Message"], textarea[placeholder*="Votre message"], div[contenteditable="true"], div[role="textbox"]';
     await page.waitForSelector(messageBoxSelector, { timeout: 10000 });
+    // If it's a contenteditable div, we might need to click it first often
+    await page.click(messageBoxSelector); 
     await page.type(messageBoxSelector, message, { delay: randomDelay(80, 160) });
     
     console.log('\n✅ The message has been typed for you in the browser window.');
