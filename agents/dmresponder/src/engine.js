@@ -60,16 +60,27 @@ export async function generateResponse({ conversationHistory }) {
  * @param {Array} conversationHistory - The history of the conversation.
  * @returns {Promise<string>} The text of the next message.
  */
-async function getLlmResponse(conversationHistory) {
+async function getLlmResponse(conversationHistory, leadContext) {
   const headers = {
     'Authorization': `Bearer ${OPENAI_API_KEY}`,
     'Content-Type': 'application/json',
   };
 
-  // The messages payload starts with the system prompt, followed by the conversation history.
-  // Note: The API expects 'content' instead of 'text'. We map it here.
+  // Build a context description if available
+  let contextDescription = "";
+  if (leadContext) {
+    contextDescription = `\n\nCONTEXTE DU PROSPECT (Utilise ces infos pour personnaliser l'échange) :\n`;
+    if (leadContext.username) contextDescription += `- Username: @${leadContext.username}\n`;
+    if (leadContext.fullName) contextDescription += `- Nom: ${leadContext.fullName}\n`;
+    if (leadContext.biography) contextDescription += `- Bio: ${leadContext.biography}\n`;
+    if (leadContext.pain_points) contextDescription += `- Problèmes identifiés: ${leadContext.pain_points}\n`;
+    if (leadContext.goals) contextDescription += `- Objectifs: ${leadContext.goals}\n`;
+    if (leadContext.notes) contextDescription += `- Notes: ${leadContext.notes}\n`;
+  }
+
+  // The messages payload starts with the system prompt + context
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: SYSTEM_PROMPT + contextDescription },
     ...conversationHistory.map(msg => ({ role: msg.role, content: msg.text })),
   ];
 
