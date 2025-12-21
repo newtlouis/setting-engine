@@ -172,7 +172,49 @@ async function processThread(thread, options) {
       }
     }
     
-    // Step 4: Generate response with FULL context (including newly saved messages)
+    // Step 4: Determine if we should generate a response
+    const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
+    let shouldGenerate = false;
+    let skipReason = "";
+    
+    if (!lastMsg) {
+      // Empty history - rare for 'conversation' status but possible
+      shouldGenerate = true;
+    } else if (lastMsg.role === 'user') {
+      // Last message is from user - Always reply
+      shouldGenerate = true;
+    } else if (lastMsg.role === 'assistant') {
+      // Last message from me - Check for follow-up timing (Relances)
+      if (!lastMsg.timestamp) {
+        // If no timestamp (likely newly scraped), assume it's recent -> Wait
+        shouldGenerate = false;
+        skipReason = "Last message is recent (no timestamp)";
+      } else {
+        const lastTime = new Date(lastMsg.timestamp);
+        const now = new Date();
+        const hoursSince = (now - lastTime) / (1000 * 60 * 60);
+        
+        // Follow-up after 48 hours (2 days)
+        if (hoursSince > 48) {
+          shouldGenerate = true;
+          console.log(`   ⏰ Follow-up triggered: ${hoursSince.toFixed(1)}h since last message`);
+        } else {
+          shouldGenerate = false;
+          skipReason = `Waiting for reply (${hoursSince.toFixed(1)}h < 48h)`;
+        }
+      }
+    }
+    
+    if (!shouldGenerate) {
+      console.log(`   ⏳ Skipping: ${skipReason}`);
+      if (openTab) {
+        // Close tab if we're not doing anything
+        await openTab.close().catch(() => {});
+      }
+      return { success: true, skipped: true };
+    }
+
+    // Step 5: Generate response with FULL context (including newly saved messages)
     console.log(`   🤖 Generating response with ${updatedHistory.length} messages context...`);
     const response = await generateResponse({
       conversationHistory: updatedHistory,
