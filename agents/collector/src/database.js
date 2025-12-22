@@ -167,10 +167,10 @@ export function saveLeads(leadsData) {
   // Prepare bulk insert statement
   const insert = db.prepare(`
     INSERT INTO leads (
-      username, profile_url,
+      username, profile_url, lead_source, lead_type,
       last_seen_at
     ) VALUES (
-      @username, @profile_url,
+      @username, @profile_url, @lead_source, @lead_type,
       datetime('now')
     )
     ON CONFLICT(username) DO UPDATE SET
@@ -208,7 +208,9 @@ export function saveLeads(leadsData) {
         // Insert/Update Lead
         insert.run({
           username: lead.username,
-          profile_url: lead.profileUrl || `https://instagram.com/${lead.username}`
+          profile_url: lead.profileUrl || `https://instagram.com/${lead.username}`,
+          lead_source: lead.source || null, // Allow passing source
+          lead_type: lead.type || 'cold'    // Default to cold
         });
         
         // Get lead ID
@@ -364,15 +366,17 @@ export function markLeadFailed(username, reason) {
  */
 function upsertLead(lead) {
   const stmt = db.prepare(`
-    INSERT INTO leads (username, profile_url, last_seen_at)
-    VALUES (@username, @profile_url, datetime('now'))
+    INSERT INTO leads (username, profile_url, lead_source, lead_type, last_seen_at)
+    VALUES (@username, @profile_url, @lead_source, @lead_type, datetime('now'))
     ON CONFLICT(username) DO UPDATE SET last_seen_at = datetime('now')
     RETURNING *
   `);
   
   return stmt.get({
     username: lead.username,
-    profile_url: lead.profile_url || `https://instagram.com/${lead.username}`
+    profile_url: lead.profile_url || `https://instagram.com/${lead.username}`,
+    lead_source: lead.lead_source || null,
+    lead_type: lead.lead_type || 'cold'
   });
 }
 
@@ -386,9 +390,17 @@ export function insertComment(comment) {
   // Get or create lead
   let lead = getLeadByUsername(comment.username);
   if (!lead) {
+    // Determine source/type
+    // If source starts with hashtag/profile, it's cold.
+    // If source implies own comments (future), might be warm.
+    const leadSource = comment.source || 'unknown';
+    const leadType = 'cold'; 
+
     lead = upsertLead({
       username: comment.username,
-      profile_url: comment.profile_url
+      profile_url: comment.profile_url,
+      lead_source: leadSource,
+      lead_type: leadType
     });
   }
   
