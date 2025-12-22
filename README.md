@@ -84,6 +84,26 @@ cd ../dmresponder
 node bin/run.js --interactive
 ```
 
+### 6. Tools & Monitoring
+
+#### 📊 Lead Dashboard
+Monitor your leads, stats, and confirm bookings in real-time.
+
+```bash
+# From project root
+npm run ui
+```
+*Access at: http://localhost:3000*
+
+#### 🗄️ Database Admin
+Explore the SQLite database directly with a web interface.
+
+```bash
+# From project root (requires sqlite-web)
+npm run db:admin
+```
+*Access at: http://localhost:8081*
+
 ---
 
 ## 📊 Data Flow (SQLite)
