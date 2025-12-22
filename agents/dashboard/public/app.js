@@ -159,6 +159,10 @@ async function loadLeads(filter) {
                         ${lead.warmth !== 'hot' ? 
                             `<button onclick="updateLead('${lead.username}', {warmth: 'hot'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">Qualify</button>` 
                             : ''}
+
+                        ${!lead.booking_status ? 
+                            `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); border-radius: 4px; color: #3fb950; cursor: pointer; font-size: 11px;">📅 Booked</button>` 
+                            : ''}
                     </div>
                 </td>
             `;

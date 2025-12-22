@@ -100,7 +100,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'warmth', 'notes', 'email'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {
@@ -145,7 +145,7 @@ app.patch('/api/bookings/:username/complete', (req, res) => {
         
         const newStatus = completed ? 'completed' : 'pending';
         
-        db.prepare('UPDATE leads SET booking_status = ?, updated_at = datetime("now") WHERE username = ?')
+        db.prepare("UPDATE leads SET booking_status = ?, updated_at = datetime('now') WHERE username = ?")
           .run(newStatus, username);
         
         res.json({ success: true, username, booking_status: newStatus });
