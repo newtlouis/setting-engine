@@ -3,7 +3,6 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
-import { promises as fs } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,7 +38,7 @@ app.get('/api/stats', (req, res) => {
         const stats = {
             total: db.prepare('SELECT COUNT(*) as c FROM leads').get().c,
             new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new'").get().c,
-            qualified: db.prepare("SELECT COUNT(*) as c FROM leads WHERE conversation_stage = 'qualified'").get().c,
+            qualified: db.prepare("SELECT COUNT(*) as c FROM leads WHERE warmth = 'hot'").get().c,
             contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready')").get().c,
             failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach'").get().c
         };
@@ -59,7 +58,7 @@ app.get('/api/leads', (req, res) => {
         let sql = `
             SELECT id, username,
                    engagement_score, 
-                   status, conversation_stage,
+                   status, warmth,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE 1=1
@@ -68,7 +67,7 @@ app.get('/api/leads', (req, res) => {
 
         if (status && status !== 'all') {
             if (status === 'qualified') {
-                sql += " AND conversation_stage = 'qualified'";
+                sql += " AND warmth = 'hot'";
             } else if (status === 'contacted') {
                 sql += " AND status IN ('message_sent', 'message_ready')";
             } else if (status === 'failed') {
@@ -80,8 +79,8 @@ app.get('/api/leads', (req, res) => {
         }
         
         if (search) {
-             sql += " AND (username LIKE ? OR full_name LIKE ?)";
-             params.push(`%${search}%`, `%${search}%`);
+             sql += " AND username LIKE ?";
+             params.push(`%${search}%`);
         }
 
         sql += ` ORDER BY engagement_score DESC LIMIT ? OFFSET ?`;
@@ -101,7 +100,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'conversation_stage', 'notes', 'email'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {
@@ -166,8 +165,9 @@ app.post('/api/leads/:username/status', (req, res) => {
               .run(status, username);
         }
         if (stage) {
-            db.prepare('UPDATE leads SET conversation_stage = ?, updated_at = datetime("now") WHERE username = ?')
-              .run(stage, username);
+             const warmth = (stage === 'qualified') ? 'hot' : 'cold';
+             db.prepare('UPDATE leads SET warmth = ?, updated_at = datetime("now") WHERE username = ?')
+              .run(warmth, username);
         }
         res.json({ success: true, username });
     } catch (err) {
