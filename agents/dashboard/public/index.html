@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -106,7 +107,8 @@
             transition: all 0.2s;
         }
 
-        .btn-filter.active, .btn-filter:hover {
+        .btn-filter.active,
+        .btn-filter:hover {
             background: #1f242c;
             color: var(--text-primary);
             border-color: var(--accent);
@@ -145,7 +147,7 @@
         }
 
         tr:hover td {
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
         }
 
         /* Badges */
@@ -156,10 +158,25 @@
             font-weight: 600;
         }
 
-        .badge-success { background: rgba(63, 185, 80, 0.15); color: #56d364; }
-        .badge-warning { background: rgba(210, 153, 34, 0.15); color: #e3b341; }
-        .badge-danger { background: rgba(248, 81, 73, 0.15); color: #ff7b72; }
-        .badge-neutral { background: rgba(110, 118, 129, 0.15); color: #8b949e; }
+        .badge-success {
+            background: rgba(63, 185, 80, 0.15);
+            color: #56d364;
+        }
+
+        .badge-warning {
+            background: rgba(210, 153, 34, 0.15);
+            color: #e3b341;
+        }
+
+        .badge-danger {
+            background: rgba(248, 81, 73, 0.15);
+            color: #ff7b72;
+        }
+
+        .badge-neutral {
+            background: rgba(110, 118, 129, 0.15);
+            color: #8b949e;
+        }
 
         .lead-info {
             display: flex;
@@ -181,95 +198,102 @@
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <header class="header">
-        <div class="logo">
-            <h1>Instagram Lead Engine</h1>
-        </div>
-        <div class="actions">
-            <!-- Buttons if needed -->
-        </div>
-    </header>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+            <div class="actions">
+                <!-- Buttons if needed -->
+            </div>
+        </header>
 
-    <!-- Stats -->
-    <div class="stats-grid" id="statsGrid">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-total">-</div>
-            <div class="stat-label">Total Leads</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-new" style="color: var(--accent);">-</div>
-            <div class="stat-label">To Contact</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-contacted" style="color: var(--warning);">-</div>
-            <div class="stat-label">Sent / Ready</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-qualified" style="color: var(--success);">-</div>
-            <div class="stat-label">Qualified</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-failed" style="color: var(--error);">-</div>
-            <div class="stat-label">Failed/Private</div>
-        </div>
-    </div>
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
 
-    <!-- Bookings Section -->
-    <div class="bookings-section hidden" id="bookingsSection" style="margin-bottom: 32px; display: none;">
-        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--success); display: flex; align-items: center; gap: 8px;">
-            📅 Confirm Bookings <span class="badge badge-success" id="bookingsCount">0</span>
-        </h2>
-        <div class="table-container" style="border-color: var(--success);">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-new" style="color: var(--accent);">-</div>
+                <div class="stat-label">To Contact</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-contacted" style="color: var(--warning);">-</div>
+                <div class="stat-label">Contacted</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-conversation" style="color: #a371f7;">-</div>
+                <div class="stat-label">Conversation</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-confirm_bookings" style="color: var(--success);">-</div>
+                <div class="stat-label">Confirm Bookings</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-booked" style="color: var(--success);">-</div>
+                <div class="stat-label">Booked</div>
+            </div>
+
+        </div>
+
+        <!-- Confirm Bookings Section (Always Visible if Bookings Exist) -->
+        <div class="bookings-section" id="bookingsSection" style="margin-bottom: 32px; display: none;">
+            <h2
+                style="font-size: 18px; margin-bottom: 16px; color: var(--success); display: flex; align-items: center; gap: 8px;">
+                📅 Confirm Bookings <span class="badge badge-success" id="bookingsCount">0</span>
+            </h2>
+            <div class="table-container" style="border-color: var(--success);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Done</th>
+                            <th>Lead</th>
+                            <th>Last Update</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookingsTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <h2 style="font-size: 18px; margin-bottom: 16px;">Leads Management</h2>
+        <div class="controls">
+            <button class="btn-filter active" onclick="loadLeads('all')">All</button>
+            <button class="btn-filter" onclick="loadLeads('new')">New</button>
+            <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
+            <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
+            <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
+            <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
+            <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 50px;">Done</th>
                         <th>Lead</th>
-                        <th>Last Update</th>
                         <th>Status</th>
+                        <th>Engagement</th>
+                        <th>Comments</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody id="bookingsTableBody">
-                    <!-- Populated by JS -->
+                <tbody id="leadsTableBody">
+                    <tr>
+                        <td colspan="5" class="loading">Loading data...</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- Filters -->
-    <h2 style="font-size: 18px; margin-bottom: 16px;">All Leads</h2>
-    <div class="controls">
-        <button class="btn-filter active" onclick="loadLeads('all')">All</button>
-        <button class="btn-filter" onclick="loadLeads('new')">New</button>
-        <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
-        <button class="btn-filter" onclick="loadLeads('qualified')">Qualified</button>
-        <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
-    </div>
-
-    <!-- Data Table -->
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Lead</th>
-                    <th>Status</th>
-                    <th>Engagement</th>
-                    <th>Comments</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="leadsTableBody">
-                <tr>
-                    <td colspan="5" class="loading">Loading data...</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<script src="app.js"></script>
+    <script src="app.js"></script>
 </body>
+
 </html>

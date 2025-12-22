@@ -38,8 +38,10 @@ app.get('/api/stats', (req, res) => {
         const stats = {
             total: db.prepare('SELECT COUNT(*) as c FROM leads').get().c,
             new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new'").get().c,
-            qualified: db.prepare("SELECT COUNT(*) as c FROM leads WHERE warmth = 'hot'").get().c,
             contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready')").get().c,
+            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL").get().c,
+            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending'").get().c,
+            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed'").get().c,
             failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach'").get().c
         };
         res.json(stats);
@@ -58,7 +60,7 @@ app.get('/api/leads', (req, res) => {
         let sql = `
             SELECT id, username,
                    engagement_score, 
-                   status, warmth,
+                   status, warmth, booking_status,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE 1=1
@@ -66,10 +68,14 @@ app.get('/api/leads', (req, res) => {
         const params = [];
 
         if (status && status !== 'all') {
-            if (status === 'qualified') {
-                sql += " AND warmth = 'hot'";
-            } else if (status === 'contacted') {
+            if (status === 'contacted') {
                 sql += " AND status IN ('message_sent', 'message_ready')";
+            } else if (status === 'conversation') {
+                sql += " AND status = 'conversation' AND booking_status IS NULL";
+            } else if (status === 'confirm_bookings') {
+                sql += " AND booking_status = 'pending'";
+            } else if (status === 'booked') {
+                 sql += " AND booking_status = 'completed'";
             } else if (status === 'failed') {
                  sql += " AND status = 'failed_outreach'";
             } else {

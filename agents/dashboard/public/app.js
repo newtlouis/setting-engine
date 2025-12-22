@@ -1,7 +1,4 @@
 
-// State
-let currentFilter = 'all';
-
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     loadBookings();
@@ -9,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadLeads('all');
 });
 
-// Load Bookings
+// Load Bookings (Dedicated Section)
 async function loadBookings() {
     const section = document.getElementById('bookingsSection');
     const tbody = document.getElementById('bookingsTableBody');
@@ -19,31 +16,30 @@ async function loadBookings() {
         const res = await fetch('/api/bookings');
         const bookings = await res.json();
         
-        if (bookings.length > 0) {
+        // Filter to show only pending bookings
+        const pendingBookings = bookings.filter(lead => lead.booking_status === 'pending');
+        
+        if (pendingBookings.length > 0) {
             section.style.display = 'block';
-            section.classList.remove('hidden');
-            badge.textContent = bookings.length;
+            badge.textContent = pendingBookings.length;
             
             tbody.innerHTML = '';
-            bookings.forEach(lead => {
+            pendingBookings.forEach(lead => {
                 const tr = document.createElement('tr');
-                const isCompleted = lead.booking_status === 'completed';
                 
                 tr.innerHTML = `
                     <td style="text-align: center;">
-                        <input type="checkbox" ${isCompleted ? 'checked' : ''} 
+                        <input type="checkbox" 
                                onchange="toggleBooking('${lead.username}', this.checked)"
                                style="transform: scale(1.2); cursor: pointer;">
                     </td>
                     <td>
                         <div style="font-weight: 600;">@${lead.username}</div>
-                        <a href="${lead.profile_url}" target="_blank" style="font-size: 12px; color: var(--text-secondary);">View Profile</a>
+                        <a href="${lead.profile_url || 'https://instagram.com/' + lead.username}" target="_blank" style="font-size: 12px; color: var(--text-secondary);">View Profile</a>
                     </td>
                     <td>${new Date(lead.updated_at).toLocaleDateString()}</td>
                     <td>
-                        <span class="badge ${isCompleted ? 'badge-success' : 'badge-warning'}">
-                            ${isCompleted ? 'DONE' : 'PENDING'}
-                        </span>
+                        <span class="badge badge-warning">PENDING</span>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -65,10 +61,12 @@ async function toggleBooking(username, completed) {
         });
         // Reload to update UI
         loadBookings();
+        loadStats();
     } catch (e) {
         alert('Error updating booking');
     }
 }
+
 
 // Load Stats
 async function loadStats() {
@@ -76,11 +74,11 @@ async function loadStats() {
         const res = await fetch('/api/stats');
         const data = await res.json();
         
-        document.getElementById('stat-total').textContent = data.total;
         document.getElementById('stat-new').textContent = data.new;
         document.getElementById('stat-contacted').textContent = data.contacted;
-        document.getElementById('stat-qualified').textContent = data.qualified;
-        document.getElementById('stat-failed').textContent = data.failed;
+        document.getElementById('stat-conversation').textContent = data.conversation;
+        document.getElementById('stat-confirm_bookings').textContent = data.confirm_bookings;
+        document.getElementById('stat-booked').textContent = data.booked;
     } catch (e) {
         console.error('Stats load error', e);
     }
@@ -119,7 +117,16 @@ async function loadLeads(filter) {
             let badgeClass = 'badge-neutral';
             let statusText = lead.status;
             
-            if (lead.warmth === 'hot') {
+            if (lead.booking_status === 'completed') {
+                 badgeClass = 'badge-success';
+                 statusText = 'Booked';
+            } else if (lead.booking_status === 'pending') {
+                 badgeClass = 'badge-success';
+                 statusText = 'Confirm Booking';
+            } else if (lead.status === 'conversation') {
+                 badgeClass = 'badge-neutral';
+                 statusText = 'Conversation';
+            } else if (lead.warmth === 'hot') {
                 badgeClass = 'badge-success';
                 statusText = 'Qualified';
             } else if (['message_sent', 'message_ready'].includes(lead.status)) {
@@ -133,6 +140,17 @@ async function loadLeads(filter) {
                 statusText = 'Failed';
             }
             
+            // Action Button Logic
+            let actionButtons = '';
+            
+            if (filter === 'confirm_bookings') {
+                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'completed'})" style="padding: 4px 8px; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); border-radius: 4px; color: #3fb950; cursor: pointer; font-size: 11px;">✅ Done</button>`;
+            } else if (filter === 'booked') {
+                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'pending'})" style="padding: 4px 8px; background: rgba(210,153,34,0.15); border: 1px solid rgba(210,153,34,0.4); border-radius: 4px; color: #e3b341; cursor: pointer; font-size: 11px;">↩️ Undo</button>`;
+            } else if (filter !== 'booked' && !lead.booking_status) {
+                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">📅 Booked</button>`;
+            }
+
             tr.innerHTML = `
                 <td>
                     <div class="lead-info">
@@ -150,11 +168,7 @@ async function loadLeads(filter) {
                  <td>
                      <div style="display: flex; gap: 8px; align-items: center;">
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
-                        
-                        <!-- Quick Actions -->
-                        ${!lead.booking_status ? 
-                            `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); border-radius: 4px; color: #3fb950; cursor: pointer; font-size: 11px;">📅 Booked</button>` 
-                            : ''}
+                         ${actionButtons}
                     </div>
                 </td>
             `;
