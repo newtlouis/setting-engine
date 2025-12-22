@@ -152,14 +152,6 @@ async function loadLeads(filter) {
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
                         
                         <!-- Quick Actions -->
-                        ${lead.status === 'new' ? 
-                            `<button onclick="updateLead('${lead.username}', {status: 'message_ready'})" style="padding: 4px 8px; background: #238636; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 11px;">Add to Queue</button>` 
-                            : ''}
-                            
-                        ${lead.warmth !== 'hot' ? 
-                            `<button onclick="updateLead('${lead.username}', {warmth: 'hot'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">Qualify</button>` 
-                            : ''}
-
                         ${!lead.booking_status ? 
                             `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); border-radius: 4px; color: #3fb950; cursor: pointer; font-size: 11px;">📅 Booked</button>` 
                             : ''}
