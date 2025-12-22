@@ -239,7 +239,29 @@ async function processThread(thread, options) {
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     
     // Step 5: Type message in the already-open tab
-    const typeResult = await typeInOpenTab(openTab, message);
+    // Check for [ALERT_BOOKING] tag
+    let finalMessage = message;
+    if (finalMessage.includes('[ALERT_BOOKING]')) {
+      console.log(`   🚨 BOOKING ALERT DETECTED! Sending system notification...`);
+      finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
+      
+      // Trigger macOS system notification
+      try {
+        const { exec } = await import('child_process');
+        exec(`osascript -e 'display notification "Un prospect a donné ses disponibilités !" with title "IG Lead Engine: BOOKING ALERT" sound name "Glass"'`);
+      } catch (err) {
+        console.error('Failed to send notification:', err.message);
+      }
+      
+      // Update lead status to stop automation and mark as booking pending
+      await markThread(username, 'scheduling', thread.metadata, {
+        booking_status: 'pending',
+        last_checked_at: new Date().toISOString()
+      });
+      console.log(`   📅 Status updated to 'scheduling' (Automation Stopped)`);
+    }
+
+    const typeResult = await typeInOpenTab(openTab, finalMessage);
     
     if (!typeResult.success) {
       console.log(`   ❌ Failed to type: ${typeResult.error}`);
@@ -252,11 +274,11 @@ async function processThread(thread, options) {
     }
     
     // Register this tab so it stays open for user review
-    registerOpenTab(username, openTab, message);
+    registerOpenTab(username, openTab, finalMessage);
     
     // Step 6: Save the typed message as 'assistant' message
     console.log(`   💾 Saving typed message to DB...`);
-    await addMessage(username, 'assistant', message, response.message_type || 'generated');
+    await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
     
     await markThread(
       username,

@@ -4,9 +4,71 @@ let currentFilter = 'all';
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
+    loadBookings();
     loadStats();
     loadLeads('all');
 });
+
+// Load Bookings
+async function loadBookings() {
+    const section = document.getElementById('bookingsSection');
+    const tbody = document.getElementById('bookingsTableBody');
+    const badge = document.getElementById('bookingsCount');
+    
+    try {
+        const res = await fetch('/api/bookings');
+        const bookings = await res.json();
+        
+        if (bookings.length > 0) {
+            section.style.display = 'block';
+            section.classList.remove('hidden');
+            badge.textContent = bookings.length;
+            
+            tbody.innerHTML = '';
+            bookings.forEach(lead => {
+                const tr = document.createElement('tr');
+                const isCompleted = lead.booking_status === 'completed';
+                
+                tr.innerHTML = `
+                    <td style="text-align: center;">
+                        <input type="checkbox" ${isCompleted ? 'checked' : ''} 
+                               onchange="toggleBooking('${lead.username}', this.checked)"
+                               style="transform: scale(1.2); cursor: pointer;">
+                    </td>
+                    <td>
+                        <div style="font-weight: 600;">@${lead.username}</div>
+                        <a href="${lead.profile_url}" target="_blank" style="font-size: 12px; color: var(--text-secondary);">View Profile</a>
+                    </td>
+                    <td>${new Date(lead.updated_at).toLocaleDateString()}</td>
+                    <td>
+                        <span class="badge ${isCompleted ? 'badge-success' : 'badge-warning'}">
+                            ${isCompleted ? 'DONE' : 'PENDING'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } else {
+            section.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Bookings load error', e);
+    }
+}
+
+async function toggleBooking(username, completed) {
+    try {
+        await fetch(`/api/bookings/${username}/complete`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completed })
+        });
+        // Reload to update UI
+        loadBookings();
+    } catch (e) {
+        alert('Error updating booking');
+    }
+}
 
 // Load Stats
 async function loadStats() {

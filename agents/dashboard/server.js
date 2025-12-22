@@ -122,10 +122,41 @@ app.patch('/api/leads/:username', (req, res) => {
     }
 });
 
+// GET /api/bookings
+app.get('/api/bookings', (req, res) => {
+    try {
+        // Fetch leads with a non-null booking_status
+        const leads = db.prepare(`
+            SELECT id, username, profile_url, booking_status, updated_at
+            FROM leads 
+            WHERE booking_status IS NOT NULL 
+            ORDER BY updated_at DESC
+        `).all();
+        res.json(leads);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/bookings/:username/complete
+app.patch('/api/bookings/:username/complete', (req, res) => {
+    try {
+        const { username } = req.params;
+        const { completed } = req.body; // boolean
+        
+        const newStatus = completed ? 'completed' : 'pending';
+        
+        db.prepare('UPDATE leads SET booking_status = ?, updated_at = datetime("now") WHERE username = ?')
+          .run(newStatus, username);
+        
+        res.json({ success: true, username, booking_status: newStatus });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // POST /api/leads/:username/status (Legacy support)
 app.post('/api/leads/:username/status', (req, res) => {
-    // ... forward to patch logic if needed, but keeping for now
-    // ... (existing code for this endpoint is fine to leave or replace)
     try {
         const { username } = req.params;
         const { status, stage } = req.body;

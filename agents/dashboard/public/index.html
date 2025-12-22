@@ -217,7 +217,30 @@
         </div>
     </div>
 
+    <!-- Bookings Section -->
+    <div class="bookings-section hidden" id="bookingsSection" style="margin-bottom: 32px; display: none;">
+        <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--success); display: flex; align-items: center; gap: 8px;">
+            📅 Confirm Bookings <span class="badge badge-success" id="bookingsCount">0</span>
+        </h2>
+        <div class="table-container" style="border-color: var(--success);">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">Done</th>
+                        <th>Lead</th>
+                        <th>Last Update</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="bookingsTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Filters -->
+    <h2 style="font-size: 18px; margin-bottom: 16px;">All Leads</h2>
     <div class="controls">
         <button class="btn-filter active" onclick="loadLeads('all')">All</button>
         <button class="btn-filter" onclick="loadLeads('new')">New</button>
