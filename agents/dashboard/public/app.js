@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadBookings();
     loadStats();
-    loadLeads('all');
+    loadLeads('new');
 });
 
 // Load Bookings (Dedicated Section)
@@ -89,8 +89,20 @@ async function loadLeads(filter) {
     currentFilter = filter;
     
     // Update active button
-    document.querySelectorAll('.btn-filter').forEach(btn => btn.classList.remove('active'));
-    event?.target?.classList.add('active');
+    document.querySelectorAll('.btn-filter').forEach(btn => {
+        btn.classList.remove('active');
+        // Set active based on filter match
+        if (btn.textContent.toLowerCase().includes(filter.replace('_', ' ')) || 
+            (filter === 'new' && btn.textContent === 'New') ||
+            (filter === 'all' && btn.textContent === 'All') ||
+            (filter === 'contacted' && btn.textContent === 'Contacted') ||
+            (filter === 'conversation' && btn.textContent === 'Conversation') ||
+            (filter === 'confirm_bookings' && btn.textContent === 'Confirm Bookings') ||
+            (filter === 'booked' && btn.textContent === 'Booked') ||
+            (filter === 'failed' && btn.textContent === 'Failed')) {
+            btn.classList.add('active');
+        }
+    });
     
     const tbody = document.getElementById('leadsTableBody');
     tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
