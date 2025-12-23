@@ -30,23 +30,21 @@ import path from 'path';
 export async function runCollector(config) {
   console.log('🚀 Starting Instagram data collection...\n');
 
-  const browser = await chromium.launch({
+  // Launch persistent context
+  const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, {
     headless: config.headless,
     slowMo: CONFIG.SLOW_MO,
+    viewport: { width: 1280, height: 720 },
+    userAgent: CONFIG.USER_AGENT,
+    locale: 'en-US',
+    timezoneId: 'America/New_York',
     args: [
       '--disable-blink-features=AutomationControlled',
       '--disable-features=IsolateOrigins,site-per-process'
     ]
   });
 
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 720 },
-    userAgent: CONFIG.USER_AGENT,
-    locale: 'en-US',
-    timezoneId: 'America/New_York'
-  });
-
-  const page = await context.newPage();
+  const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
 
   // Ensure output directory exists
   await ensureOutputDir(config.outputDir);
@@ -259,7 +257,7 @@ export async function runCollector(config) {
     console.error('\n❌ Error during collection:', error.message);
     throw error;
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 

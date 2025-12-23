@@ -170,13 +170,44 @@ async function typeHumanLike(page, selector, text) {
  */
 export async function autoLoginInstagram(page, username, password) {
   try {
-    console.log('🔐 Auto-login enabled, logging in to Instagram...');
+    console.log('🔐 Checking for existing Instagram session...');
     
-    // Navigate to login page
+    // Navigate to homepage first to see if we are already logged in
     await page.goto('https://www.instagram.com/', {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });
+    
+    await delay(2000 + Math.random() * 2000);
+
+    // If we're on the home page or reels page, check if we're logged in
+    // Logged in users usually have a different title or specific navigation elements
+    const isLoggedIn = await page.evaluate(() => {
+      // Common indicators of being logged in:
+      // 1. Presence of "Messages" or "Create" in side nav
+      // 2. Absence of login inputs
+      const navText = document.body.innerText.toLowerCase();
+      const hasMessages = navText.includes('messages') || navText.includes('notifications');
+      const hasLoginInput = !!document.querySelector('input[name="username"]');
+      
+      return hasMessages && !hasLoginInput;
+    });
+
+    if (isLoggedIn) {
+      console.log('   ✅ Valid session found! Skipping login.');
+      return true;
+    }
+
+    console.log('   👤 No active session, proceeding to login...');
+    
+    // If we're not on the login page, go there
+    if (!page.url().includes('accounts/login')) {
+      await page.goto('https://www.instagram.com/accounts/login/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
+      await delay(2000);
+    }
     
     await delay(2000 + Math.random() * 2000);
     
@@ -291,24 +322,21 @@ export async function autoLoginInstagram(page, username, password) {
     
     // Wait for navigation or error
     console.log('   → Waiting for login response...');
-    await delay(3000 + Math.random() * 2000);
-    
-    // Check if login was successful
+    await delay(5000 + Math.random() * 2000); // Increased delay for redirects
+
+    // 1. IMPROVED 2FA DETECTION
     const currentUrl = page.url();
-    
-    // Check for login errors
-    const errorElement = await page.$('p[data-testid="login-error-message"]').catch(() => null);
-    if (errorElement) {
-      const errorText = await errorElement.textContent();
-      console.error('   ❌ Login failed:', errorText);
-      return false;
-    }
-    
-    // Check for 2FA challenge
-    if (currentUrl.includes('/challenge/') || currentUrl.includes('/accounts/login/two_factor')) {
-      console.log('\n⚠️  Two-factor authentication detected!');
-      console.log('   Please complete the 2FA verification in the browser.');
-      console.log('   Press ENTER here when you see your Instagram feed...\n');
+    const is2FAPage = currentUrl.includes('/challenge/') || 
+                     currentUrl.includes('/accounts/login/two_factor') ||
+                     await page.$('input[name="verificationCode"]').catch(() => null) ||
+                     await page.$('text=/Security Code|Code de sécurité|Authentification/i').catch(() => null);
+
+    if (is2FAPage) {
+      console.log('\n🔐 [ACTION REQUISH] : Authentification à deux facteurs détectée (2FA) !');
+      console.log('   1. Remplissez le code Google Authenticator dans le navigateur.');
+      console.log('   2. Cliquez sur "Se connecter".');
+      console.log('   3. UNE FOIS QUE VOUS VOYEZ VOTRE FIL D\'ACTUALITÉ INSTAGRAM :');
+      console.log('   4. Revenez ici et appuyez sur [ENTRÉE] pour continuer...\n');
       
       // Wait for manual 2FA completion
       const { createInterface } = await import('readline');
@@ -322,8 +350,28 @@ export async function autoLoginInstagram(page, username, password) {
           resolve();
         });
       });
-      
-      return true;
+
+      // After user presses enter, strictly verify we are on the home page
+      try {
+        console.log('   → Vérification de la connexion finale...');
+        await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 15000 });
+        console.log('   ✅ Connexion confirmée !');
+        return true;
+      } catch (err) {
+        console.error('   ❌ Toujours pas connecté. La session a peut-être expiré ou le code était faux.');
+        return false;
+      }
+    }
+    
+    // Check if login was successful strictly (not on login page anymore)
+    if (currentUrl.includes('accounts/login') && !currentUrl.includes('two_factor')) {
+       // Check for login errors
+       const errorElement = await page.$('p[data-testid="login-error-message"]').catch(() => null);
+       if (errorElement) {
+         const errorText = await errorElement.textContent();
+         console.error('   ❌ Login failed:', errorText);
+         return false;
+       }
     }
     
     // Check if "Save Your Login Info?" popup appears (means login succeeded!)

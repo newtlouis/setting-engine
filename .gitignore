@@ -22,6 +22,10 @@ agents/*/data/
 *.log
 logs/
 
+# Browser Data
+browser-data/
+.opencode/
+
 # OS files
 .DS_Store
 Thumbs.db

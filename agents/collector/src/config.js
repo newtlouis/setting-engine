@@ -2,6 +2,7 @@
  * Configuration Constants
  */
 
+import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -25,6 +26,9 @@ export const CONFIG = {
   // Instagram credentials (optional - for auto-login)
   INSTAGRAM_USERNAME: process.env.INSTAGRAM_USERNAME || '',
   INSTAGRAM_PASSWORD: process.env.INSTAGRAM_PASSWORD || '',
+  
+  // Persistent browser data for session storage
+  USER_DATA_DIR: path.join(process.cwd(), 'browser-data'),
 
   // Instagram selectors (centralized for easy updates)
   // FIX NOTE: Update these selectors if Instagram changes their DOM structure

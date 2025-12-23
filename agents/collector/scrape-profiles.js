@@ -90,23 +90,21 @@ export async function scrapeProfilesForLeads(options = {}) {
     console.log(`   (${allLeads.length - leadsToScrape.length} already up-to-date)\n`);
     
     // Launch browser
-    const browser = await chromium.launch({
+    // Launch persistent context
+    const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, {
       headless: false,
       slowMo: CONFIG.SLOW_MO || 50,
+      viewport: { width: 1280, height: 720 },
+      userAgent: CONFIG.USER_AGENT,
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
       args: [
         '--disable-blink-features=AutomationControlled',
         '--disable-features=IsolateOrigins,site-per-process'
       ]
     });
     
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      userAgent: CONFIG.USER_AGENT,
-      locale: 'en-US',
-      timezoneId: 'America/New_York'
-    });
-    
-    const page = await context.newPage();
+    const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
     
     try {
       // Login
@@ -122,8 +120,13 @@ export async function scrapeProfilesForLeads(options = {}) {
             waitUntil: 'domcontentloaded',
             timeout: 60000
           });
-          console.log('   Press ENTER when you are logged in...\n');
+          console.log('   Press ENTER when you are logged in and see your Instagram feed...\n');
           await waitForEnter();
+          
+          // Verify login
+          await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
+            console.error('   ❌ Login verification failed. Please ensure you are logged in.');
+          });
         }
       } else {
         console.log('📱 Opening Instagram for manual login...\n');
@@ -134,6 +137,11 @@ export async function scrapeProfilesForLeads(options = {}) {
         console.log('   Please log in manually.');
         console.log('   Press ENTER when you see your Instagram feed...\n');
         await waitForEnter();
+
+        // Verify login
+        await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
+          console.error('   ❌ Login verification failed. Please ensure you are logged in.');
+        });
       }
       
       console.log('✅ Login successful!\n');
@@ -188,7 +196,7 @@ export async function scrapeProfilesForLeads(options = {}) {
       console.log(`   Skipped:    ${allLeads.length - leadsToScrape.length} (already up-to-date)`);
       
     } finally {
-      await browser.close();
+      await context.close();
     }
     
     closeDatabase();
