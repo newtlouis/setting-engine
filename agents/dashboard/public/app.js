@@ -180,6 +180,7 @@ async function loadLeads(filter) {
                         <div class="avatar" style="background: #30363d; display: flex; align-items: center; justify-content: center;">👤</div>
                         <div>
                             <div style="font-weight: 600;">@${lead.username}</div>
+                            <div class="lead-bio-snippet" title="${lead.bio || ''}">${lead.bio ? (lead.bio.length > 60 ? lead.bio.substring(0, 57) + '...' : lead.bio) : '<span style="color: #484f58; font-style: italic;">No bio</span>'}</div>
                         </div>
                     </div>
                 </td>

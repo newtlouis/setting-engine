@@ -155,6 +155,23 @@ export async function scrapeProfileData(page, username, saveToDb = true) {
         }
       }
       
+      if (!data.bio) {
+        const bioSection = document.querySelector('section.xqui205') || 
+                          document.querySelector('header section') ||
+                          document.querySelector('div[id="mount_0_0_"] main section');
+        if (bioSection) {
+          // The bio is often in a span with dir="auto" or a div within this section
+          // The user provided HTML shows it inside a span with class "_ap3a _aaco _aacu _aacx _aad7 _aade"
+          const bioEl = bioSection.querySelector('span._ap3a._aaco._aacu._aacx._aad7._aade[dir="auto"]') ||
+                        bioSection.querySelector('span[dir="auto"] div[role="button"] span') ||
+                        bioSection.querySelector('h1').parentElement.nextElementSibling?.querySelector('span');
+
+          if (bioEl) {
+            data.bio = bioEl.textContent.trim().substring(0, 500);
+          }
+        }
+      }
+
       // Strategy 2: Try the specific section class (may change)
       if (!data.bio) {
         const bioSection = document.querySelector('section.xqui205');
@@ -254,15 +271,16 @@ export async function scrapeProfileData(page, username, saveToDb = true) {
     profileData.is_private = extractedData.isPrivate;
     profileData.profile_scraped_at = new Date().toISOString();
 
-    // Clear other fields that are no longer being extracted
-    profileData.followers_count = null;
-    profileData.following_count = null;
-    profileData.posts_count = null;
-    profileData.is_verified = false;
-    profileData.is_business = false;
-    profileData.bio = '';
-    profileData.external_url = '';
-    profileData.full_name = '';
+    // Keep fields that we want to track
+    profileData.bio = extractedData.bio;
+    profileData.is_private = extractedData.isPrivate;
+    profileData.full_name = extractedData.fullName;
+    profileData.external_url = extractedData.externalUrl;
+    profileData.is_verified = extractedData.isVerified;
+    profileData.is_business = extractedData.isBusiness;
+    profileData.followers_count = parseFollowerCount(extractedData.followers);
+    profileData.following_count = parseFollowerCount(extractedData.following);
+    profileData.posts_count = parseFollowerCount(extractedData.posts);
 
     // Save to database if requested
     if (saveToDb && !profileData.scrape_error) {

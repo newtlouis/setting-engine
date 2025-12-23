@@ -58,6 +58,16 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       lead_type TEXT DEFAULT 'cold',
       booking_status TEXT, -- pending, completed
       is_ignored INTEGER DEFAULT 0,
+      is_private INTEGER DEFAULT 0,
+      is_verified INTEGER DEFAULT 0,
+      is_business INTEGER DEFAULT 0,
+      followers_count INTEGER,
+      following_count INTEGER,
+      posts_count INTEGER,
+      full_name TEXT,
+      bio TEXT,
+      external_url TEXT,
+      profile_scraped_at TEXT,
       pain_points TEXT,  -- JSON array
       goals TEXT,  -- JSON array
       objections TEXT,  -- JSON array
@@ -328,9 +338,35 @@ export function updateLeadStatus(username, status) {
 /**
  * Update lead profile data
  */
-// Obsolete - functionality removed by request
 export function updateLeadProfile(username, profileData) {
-  return; 
+  const stmt = db.prepare(`
+    UPDATE leads SET
+      full_name = COALESCE(@full_name, full_name),
+      bio = COALESCE(@bio, bio),
+      external_url = COALESCE(@external_url, external_url),
+      followers_count = COALESCE(@followers_count, followers_count),
+      following_count = COALESCE(@following_count, following_count),
+      posts_count = COALESCE(@posts_count, posts_count),
+      is_private = COALESCE(@is_private, is_private),
+      is_verified = COALESCE(@is_verified, is_verified),
+      is_business = COALESCE(@is_business, is_business),
+      profile_scraped_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE username = @username
+  `);
+  
+  return stmt.run({
+    username,
+    full_name: profileData.full_name || null,
+    bio: profileData.bio || null,
+    external_url: profileData.external_url || null,
+    followers_count: profileData.followers_count || null,
+    following_count: profileData.following_count || null,
+    posts_count: profileData.posts_count || null,
+    is_private: profileData.is_private ? 1 : 0,
+    is_verified: profileData.is_verified ? 1 : 0,
+    is_business: profileData.is_business ? 1 : 0
+  });
 }
 
 /**
