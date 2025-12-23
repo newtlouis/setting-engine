@@ -61,6 +61,7 @@ app.get('/api/leads', (req, res) => {
             SELECT id, username,
                    engagement_score, 
                    status, warmth, booking_status,
+                   lead_source, lead_type,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE 1=1

@@ -164,6 +164,11 @@ async function loadLeads(filter) {
                  actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">📅 Booked</button>`;
             }
 
+            // Type Badge Logic
+            let typeBadgeClass = 'badge-neutral';
+            if (lead.lead_type === 'hot') typeBadgeClass = 'badge-danger';
+            if (lead.lead_type === 'warm') typeBadgeClass = 'badge-warning';
+
             tr.innerHTML = `
                 <td>
                     <div class="lead-info">
@@ -174,10 +179,12 @@ async function loadLeads(filter) {
                     </div>
                 </td>
                 <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                <td><span class="badge ${typeBadgeClass}">${(lead.lead_type || 'cold').toUpperCase()}</span></td>
                 <td>
-                    <div style="font-weight: 500;">${lead.engagement_score || 0}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${lead.lead_source || 'Unknown'}">
+                        ${lead.lead_source || 'Unknown'}
+                    </div>
                 </td>
-                <td>${lead.comment_count}</td>
                  <td>
                      <div style="display: flex; gap: 8px; align-items: center;">
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>

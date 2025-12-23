@@ -368,7 +368,9 @@ function upsertLead(lead) {
   const stmt = db.prepare(`
     INSERT INTO leads (username, profile_url, lead_source, lead_type, last_seen_at)
     VALUES (@username, @profile_url, @lead_source, @lead_type, datetime('now'))
-    ON CONFLICT(username) DO UPDATE SET last_seen_at = datetime('now')
+    ON CONFLICT(username) DO UPDATE SET 
+      last_seen_at = datetime('now'),
+      lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source)
     RETURNING *
   `);
   
@@ -387,22 +389,16 @@ function upsertLead(lead) {
  * @returns {Object|null} Inserted comment or null if duplicate
  */
 export function insertComment(comment) {
-  // Get or create lead
-  let lead = getLeadByUsername(comment.username);
-  if (!lead) {
-    // Determine source/type
-    // If source starts with hashtag/profile, it's cold.
-    // If source implies own comments (future), might be warm.
-    const leadSource = comment.source || 'unknown';
-    const leadType = 'cold'; 
+  // Upsert lead (handles creation or update of last_seen/source)
+  const leadSource = comment.source || 'unknown';
+  const leadType = 'cold'; 
 
-    lead = upsertLead({
-      username: comment.username,
-      profile_url: comment.profile_url,
-      lead_source: leadSource,
-      lead_type: leadType
-    });
-  }
+  const lead = upsertLead({
+    username: comment.username,
+    profile_url: comment.profile_url,
+    lead_source: leadSource,
+    lead_type: leadType
+  });
   
   // Check for duplicate (same user, same post, similar text)
   const existing = db.prepare(`
