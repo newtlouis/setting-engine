@@ -379,6 +379,10 @@
             <table>
                 <thead>
                     <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAllLeads" onchange="toggleSelectAll(this.checked)"
+                                style="cursor: pointer;">
+                        </th>
                         <th>Lead</th>
                         <th>Status</th>
                         <th>Type</th>
@@ -395,11 +399,25 @@
         </div>
     </div>
 
+    <!-- Bulk Action Toolbar (Floating at bottom) -->
+    <div id="bulkActionBar"
+        style="display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 900; align-items: center; gap: 20px;">
+        <div style="font-weight: 600; color: var(--accent);">
+            <span id="selectedCount">0</span> selected
+        </div>
+        <div style="display: flex; gap: 12px;">
+            <button onclick="showBulkIgnoreConfirm()" class="btn-modal btn-confirm"
+                style="padding: 6px 16px; font-size: 13px;">Ignore All Selected</button>
+            <button onclick="clearSelection()" class="btn-modal btn-cancel"
+                style="padding: 6px 16px; font-size: 13px;">Cancel</button>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal">
         <div class="modal-content">
-            <div class="modal-title">Ignore Lead?</div>
-            <div class="modal-text">
+            <div class="modal-title" id="modalTitle">Ignore Lead?</div>
+            <div class="modal-text" id="modalText">
                 This lead will be hidden from the dashboard and ignored by all agents (Outreach & DM Responder).
             </div>
             <div class="modal-actions">

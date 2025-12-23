@@ -101,6 +101,43 @@ app.get('/api/leads', (req, res) => {
     }
 });
 
+// POST /api/leads/bulk-update
+app.post('/api/leads/bulk-update', (req, res) => {
+    try {
+        const { usernames, updates } = req.body;
+        
+        if (!Array.isArray(usernames) || usernames.length === 0) {
+            return res.status(400).json({ error: 'usernames must be a non-empty array' });
+        }
+
+        const allowedFields = ['status', 'warmth', 'booking_status', 'is_ignored'];
+        const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
+        
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field]);
+        const sql = `UPDATE leads SET ${setClause}, updated_at = datetime('now') WHERE username = ?`;
+        
+        const updateStmt = db.prepare(sql);
+        
+        // Use a transaction for efficiency
+        const transaction = db.transaction((users) => {
+            for (const user of users) {
+                updateStmt.run(...values, user);
+            }
+        });
+        
+        transaction(usernames);
+        
+        res.json({ success: true, count: usernames.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // PATCH /api/leads/:username
 app.patch('/api/leads/:username', (req, res) => {
     try {

@@ -1,3 +1,5 @@
+let selectedLeads = new Set();
+let currentLeads = []; // Track currently visible leads for "Select All"
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
@@ -110,11 +112,15 @@ async function loadLeads(filter) {
     });
     
     const tbody = document.getElementById('leadsTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+    
+    // Clear selection on filter change
+    clearSelection();
 
     try {
         const res = await fetch(`/api/leads?status=${filter}&limit=100`);
         const leads = await res.json();
+        currentLeads = leads; // Store for Select All
         
         if (!Array.isArray(leads)) {
             console.error('API Error:', leads);
@@ -123,7 +129,7 @@ async function loadLeads(filter) {
         }
 
         if (leads.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="loading">No leads found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">No leads found.</td></tr>';
             return;
         }
 
@@ -175,6 +181,14 @@ async function loadLeads(filter) {
             if (lead.lead_type === 'warm') typeBadgeClass = 'badge-warning';
 
             tr.innerHTML = `
+                <td>
+                    <input type="checkbox" 
+                           class="lead-checkbox" 
+                           data-username="${lead.username}"
+                           ${selectedLeads.has(lead.username) ? 'checked' : ''}
+                           onchange="toggleLeadSelection('${lead.username}', this.checked)"
+                           style="cursor: pointer;">
+                </td>
                 <td>
                     <div class="lead-info">
                         <div class="avatar" style="background: #30363d; display: flex; align-items: center; justify-content: center;">👤</div>
@@ -229,10 +243,99 @@ async function updateLead(username, updates) {
     }
 }
 
+// Selection Logic
+function toggleSelectAll(checked) {
+    const checkboxes = document.querySelectorAll('.lead-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const username = cb.getAttribute('data-username');
+        if (checked) selectedLeads.add(username);
+        else selectedLeads.delete(username);
+    });
+    updateBulkActionBar();
+}
+
+function toggleLeadSelection(username, checked) {
+    if (checked) {
+        selectedLeads.add(username);
+    } else {
+        selectedLeads.delete(username);
+        // Deselect Select All if any lead is unchecked
+        document.getElementById('selectAllLeads').checked = false;
+    }
+    updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+    const bar = document.getElementById('bulkActionBar');
+    const countSpan = document.getElementById('selectedCount');
+    
+    if (selectedLeads.size > 0) {
+        bar.style.display = 'flex';
+        countSpan.textContent = selectedLeads.size;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearSelection() {
+    selectedLeads.clear();
+    const selectAll = document.getElementById('selectAllLeads');
+    if (selectAll) selectAll.checked = false;
+    updateBulkActionBar();
+}
+
+// Bulk Actions
+async function bulkUpdateLeads(updates) {
+    if (selectedLeads.size === 0) return;
+    
+    try {
+        const usernames = Array.from(selectedLeads);
+        const res = await fetch('/api/leads/bulk-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usernames, updates })
+        });
+        
+        if (res.ok) {
+            clearSelection();
+            loadStats();
+            loadLeads(currentFilter);
+        } else {
+            alert('Bulk update failed');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Error performing bulk update');
+    }
+}
+
+function showBulkIgnoreConfirm() {
+    const modal = document.getElementById('confirmModal');
+    const title = document.getElementById('modalTitle');
+    const text = document.getElementById('modalText');
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    
+    title.textContent = `Ignore ${selectedLeads.size} leads?`;
+    text.textContent = `All selected leads will be hidden from the dashboard and ignored by all agents.`;
+    
+    modal.style.display = 'flex';
+    
+    confirmBtn.onclick = async () => {
+        await bulkUpdateLeads({ is_ignored: 1 });
+        closeModal();
+    };
+}
+
 // Modal Logic
 function showIgnoreConfirm(username) {
     const modal = document.getElementById('confirmModal');
+    const title = document.getElementById('modalTitle');
+    const text = document.getElementById('modalText');
     const confirmBtn = document.getElementById('modalConfirmBtn');
+    
+    title.textContent = 'Ignore Lead?';
+    text.textContent = 'This lead will be hidden from the dashboard and ignored by all agents.';
     
     modal.style.display = 'flex';
     
