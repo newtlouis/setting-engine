@@ -32,7 +32,7 @@ npm run ui
 **Exemples :**
 ```bash
 # Scraper 20 posts sur des hashtags
-npm run scrape -- -t fitness yoga --max-posts 20
+npm run scrape -- -t hypersensible dependanceaffective --max-posts 20
 
 # Scraper les followers d'un concurrent
 npm run scrape -- -p https://instagram.com/competitor_profile/ --max-posts 50

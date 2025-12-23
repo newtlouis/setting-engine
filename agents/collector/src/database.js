@@ -54,6 +54,9 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       
       -- Lead qualification
       warmth TEXT DEFAULT 'cold',  -- cold, warm, hot
+      lead_source TEXT,
+      lead_type TEXT DEFAULT 'cold',
+      booking_status TEXT, -- pending, completed
       pain_points TEXT,  -- JSON array
       goals TEXT,  -- JSON array
       objections TEXT,  -- JSON array
