@@ -122,6 +122,7 @@ async function loadLeads(filter) {
             return;
         }
 
+        tbody.innerHTML = ''; // Clear "Loading..." message
         leads.forEach(lead => {
             const tr = document.createElement('tr');
             
