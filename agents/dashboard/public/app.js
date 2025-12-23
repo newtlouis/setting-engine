@@ -41,6 +41,11 @@ async function loadBookings() {
                     <td>
                         <span class="badge badge-warning">PENDING</span>
                     </td>
+                    <td style="text-align: right;">
+                        <button onclick="showIgnoreConfirm('${lead.username}')" 
+                                class="btn-action-icon" 
+                                title="Ignore Lead">🗑️</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -188,7 +193,10 @@ async function loadLeads(filter) {
                  <td>
                      <div style="display: flex; gap: 8px; align-items: center;">
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
-                         ${actionButtons}
+                        ${actionButtons}
+                        <button onclick="showIgnoreConfirm('${lead.username}')" 
+                                class="btn-action-icon" 
+                                title="Ignore Lead">🗑️</button>
                     </div>
                 </td>
             `;
@@ -201,8 +209,6 @@ async function loadLeads(filter) {
 }
 
 async function updateLead(username, updates) {
-    if (!confirm(`Update ${username}?`)) return;
-    
     try {
         const res = await fetch(`/api/leads/${username}`, {
             method: 'PATCH',
@@ -211,7 +217,6 @@ async function updateLead(username, updates) {
         });
         
         if (res.ok) {
-            // Refresh logic - simplified recharge
             loadStats();
             loadLeads(currentFilter);
         } else {
@@ -222,3 +227,28 @@ async function updateLead(username, updates) {
         alert('Error updating lead');
     }
 }
+
+// Modal Logic
+function showIgnoreConfirm(username) {
+    const modal = document.getElementById('confirmModal');
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    
+    modal.style.display = 'flex';
+    
+    confirmBtn.onclick = async () => {
+        await updateLead(username, { is_ignored: 1 });
+        closeModal();
+    };
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+}
+
+// Close modal on background click
+window.onclick = (event) => {
+    const modal = document.getElementById('confirmModal');
+    if (event.target == modal) {
+        closeModal();
+    }
+};

@@ -36,13 +36,14 @@ try {
 app.get('/api/stats', (req, res) => {
     try {
         const stats = {
-            total: db.prepare('SELECT COUNT(*) as c FROM leads').get().c,
-            new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new'").get().c,
-            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready')").get().c,
-            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL").get().c,
-            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending'").get().c,
-            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed'").get().c,
-            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach'").get().c
+            total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0').get().c,
+            new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new' AND is_ignored = 0").get().c,
+            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready') AND is_ignored = 0").get().c,
+            // conversation/bookings status should probably also check is_ignored
+            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL AND is_ignored = 0").get().c,
+            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored = 0").get().c,
+            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0").get().c,
+            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0").get().c
         };
         res.json(stats);
     } catch (err) {
@@ -64,7 +65,7 @@ app.get('/api/leads', (req, res) => {
                    lead_source, lead_type,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
-            WHERE 1=1
+            WHERE is_ignored = 0
         `;
         const params = [];
 
@@ -107,7 +108,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {
@@ -135,7 +136,7 @@ app.get('/api/bookings', (req, res) => {
         const leads = db.prepare(`
             SELECT id, username, profile_url, booking_status, updated_at
             FROM leads 
-            WHERE booking_status IS NOT NULL 
+            WHERE booking_status IS NOT NULL AND is_ignored = 0
             ORDER BY updated_at DESC
         `).all();
         res.json(leads);

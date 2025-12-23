@@ -57,6 +57,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       lead_source TEXT,
       lead_type TEXT DEFAULT 'cold',
       booking_status TEXT, -- pending, completed
+      is_ignored INTEGER DEFAULT 0,
       pain_points TEXT,  -- JSON array
       goals TEXT,  -- JSON array
       objections TEXT,  -- JSON array
@@ -649,7 +650,7 @@ export function getLeadsForResponder(filters = {}) {
   let query = `
     SELECT *
     FROM leads
-    WHERE 1=1
+    WHERE is_ignored = 0
   `;
   const params = [];
   

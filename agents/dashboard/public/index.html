@@ -150,6 +150,23 @@
             background: rgba(255, 255, 255, 0.02);
         }
 
+        .btn-action-icon {
+            padding: 4px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }
+
+        .btn-action-icon:hover {
+            opacity: 1;
+            transform: scale(1.2);
+            color: var(--error);
+        }
+
         /* Badges */
         .badge {
             padding: 4px 8px;
@@ -195,6 +212,80 @@
             text-align: center;
             padding: 40px;
             color: var(--text-secondary);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            text-align: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .modal-text {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .btn-modal {
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .btn-confirm {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-confirm:hover {
+            background: #da3633;
+        }
+
+        .btn-cancel {
+            background: var(--bg-input);
+            border-color: var(--border);
+            color: var(--text-secondary);
+        }
+
+        .btn-cancel:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
         }
     </style>
 </head>
@@ -251,6 +342,7 @@
                             <th>Lead</th>
                             <th>Last Update</th>
                             <th>Status</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="bookingsTableBody">
@@ -290,6 +382,20 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-content">
+            <div class="modal-title">Ignore Lead?</div>
+            <div class="modal-text">
+                This lead will be hidden from the dashboard and ignored by all agents (Outreach & DM Responder).
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-modal btn-confirm" id="modalConfirmBtn">Ignore Lead</button>
+            </div>
         </div>
     </div>
 

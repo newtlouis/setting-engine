@@ -226,6 +226,7 @@ export async function getActiveConversations() {
     WHERE l.status IN ('contacted', 'replied', 'qualified')
       AND l.conversation_stage NOT IN ('closed_won', 'closed_lost')
       AND l.total_messages_sent > 0
+      AND l.is_ignored = 0
     ORDER BY last_message_at DESC
   `).all();
   

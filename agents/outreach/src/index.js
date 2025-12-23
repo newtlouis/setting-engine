@@ -80,7 +80,7 @@ export async function getOutreachCandidates(options = {}) {
     SELECT l.*, 
            (SELECT COUNT(*) FROM comments c WHERE c.lead_id = l.id AND c.is_spam = 0) as comment_count
     FROM leads l
-    WHERE 1=1
+    WHERE l.is_ignored = 0
       AND l.engagement_score >= ?
   `;
   
@@ -461,19 +461,20 @@ export async function getOutreachStats() {
   await loadDatabase();
   
   const stats = {
-    total_leads: db.prepare('SELECT COUNT(*) as count FROM leads').get().count,
-    new_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'new'").get().count,
-    contacted_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'contacted'").get().count,
-    replied_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'replied'").get().count,
+    total_leads: db.prepare('SELECT COUNT(*) as count FROM leads WHERE is_ignored = 0').get().count,
+    new_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'new' AND is_ignored = 0").get().count,
+    contacted_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'contacted' AND is_ignored = 0").get().count,
+    replied_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'replied' AND is_ignored = 0").get().count,
     
-    messages_sent: db.prepare("SELECT COUNT(*) as count FROM conversations WHERE role = 'assistant'").get().count,
-    messages_received: db.prepare("SELECT COUNT(*) as count FROM conversations WHERE role = 'user'").get().count,
+    messages_sent: db.prepare("SELECT COUNT(*) as count FROM conversations c JOIN leads l ON c.lead_id = l.id WHERE c.role = 'assistant' AND l.is_ignored = 0").get().count,
+    messages_received: db.prepare("SELECT COUNT(*) as count FROM conversations c JOIN leads l ON c.lead_id = l.id WHERE c.role = 'user' AND l.is_ignored = 0").get().count,
     
     min_engagement_threshold: OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE,
     
     eligible_for_outreach: db.prepare(`
       SELECT COUNT(*) as count FROM leads 
       WHERE status = 'new' 
+        AND is_ignored = 0
         AND engagement_score >= ?
         AND (is_private IS NULL OR is_private = 0)
     `).get(OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE).count,
@@ -481,7 +482,7 @@ export async function getOutreachStats() {
     by_engagement: db.prepare(`
       SELECT warmth as level, COUNT(*) as count 
       FROM leads 
-      WHERE status = 'new'
+      WHERE status = 'new' AND is_ignored = 0
       GROUP BY warmth
     `).all()
   };
