@@ -38,7 +38,7 @@ app.get('/api/stats', (req, res) => {
         const stats = {
             total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0').get().c,
             new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new' AND is_ignored = 0").get().c,
-            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status IN ('message_sent', 'message_ready') AND is_ignored = 0").get().c,
+            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'outreach' AND is_ignored = 0").get().c,
             // conversation/bookings status should probably also check is_ignored
             conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL AND is_ignored = 0").get().c,
             confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored = 0").get().c,
@@ -71,7 +71,7 @@ app.get('/api/leads', (req, res) => {
 
         if (status && status !== 'all') {
             if (status === 'contacted') {
-                sql += " AND status IN ('message_sent', 'message_ready')";
+                sql += " AND status = 'outreach'";
             } else if (status === 'conversation') {
                 sql += " AND status = 'conversation' AND booking_status IS NULL";
             } else if (status === 'confirm_bookings') {
@@ -79,7 +79,7 @@ app.get('/api/leads', (req, res) => {
             } else if (status === 'booked') {
                  sql += " AND booking_status = 'completed'";
             } else if (status === 'failed') {
-                 sql += " AND status = 'failed_outreach'";
+                 sql += " AND status = 'failed'";
             } else {
                 sql += " AND status = ?";
                 params.push(status);
