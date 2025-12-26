@@ -715,26 +715,8 @@ export function getLeadsForResponder(filters = {}) {
   return db.prepare(query).all(...params);
 }
 
-// Legacy compatibility wrappers (to be removed after full migration)
-export function upsertDmThread(thread) {
-  console.warn('DEPRECATED: upsertDmThread - use updateLeadDmStatus instead');
-  const lead = upsertLead({
-    username: thread.username,
-    profile_url: thread.profile_url || `https://www.instagram.com/${thread.username}/`
-  });
-  updateLeadDmStatus(thread.username, thread.last_status, thread.dm_url);
-  return lead;
-}
+// Deprecated functions removed
 
-export function updateDmThreadStatus(username, status, updates = {}) {
-  console.warn('DEPRECATED: updateDmThreadStatus - use updateLeadDmStatus instead');
-  return updateLeadDmStatus(username, status, updates.dm_url);
-}
-
-export function getDmThreads(filters = {}) {
-  console.warn('DEPRECATED: getDmThreads - use getLeadsForResponder instead');
-  return getLeadsForResponder(filters);
-}
 
 // ============================================
 // STATISTICS

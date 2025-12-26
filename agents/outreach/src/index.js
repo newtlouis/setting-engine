@@ -14,7 +14,8 @@ import { fileURLToPath } from 'url';
 import { CONFIG, OUTREACH_CRITERIA } from './config.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
 import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
-import { ExcelCRM } from '../../collector/src/excel_writer.js';
+// ExcelCRM removed
+
 
 // Import database from collector (shared)
 const __filename = fileURLToPath(import.meta.url);
@@ -23,21 +24,8 @@ const __dirname = path.dirname(__filename);
 // Dynamic import for database (ESM compatibility)
 let db = null;
 let dbFunctions = null;
-let excelTrackerInstance = null;
+// getExcelTracker removed
 
-async function getExcelTracker() {
-  if (!CONFIG.CRM_TRACKING_ENABLED) {
-    return null;
-  }
-  if (excelTrackerInstance) {
-    return excelTrackerInstance;
-  }
-  await mkdir(CONFIG.CRM_OUTPUT_DIR, { recursive: true });
-  const tracker = new ExcelCRM(CONFIG.CRM_OUTPUT_DIR);
-  await tracker.load();
-  excelTrackerInstance = tracker;
-  return excelTrackerInstance;
-}
 
 async function loadDatabase() {
   if (dbFunctions) return dbFunctions;
@@ -247,7 +235,7 @@ export async function runOutreach(options = {}) {
   
   let successfulCount = 0;
   let attempts = 0;
-  const maxAttempts = cleanLimit * 3; // Safety break to prevent infinite loops
+  const maxAttempts = Math.max(50, cleanLimit * 20); // Safety break: allow many attempts before giving up
   
   let batchResults = {
     attempted: 0,
@@ -349,17 +337,8 @@ export async function runOutreach(options = {}) {
                       typed_at: typedAt || new Date().toISOString()
                     });
                   }
-                  const tracker = await getExcelTracker();
-                  if (tracker) {
-                    await tracker.recordConversationEntry({
-                      username,
-                      dmUrl,
-                      messagePreview,
-                      status: 'outreach',
-                      typedAt: typedAt || new Date().toISOString()
-                    });
-                    await tracker.save();
-                  }
+                  // Excel tracking removed
+
                 } catch (error) {
                   console.error(`Failed to record conversation metadata for @${username}:`, error.message);
                 }
