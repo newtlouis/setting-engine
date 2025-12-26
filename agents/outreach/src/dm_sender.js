@@ -287,6 +287,7 @@ export async function checkCanContact(page) {
 
 /**
  * Scrape bio from Instagram profile page
+ * Uses the same robust logic as the Collector agent
  * 
  * @param {Page} page - Playwright page on a profile
  * @returns {Promise<string|null>} Bio text or null if not found
@@ -294,55 +295,82 @@ export async function checkCanContact(page) {
 export async function scrapeBioFromProfile(page) {
   try {
     const bio = await page.evaluate(() => {
-      // Try multiple selectors for bio
-      // The bio is usually in a span inside the header section
-      const selectors = [
-        'header section span:not([class])', // Simple span in header
-        'header section > div > span',
-        'div[class*="x7a106z"] span', // Common bio container class
-        'header span[dir="auto"]' // Text with direction
-      ];
+      let foundBio = null;
       
-      for (const selector of selectors) {
-        const elements = document.querySelectorAll(selector);
-        for (const el of elements) {
-          const text = el.innerText?.trim();
-          // Bio is typically longer than username and doesn't contain @ at start
-          if (text && text.length > 10 && !text.startsWith('@') && !text.includes('followers') && !text.includes('following')) {
-            // Check if it looks like a bio (not a count, not navigation text)
-            if (!/^\d+[,\.\d]*\s*(posts?|followers?|following|abonnés?|publications?)/i.test(text)) {
-              return text;
+      // Strategy 1: Find bio in header area using span[dir="auto"]
+      const header = document.querySelector('header');
+      if (header) {
+        const allSpans = header.querySelectorAll('span[dir="auto"]');
+        const potentialBios = [];
+        
+        allSpans.forEach(span => {
+          const text = span.textContent.trim();
+          // Skip stats (followers, following, posts)
+          if (/^\d[\d,.]*[KMB]?$/i.test(text)) return;
+          if (/^(followers?|following|posts?|abonnés?|abonnements?|publications?)$/i.test(text)) return;
+          // Skip very short text
+          if (text.length < 5) return;
+          // Skip if it's just username with @
+          if (/^@[\w.]+$/.test(text)) return;
+          // Skip navigation text
+          if (/^(follow|suivre|message|contacter|edit profile|modifier)$/i.test(text)) return;
+          potentialBios.push(text);
+        });
+        
+        // Take the longest text as the bio
+        if (potentialBios.length > 0) {
+          const longestText = potentialBios.reduce((a, b) => a.length >= b.length ? a : b);
+          if (longestText.length >= 10) {
+            foundBio = longestText.substring(0, 300);
+          }
+        }
+      }
+      
+      // Strategy 2: Try specific Instagram section classes
+      if (!foundBio) {
+        const bioSection = document.querySelector('section.xqui205') || 
+                          document.querySelector('header section') ||
+                          document.querySelector('div[id="mount_0_0_"] main section');
+        if (bioSection) {
+          const bioEl = bioSection.querySelector('span._ap3a._aaco._aacu._aacx._aad7._aade[dir="auto"]') ||
+                        bioSection.querySelector('span[dir="auto"] div[role="button"] span') ||
+                        bioSection.querySelector('h1')?.parentElement?.nextElementSibling?.querySelector('span');
+          if (bioEl) {
+            foundBio = bioEl.textContent.trim().substring(0, 500);
+          }
+        }
+      }
+      
+      // Strategy 3: Meta description fallback
+      if (!foundBio) {
+        const metaDesc = document.querySelector('meta[name="description"]');
+        if (metaDesc) {
+          const content = metaDesc.getAttribute('content') || '';
+          const dashIndex = content.indexOf(' - ');
+          if (dashIndex > 0 && dashIndex < content.length - 10) {
+            const bioFromMeta = content.substring(dashIndex + 3).trim();
+            // Skip generic "See Instagram photos and videos" text
+            if (!bioFromMeta.toLowerCase().includes('see instagram photos') && 
+                !bioFromMeta.toLowerCase().includes('voir les photos')) {
+              foundBio = bioFromMeta.substring(0, 300);
             }
           }
         }
       }
       
-      // Fallback: look for any substantial text in header that's not counts
-      const headerSpans = document.querySelectorAll('header span');
-      for (const span of headerSpans) {
-        const text = span.innerText?.trim();
-        if (text && text.length > 20 && 
-            !/^\d+[,\.\d]*/.test(text) && 
-            !text.includes('Follow') &&
-            !text.includes('Suivre') &&
-            !text.includes('Message')) {
-          return text;
-        }
-      }
-      
-      return null;
+      return foundBio;
     });
     
     if (bio) {
-      console.log(`   📋 Bio scraped (${bio.length} chars): "${bio.substring(0, 50)}..."`);
+      console.log(`   📋 Bio trouvée (${bio.length} chars): "${bio.substring(0, 60)}..."`);
     } else {
-      console.log('   ℹ️  No bio found on profile');
+      console.log('   ℹ️  Aucune bio trouvée sur le profil');
     }
     
     return bio;
     
   } catch (error) {
-    console.error('   ⚠️  Bio scraping error:', error.message);
+    console.error('   ⚠️  Erreur scraping bio:', error.message);
     return null;
   }
 }
@@ -601,6 +629,30 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       return result;
     }
     
+    // Step 2.5: Qualify lead BEFORE clicking contact (while still on profile)
+    // This avoids navigation issues with Instagram's SPA
+    if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
+      if (onProgress) onProgress('qualifying', username);
+      
+      // Scrape bio while we're still on the profile page
+      const bio = await scrapeBioFromProfile(newTab);
+      result.steps.push({ step: 'scrape_bio', bio: bio?.substring(0, 100) || null });
+      
+      const qualification = await qualifyLead(bio);
+      result.steps.push({ step: 'qualify', ...qualification });
+      
+      if (!qualification.qualified) {
+        result.skipped = true;
+        result.isCompetitor = true;
+        result.error = qualification.reason || 'competitor_detected';
+        console.log(`      🚫 @${username} est un concurrent - outreach annulé`);
+        await newTab.close().catch(() => {});
+        return result;
+      }
+      
+      console.log(`      ✅ @${username} qualifié - poursuite outreach`);
+    }
+    
     // Step 3: Click "Contacter" button to open DM popup
     if (onProgress) onProgress('clicking_contact', username);
     const clickResult = await clickMessageButton(newTab);
@@ -620,39 +672,9 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       result.skipped = true;
       result.existingConversation = true; // Flag for caller to update status
       result.messageCount = existingCheck.messageCount;
-      console.log(`      � @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
+      console.log(`      💬 @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
       await newTab.close().catch(() => {});
       return result;
-    }
-    
-    // Step 3.7: NOW qualify lead (after confirming popup opened successfully)
-    // This ensures we only call OpenAI for leads we can actually contact
-    if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
-      if (onProgress) onProgress('qualifying', username);
-      
-      // Scrape bio from profile (we may need to go back briefly or extract from conversation header)
-      // First try to get bio from the page - navigate back to profile briefly
-      await newTab.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
-      await delay(1000, 1500);
-      
-      const bio = await scrapeBioFromProfile(newTab);
-      result.steps.push({ step: 'scrape_bio', bio: bio?.substring(0, 100) || null });
-      
-      const qualification = await qualifyLead(bio);
-      result.steps.push({ step: 'qualify', ...qualification });
-      
-      if (!qualification.qualified) {
-        result.skipped = true;
-        result.isCompetitor = true;
-        result.error = qualification.reason || 'competitor_detected';
-        console.log(`      � @${username} is a competitor - skipping outreach`);
-        await newTab.close().catch(() => {});
-        return result;
-      }
-      
-      // Go back to DM popup
-      await newTab.goForward({ waitUntil: 'domcontentloaded' }).catch(() => {});
-      await delay(1000, 1500);
     }
     
     // Step 4: Type message (but DON'T send, DON'T clear - keep it ready)

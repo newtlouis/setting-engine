@@ -62,6 +62,7 @@ export async function qualifyLead(bio) {
     console.log(`   🤖 OpenAI qualification: "${answer}"`);
     
     if (answer.includes('NON')) {
+      console.log(`   ❌ Bio REJETÉE → Profil concurrent détecté`);
       return { 
         qualified: false, 
         reason: 'Profil concurrent (coach/accompagnateur)',
@@ -70,6 +71,7 @@ export async function qualifyLead(bio) {
     }
     
     if (answer.includes('OUI')) {
+      console.log(`   ✅ Bio ACCEPTÉE → Lead qualifié pour outreach`);
       return { qualified: true, raw: answer };
     }
     
