@@ -193,13 +193,46 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
       console.log(`      ⚠️  Could not change sort order (may already be sorted or not available)`);
     }
     
-    // Aggressive scrolling to load comments
-    console.log(`      → Scrolling to load comments...`);
+    // Aggressive, targeted scrolling to load comments
+    // User Update: Don't scroll window (triggers suggested posts), scroll the comment sidebar/container
+    console.log(`      → Scrolling comment list...`);
     for (let i = 0; i < 15; i++) {
-      await page.evaluate(() => {
-        window.scrollBy({ top: 400, behavior: 'smooth' });
-      });
-      await delay(1000);
+        const scrolled = await page.evaluate(() => {
+            // Find the most likely comment container
+            // It should be a scrollable DIV or UL, not body/html
+            // On desktop post view, it's usually the right-hand column inside the modal/page
+            const candidates = Array.from(document.querySelectorAll('div, ul'));
+            let bestScroller = null;
+            let maxScrollHeight = 0;
+
+            for (const el of candidates) {
+                // Must be vertical scrollable
+                if (el.scrollHeight > el.clientHeight) {
+                    const style = window.getComputedStyle(el);
+                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                        // Heuristic: The comment container usually has many children
+                        // and appears in the DOM structure (not a tiny dropdown)
+                        if (el.scrollHeight > maxScrollHeight) {
+                            maxScrollHeight = el.scrollHeight;
+                            bestScroller = el;
+                        }
+                    }
+                }
+            }
+
+            if (bestScroller) {
+                bestScroller.scrollBy({ top: 500, behavior: 'smooth' });
+                return true;
+            }
+            return false;
+        });
+
+        if (!scrolled) {
+            // Fallback for mobile view or weird layouts where window IS the scroller
+            await page.evaluate(() => window.scrollBy({ top: 500, behavior: 'smooth' }));
+        }
+        
+        await delay(1000);
     }
 
     // Click "View more comments" / "View replies" buttons
