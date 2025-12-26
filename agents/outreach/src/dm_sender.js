@@ -18,6 +18,7 @@
 
 import { chromium } from 'playwright';
 import { CONFIG } from './config.js';
+import { qualifyLead } from './qualify_lead.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -282,6 +283,68 @@ export async function checkCanContact(page) {
   }
   
   return { canContact: false };
+}
+
+/**
+ * Scrape bio from Instagram profile page
+ * 
+ * @param {Page} page - Playwright page on a profile
+ * @returns {Promise<string|null>} Bio text or null if not found
+ */
+export async function scrapeBioFromProfile(page) {
+  try {
+    const bio = await page.evaluate(() => {
+      // Try multiple selectors for bio
+      // The bio is usually in a span inside the header section
+      const selectors = [
+        'header section span:not([class])', // Simple span in header
+        'header section > div > span',
+        'div[class*="x7a106z"] span', // Common bio container class
+        'header span[dir="auto"]' // Text with direction
+      ];
+      
+      for (const selector of selectors) {
+        const elements = document.querySelectorAll(selector);
+        for (const el of elements) {
+          const text = el.innerText?.trim();
+          // Bio is typically longer than username and doesn't contain @ at start
+          if (text && text.length > 10 && !text.startsWith('@') && !text.includes('followers') && !text.includes('following')) {
+            // Check if it looks like a bio (not a count, not navigation text)
+            if (!/^\d+[,\.\d]*\s*(posts?|followers?|following|abonnés?|publications?)/i.test(text)) {
+              return text;
+            }
+          }
+        }
+      }
+      
+      // Fallback: look for any substantial text in header that's not counts
+      const headerSpans = document.querySelectorAll('header span');
+      for (const span of headerSpans) {
+        const text = span.innerText?.trim();
+        if (text && text.length > 20 && 
+            !/^\d+[,\.\d]*/.test(text) && 
+            !text.includes('Follow') &&
+            !text.includes('Suivre') &&
+            !text.includes('Message')) {
+          return text;
+        }
+      }
+      
+      return null;
+    });
+    
+    if (bio) {
+      console.log(`   📋 Bio scraped (${bio.length} chars): "${bio.substring(0, 50)}..."`);
+    } else {
+      console.log('   ℹ️  No bio found on profile');
+    }
+    
+    return bio;
+    
+  } catch (error) {
+    console.error('   ⚠️  Bio scraping error:', error.message);
+    return null;
+  }
 }
 
 /**
@@ -557,9 +620,39 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       result.skipped = true;
       result.existingConversation = true; // Flag for caller to update status
       result.messageCount = existingCheck.messageCount;
-      console.log(`      💬 @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
+      console.log(`      � @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
       await newTab.close().catch(() => {});
       return result;
+    }
+    
+    // Step 3.7: NOW qualify lead (after confirming popup opened successfully)
+    // This ensures we only call OpenAI for leads we can actually contact
+    if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
+      if (onProgress) onProgress('qualifying', username);
+      
+      // Scrape bio from profile (we may need to go back briefly or extract from conversation header)
+      // First try to get bio from the page - navigate back to profile briefly
+      await newTab.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await delay(1000, 1500);
+      
+      const bio = await scrapeBioFromProfile(newTab);
+      result.steps.push({ step: 'scrape_bio', bio: bio?.substring(0, 100) || null });
+      
+      const qualification = await qualifyLead(bio);
+      result.steps.push({ step: 'qualify', ...qualification });
+      
+      if (!qualification.qualified) {
+        result.skipped = true;
+        result.isCompetitor = true;
+        result.error = qualification.reason || 'competitor_detected';
+        console.log(`      � @${username} is a competitor - skipping outreach`);
+        await newTab.close().catch(() => {});
+        return result;
+      }
+      
+      // Go back to DM popup
+      await newTab.goForward({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await delay(1000, 1500);
     }
     
     // Step 4: Type message (but DON'T send, DON'T clear - keep it ready)

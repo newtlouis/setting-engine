@@ -62,7 +62,18 @@ export const CONFIG = {
     // Detection indicators
     CHALLENGE_INDICATOR: 'form[id*="challenge"]'
     // Note: Rate limit detection is now done with specific selectors in dm_sender.js
-  }
+  },
+  
+  // OpenAI Configuration for Lead Qualification
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  QUALIFICATION_ENABLED: process.env.QUALIFICATION_ENABLED !== 'false', // Default: enabled
+  QUALIFICATION_PROMPT: `Analyse cette bio Instagram. 
+Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds uniquement "NON".
+Sinon, réponds uniquement "OUI".
+
+Bio: {bio}
+
+Réponse (OUI ou NON):`,
 };
 
 // Default outreach criteria

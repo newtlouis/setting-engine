@@ -393,6 +393,15 @@ export async function runOutreach(options = {}) {
                              updated_at = datetime('now')
                            WHERE username = ?
                          `).run(result.username);
+                     } else if (result.isCompetitor) {
+                         console.log(`   🚫 Marking @${result.username} as FAILED (Competitor) in DB.`);
+                         db.prepare(`
+                           UPDATE leads SET 
+                             status = 'failed',
+                             notes = 'Profil concurrent (coach/accompagnateur)',
+                             updated_at = datetime('now')
+                           WHERE username = ?
+                         `).run(result.username);
                      } else if (result.error && (result.error.includes('private') || result.error === 'private_account_no_contact')) {
                          console.log(`   ✨ Marking @${result.username} as FAILED (Private Account) in DB.`);
                          dbFunctions.markLeadFailed(result.username, 'Private Account');
