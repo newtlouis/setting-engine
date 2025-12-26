@@ -416,14 +416,15 @@ export async function clickMessageButton(page) {
     // Click the contact button
     await button.click();
     
-    // Wait for DM popup to open
-    await delay(5000, 8000);
+    // Wait briefly for transition to start
+    await delay(2000, 3000);
     
     // Verify the message input appeared (DM popup opened)
     const inputSelectors = CONFIG.SELECTORS.MESSAGE_INPUT;
     let dmInput = null;
     
-    // Try to wait for one of the selectors to appear
+    // Try to wait for one of the selectors to appear (dynamic wait)
+    // Total wait will be 2s delay + up to 3s wait = max 5s (but usually faster)
     for (const selector of inputSelectors) {
       try {
         dmInput = await page.waitForSelector(selector, { state: 'visible', timeout: 3000 }).catch(() => null);
@@ -992,10 +993,10 @@ export async function batchSendDMs(page, targets, options = {}) {
     
     // Logic handled above
     
-    // Rate limiting delay (longer since we did more interaction)
+    // Rate limiting delay (reduced by half as requested)
     if (i < targets.length - 1 && successfulCount < maxPerSession) {
-      const waitTime = CONFIG.MIN_DELAY_BETWEEN_DMS + 
-                       Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS);
+      const waitTime = (CONFIG.MIN_DELAY_BETWEEN_DMS + 
+                       Math.random() * (CONFIG.MAX_DELAY_BETWEEN_DMS - CONFIG.MIN_DELAY_BETWEEN_DMS)) / 4;
       console.log(`      Waiting ${Math.round(waitTime/1000)}s before next...`);
       await delay(waitTime, waitTime + 1000);
     }
