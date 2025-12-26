@@ -75,6 +75,19 @@
             padding: 20px;
             position: relative;
             overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent);
+            background: #1c2128;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card:active {
+            transform: translateY(0);
         }
 
         .stat-value {
@@ -315,23 +328,23 @@
         <!-- Stats -->
         <div class="stats-grid" id="statsGrid">
 
-            <div class="stat-card">
+            <div class="stat-card" onclick="loadLeads('new')">
                 <div class="stat-value" id="stat-new" style="color: var(--accent);">-</div>
-                <div class="stat-label">To Contact</div>
+                <div class="stat-label">Tout contact</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="loadLeads('contacted')">
                 <div class="stat-value" id="stat-contacted" style="color: var(--warning);">-</div>
-                <div class="stat-label">Contacted</div>
+                <div class="stat-label">Contact</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="loadLeads('conversation')">
                 <div class="stat-value" id="stat-conversation" style="color: #a371f7;">-</div>
                 <div class="stat-label">Conversation</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="loadLeads('confirm_bookings')">
                 <div class="stat-value" id="stat-confirm_bookings" style="color: var(--success);">-</div>
-                <div class="stat-label">Confirm Bookings</div>
+                <div class="stat-label">Confirm Booking</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="loadLeads('booked')">
                 <div class="stat-value" id="stat-booked" style="color: var(--success);">-</div>
                 <div class="stat-label">Booked</div>
             </div>

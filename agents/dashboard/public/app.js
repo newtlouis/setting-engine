@@ -100,9 +100,9 @@ async function loadLeads(filter) {
         btn.classList.remove('active');
         // Set active based on filter match
         if (btn.textContent.toLowerCase().includes(filter.replace('_', ' ')) || 
-            (filter === 'new' && btn.textContent === 'New') ||
+            (filter === 'new' && (btn.textContent === 'New' || btn.textContent === 'To contact')) ||
             (filter === 'all' && btn.textContent === 'All') ||
-            (filter === 'contacted' && btn.textContent === 'Contacted') ||
+            (filter === 'contacted' && (btn.textContent === 'Contacted' || btn.textContent === 'Contact')) ||
             (filter === 'conversation' && btn.textContent === 'Conversation') ||
             (filter === 'confirm_bookings' && btn.textContent === 'Confirm Bookings') ||
             (filter === 'booked' && btn.textContent === 'Booked') ||
