@@ -105,6 +105,11 @@ export async function runCollector(config) {
       console.log('✅ Login successful!\n');
     }
 
+    // Load already-scraped posts tracking EARLY to filter duplicates during discovery
+    const trackingFile = path.join(config.outputDir, '..', 'permanent-data', 'scraped_posts.json');
+    const alreadyScraped = await loadScrapedPosts(trackingFile);
+    console.log(`ℹ️  Loaded ${alreadyScraped.size} previously scraped posts for duplicate filtering.\n`);
+
     // Step 2: Discovery phase
     if (config.mode === 'hashtags' || config.mode === 'both' || config.mode === 'only-discover') {
       if (config.hashtags && config.hashtags.length > 0) {
@@ -112,10 +117,11 @@ export async function runCollector(config) {
         const hashtagPosts = await discoverFromHashtags(
           page, 
           config.hashtags, 
-          config.maxPostsPerSource
+          config.maxPostsPerSource,
+          alreadyScraped // Pass tracking set
         );
         allPosts.push(...hashtagPosts);
-        console.log(`   Found ${hashtagPosts.length} posts from hashtags\n`);
+        console.log(`   Found ${hashtagPosts.length} NEW posts from hashtags\n`);
       }
     }
 
@@ -125,10 +131,11 @@ export async function runCollector(config) {
         const profilePosts = await discoverFromProfiles(
           page, 
           config.profiles, 
-          config.maxPostsPerSource
+          config.maxPostsPerSource,
+          alreadyScraped // Pass tracking set
         );
         allPosts.push(...profilePosts);
-        console.log(`   Found ${profilePosts.length} posts from profiles\n`);
+        console.log(`   Found ${profilePosts.length} NEW posts from profiles\n`);
       }
     }
 
@@ -147,14 +154,16 @@ export async function runCollector(config) {
         ? `hashtag:${config.hashtags[0]}` 
         : `profile:${config.profiles?.[0] || 'unknown'}`;
       
-      // Load already-scraped posts to avoid duplicates
-      const trackingFile = path.join(config.outputDir, '..', 'permanent-data', 'scraped_posts.json');
-      const alreadyScraped = await loadScrapedPosts(trackingFile);
+      // Tracking file already loaded above
+      // const trackingFile = ... 
+      // const alreadyScraped = ...
       
+      // We still filter here just in case, but discovery should have returned only new ones
       if (alreadyScraped.size > 0) {
+        // Just a sanity check deduplication
         const { newPosts, skippedCount } = filterAlreadyScraped(allPosts, alreadyScraped);
         if (skippedCount > 0) {
-          console.log(`⏭️  Skipping ${skippedCount} already-scraped posts`);
+          console.log(`ℹ️  Filtered ${skippedCount} duplicates/scraped posts (sanity check)`);
         }
         allPosts = newPosts;
       }

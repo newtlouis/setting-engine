@@ -12,10 +12,11 @@ import { CONFIG } from './config.js';
  * 
  * @param {Page} page - Playwright page object
  * @param {string[]} hashtags - Array of hashtags (without #)
- * @param {number} maxPosts - Maximum posts to collect per hashtag
+ * @param {number} maxPosts - Maximum NEW posts to collect per hashtag
+ * @param {Set<string>} alreadyScraped - Set of already scraped URLs (optional)
  * @returns {Promise<Array>} Array of post objects
  */
-export async function discoverFromHashtags(page, hashtags, maxPosts) {
+export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScraped = new Set()) {
   const allPosts = [];
 
   for (const hashtag of hashtags) {
@@ -57,10 +58,16 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
         console.log(`      ⚠️  No posts found with standard selectors, trying alternative extraction...`);
       }
 
-      const posts = [];
+      const posts = []; // Local unique new posts
+      const seenUrls = new Set(); // To track duplicates within this session run
+      
       let scrollAttempts = 0;
-      const maxScrolls = Math.ceil(maxPosts / 9); // Instagram shows ~9 posts per viewport
-      let previousCount = 0;
+      // Increased max scrolls to allow skipping many duplicates
+      const maxScrolls = Math.max(50, maxPosts * 5); 
+      let consecutiveNoNewPosts = 0;
+      let totalProcessedCandidates = 0;
+
+      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring ${alreadyScraped.size} history)`);
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
         // Extract post links from current viewport - try multiple methods
@@ -81,29 +88,59 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
           }).catch(() => []);
         }
         
-        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${postLinks.length} post links in viewport (total: ${posts.length})`);
+        // Count how many we actually added this scroll
+        let newAddedThisScroll = 0;
 
-        // Deduplicate
         for (const link of postLinks) {
-          if (!posts.find(p => p.post_url === link)) {
-            posts.push({
-              source_type: 'hashtag',
-              source_name: cleanTag,
-              post_url: link,
-              post_date: '',
-              likes: '',
-              comments_count: '',
-              caption_excerpt: ''
-            });
+          // Normalize link (remove query params for comparison)
+          const cleanLink = link.split('?')[0];
+
+          // Check if we've already collected it in this session
+          if (seenUrls.has(cleanLink)) continue;
+          seenUrls.add(cleanLink);
+          totalProcessedCandidates++;
+
+          // Check if it's already in our history (persistent DB)
+          if (alreadyScraped.has(cleanLink) || alreadyScraped.has(link)) {
+            continue; // Skip without adding
           }
+
+          // It's new!
+          // Double check we haven't hit limit inside the loop
+          if (posts.length >= maxPosts) break;
+
+          posts.push({
+            source_type: 'hashtag',
+            source_name: cleanTag,
+            post_url: link,
+            post_date: '',
+            likes: '',
+            comments_count: '',
+            caption_excerpt: ''
+          });
+          newAddedThisScroll++;
+        }
+        
+        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${newAddedThisScroll} NEW posts (Status: ${posts.length}/${maxPosts} collected, Processed ${totalProcessedCandidates} links)`);
+
+        // Break if we have enough
+        if (posts.length >= maxPosts) {
+            console.log(`      ✨ Goal reached: ${posts.length} new posts.`);
+            break;
         }
 
-        // Break if no new posts found after scrolling
-        if (posts.length === previousCount && scrollAttempts > 1) {
-          console.log(`      ⚠️  No new posts found after scroll, stopping`);
+        // Logic to stop if we are stuck
+        if (newAddedThisScroll === 0) {
+            consecutiveNoNewPosts++;
+        } else {
+            consecutiveNoNewPosts = 0;
+        }
+
+        // Break if stuck for too long (scrolling but seeing only old stuff or nothing)
+        if (consecutiveNoNewPosts > 5 && scrollAttempts > 5) {
+          console.log(`      ⚠️  Stopping: No new posts found in last 5 scrolls (likely end of feed or excessive duplicates).`);
           break;
         }
-        previousCount = posts.length;
 
         // Scroll down slowly to trigger lazy loading
         await page.evaluate(() => {
@@ -116,11 +153,11 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
         scrollAttempts++;
       }
 
-      // Limit to maxPosts
+      // Limit to maxPosts (just in case)
       const limitedPosts = posts.slice(0, maxPosts);
       allPosts.push(...limitedPosts);
 
-      console.log(`      → Total found: ${limitedPosts.length} posts`);
+      console.log(`      → Total collected for #${hashtag}: ${limitedPosts.length} posts`);
 
       // Delay between hashtags
       await delay(CONFIG.MIN_DELAY + Math.random() * CONFIG.MAX_DELAY);
@@ -139,10 +176,11 @@ export async function discoverFromHashtags(page, hashtags, maxPosts) {
  * 
  * @param {Page} page - Playwright page object
  * @param {string[]} profiles - Array of Instagram profile URLs or usernames
- * @param {number} maxPosts - Maximum posts to collect per profile
+ * @param {number} maxPosts - Maximum NEW posts to collect per profile
+ * @param {Set<string>} alreadyScraped - Set of already scraped URLs (optional)
  * @returns {Promise<Array>} Array of post objects
  */
-export async function discoverFromProfiles(page, profiles, maxPosts) {
+export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScraped = new Set()) {
   const allPosts = [];
 
   for (const profile of profiles) {
@@ -186,10 +224,16 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
         console.log(`      ⚠️  No posts found with standard selectors`);
       }
 
-      const posts = [];
+      const posts = []; // Local unique new posts
+      const seenUrls = new Set();
+      
       let scrollAttempts = 0;
-      const maxScrolls = Math.ceil(maxPosts / 12); // Profiles show ~12 posts per viewport
-      let previousCount = 0;
+      // Increased max scrolls
+      const maxScrolls = Math.max(50, maxPosts * 5);
+      let consecutiveNoNewPosts = 0;
+      let totalProcessedCandidates = 0;
+
+      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring ${alreadyScraped.size} history)`);
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
         // Extract post links - try multiple methods
@@ -209,12 +253,24 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
           }).catch(() => []);
         }
         
-        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${postLinks.length} post links (total: ${posts.length})`);
+        // Count how many we actually added this scroll
+        let newAddedThisScroll = 0;
 
-        // Deduplicate
         for (const link of postLinks) {
-          if (!posts.find(p => p.post_url === link)) {
-            posts.push({
+           // Normalize link (remove query params)
+           const cleanLink = link.split('?')[0];
+
+           if (seenUrls.has(cleanLink)) continue;
+           seenUrls.add(cleanLink);
+           totalProcessedCandidates++;
+
+           if (alreadyScraped.has(cleanLink) || alreadyScraped.has(link)) {
+             continue; // Skip history
+           }
+
+           if (posts.length >= maxPosts) break;
+           
+           posts.push({
               source_type: 'profile',
               source_name: username,
               post_url: link,
@@ -223,15 +279,27 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
               comments_count: '',
               caption_excerpt: ''
             });
-          }
+            newAddedThisScroll++;
+        }
+        
+        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${newAddedThisScroll} NEW posts (Status: ${posts.length}/${maxPosts} collected, Processed ${totalProcessedCandidates} links)`);
+
+        if (posts.length >= maxPosts) {
+            console.log(`      ✨ Goal reached: ${posts.length} new posts.`);
+            break;
         }
 
-        // Break if no new posts
-        if (posts.length === previousCount && scrollAttempts > 1) {
-          console.log(`      ⚠️  No new posts found, stopping`);
+        if (newAddedThisScroll === 0) {
+            consecutiveNoNewPosts++;
+        } else {
+            consecutiveNoNewPosts = 0;
+        }
+
+         // Stop if stuck
+        if (consecutiveNoNewPosts > 5 && scrollAttempts > 5) {
+          console.log(`      ⚠️  Stopping: No new posts found in last 5 scrolls.`);
           break;
         }
-        previousCount = posts.length;
 
         // Scroll down
         await page.evaluate(() => {
@@ -248,7 +316,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts) {
       const limitedPosts = posts.slice(0, maxPosts);
       allPosts.push(...limitedPosts);
 
-      console.log(`      → Total found: ${limitedPosts.length} posts`);
+      console.log(`      → Total collected for @${username}: ${limitedPosts.length} posts`);
 
       // Delay between profiles
       await delay(CONFIG.MIN_DELAY + Math.random() * CONFIG.MAX_DELAY);
