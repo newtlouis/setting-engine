@@ -299,43 +299,68 @@ export async function scrapeProfileData(page) {
       let foundBio = null;
       let foundFullName = null;
       
-      // Strategy 1: Find bio and name in header area
+      // Helper to validate if a string looks like a real name
+      function isValidName(text) {
+        if (!text || text.length < 2 || text.length > 30) return false;
+        // Should not have numbers (unless it's like "3rd") but Instagram names usually don't have digits if they are real names
+        if (/\d/.test(text)) return false;
+        // Should not contain @
+        if (text.includes('@')) return false;
+        // Should not be a common UI button text
+        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis)$/i.test(text)) return false;
+        // Should not be stats
+        if (/^\d+/.test(text)) return false;
+        return true;
+      }
+
+      // Strategy 1: Find name in specific location (User provided structure)
+      // We look for span[dir="auto"] in the typical name location within header
       const header = document.querySelector('header');
       if (header) {
-        // Full name is usually an h1, h2, or a specific span
+        const allSpans = Array.from(header.querySelectorAll('span[dir="auto"]'));
+        
+        // Filter potential names
+        const nameCandidates = allSpans.map(s => s.textContent.trim()).filter(text => {
+           return isValidName(text) && 
+                  !text.includes('followers') && 
+                  !text.includes('following') &&
+                  !text.includes('posts');
+        });
+
+        // The name is usually the first "valid" text that appears in the header (before bio)
+        // or specifically in the h1 area if structure allows
+        if (nameCandidates.length > 0) {
+           // Heuristic: The name is often the shortest valid string that isn't a UI element
+           // But bio is also often in span[dir="auto"].
+           // Usually Name comes BEFORE Bio in DOM order.
+           foundFullName = nameCandidates[0];
+        }
+
+        // Also try standard H1/H2 as strong signals
         const nameEl = header.querySelector('h1:not([class*="x"])') || 
                        header.querySelector('h2') || 
                        header.querySelector('section > div:first-child > span');
+                       
         if (nameEl) {
-          foundFullName = nameEl.textContent.trim();
+           const hText = nameEl.textContent.trim();
+           if (isValidName(hText)) {
+             foundFullName = hText;
+           }
         }
-
-        const allSpans = header.querySelectorAll('span[dir="auto"]');
-        const potentialBios = [];
         
-        allSpans.forEach(span => {
-          const text = span.textContent.trim();
-          // Skip stats
-          if (/^\d[\d,.]*[KMB]?$/i.test(text)) return;
-          if (/^(followers?|following|posts?|abonnés?|abonnements?|publications?)$/i.test(text)) return;
-          // Skip very short text
-          if (text.length < 5) return;
-          // Skip username
-          if (/^@[\w.]+$/.test(text)) return;
-          // Skip navigation
-          if (/^(follow|suivre|message|contacter|edit profile|modifier|following)$/i.test(text)) return;
-          // Skip the full name if we already found it
-          if (text === foundFullName) return;
-          
-          potentialBios.push(text);
+        // Scraping Bio (remaining logic)
+        const potentialBios = allSpans.map(s => s.textContent.trim()).filter(text => {
+            // Bio is usually longer than name
+            return text.length > 5 && 
+                   text !== foundFullName && 
+                   !/^(followers?|following|posts?|abonnés?|abonnements?|publications?)$/i.test(text) &&
+                   !/^\d/.test(text); // No stats
         });
         
-        // Take the longest text as the bio
         if (potentialBios.length > 0) {
+          // Take the longest text as the bio
           const longestText = potentialBios.reduce((a, b) => a.length >= b.length ? a : b);
-          if (longestText.length >= 10) {
-            foundBio = longestText.substring(0, 300);
-          }
+          if (longestText.length >= 10) foundBio = longestText.substring(0, 300);
         }
       }
       
@@ -392,21 +417,34 @@ export async function clickMessageButton(page) {
     await button.click();
     
     // Wait for DM popup to open
-    await delay(2000, 3000);
+    await delay(5000, 8000);
     
     // Verify the message input appeared (DM popup opened)
     const inputSelectors = CONFIG.SELECTORS.MESSAGE_INPUT;
     let dmInput = null;
     
+    // Try to wait for one of the selectors to appear
     for (const selector of inputSelectors) {
-      dmInput = await page.$(selector).catch(() => null);
-      if (dmInput) {
-        const isVisible = await dmInput.isVisible().catch(() => false);
-        if (isVisible) break;
-        dmInput = null;
+      try {
+        dmInput = await page.waitForSelector(selector, { state: 'visible', timeout: 3000 }).catch(() => null);
+        if (dmInput) break;
+      } catch (e) {
+        // Ignore timeout
       }
     }
     
+    if (!dmInput) {
+      // Last ditch effort: check immediate presence
+      for (const selector of inputSelectors) {
+        dmInput = await page.$(selector).catch(() => null);
+        if (dmInput) {
+          const isVisible = await dmInput.isVisible().catch(() => false);
+          if (isVisible) break;
+          dmInput = null;
+        }
+      }
+    }
+
     if (!dmInput) {
       return { success: false, error: 'dm_popup_not_opened' };
     }
