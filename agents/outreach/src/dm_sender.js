@@ -19,6 +19,7 @@
 import { chromium } from 'playwright';
 import { CONFIG } from './config.js';
 import { qualifyLead } from './qualify_lead.js';
+import { extractFirstName } from './templates.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -286,34 +287,46 @@ export async function checkCanContact(page) {
 }
 
 /**
- * Scrape bio from Instagram profile page
+ * Scrape profile data (bio, full name) from Instagram profile page
  * Uses the same robust logic as the Collector agent
  * 
  * @param {Page} page - Playwright page on a profile
- * @returns {Promise<string|null>} Bio text or null if not found
+ * @returns {Promise<{bio: string|null, fullName: string|null}>} Profile data
  */
-export async function scrapeBioFromProfile(page) {
+export async function scrapeProfileData(page) {
   try {
-    const bio = await page.evaluate(() => {
+    const data = await page.evaluate(() => {
       let foundBio = null;
+      let foundFullName = null;
       
-      // Strategy 1: Find bio in header area using span[dir="auto"]
+      // Strategy 1: Find bio and name in header area
       const header = document.querySelector('header');
       if (header) {
+        // Full name is usually an h1, h2, or a specific span
+        const nameEl = header.querySelector('h1:not([class*="x"])') || 
+                       header.querySelector('h2') || 
+                       header.querySelector('section > div:first-child > span');
+        if (nameEl) {
+          foundFullName = nameEl.textContent.trim();
+        }
+
         const allSpans = header.querySelectorAll('span[dir="auto"]');
         const potentialBios = [];
         
         allSpans.forEach(span => {
           const text = span.textContent.trim();
-          // Skip stats (followers, following, posts)
+          // Skip stats
           if (/^\d[\d,.]*[KMB]?$/i.test(text)) return;
           if (/^(followers?|following|posts?|abonnés?|abonnements?|publications?)$/i.test(text)) return;
           // Skip very short text
           if (text.length < 5) return;
-          // Skip if it's just username with @
+          // Skip username
           if (/^@[\w.]+$/.test(text)) return;
-          // Skip navigation text
-          if (/^(follow|suivre|message|contacter|edit profile|modifier)$/i.test(text)) return;
+          // Skip navigation
+          if (/^(follow|suivre|message|contacter|edit profile|modifier|following)$/i.test(text)) return;
+          // Skip the full name if we already found it
+          if (text === foundFullName) return;
+          
           potentialBios.push(text);
         });
         
@@ -326,52 +339,37 @@ export async function scrapeBioFromProfile(page) {
         }
       }
       
-      // Strategy 2: Try specific Instagram section classes
-      if (!foundBio) {
+      // Strategy 2: Try specific Instagram classes
+      if (!foundBio || !foundFullName) {
         const bioSection = document.querySelector('section.xqui205') || 
                           document.querySelector('header section') ||
                           document.querySelector('div[id="mount_0_0_"] main section');
         if (bioSection) {
-          const bioEl = bioSection.querySelector('span._ap3a._aaco._aacu._aacx._aad7._aade[dir="auto"]') ||
-                        bioSection.querySelector('span[dir="auto"] div[role="button"] span') ||
-                        bioSection.querySelector('h1')?.parentElement?.nextElementSibling?.querySelector('span');
-          if (bioEl) {
-            foundBio = bioEl.textContent.trim().substring(0, 500);
+          if (!foundFullName) {
+            const nameEl = bioSection.querySelector('h1') || bioSection.querySelector('h2');
+            if (nameEl) foundFullName = nameEl.textContent.trim();
+          }
+          
+          if (!foundBio) {
+            const bioEl = bioSection.querySelector('span._ap3a._aaco._aacu._aacx._aad7._aade[dir="auto"]') ||
+                          bioSection.querySelector('span[dir="auto"] div[role="button"] span') ||
+                          bioSection.querySelector('h1')?.parentElement?.nextElementSibling?.querySelector('span');
+            if (bioEl) foundBio = bioEl.textContent.trim().substring(0, 500);
           }
         }
       }
       
-      // Strategy 3: Meta description fallback
-      if (!foundBio) {
-        const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) {
-          const content = metaDesc.getAttribute('content') || '';
-          const dashIndex = content.indexOf(' - ');
-          if (dashIndex > 0 && dashIndex < content.length - 10) {
-            const bioFromMeta = content.substring(dashIndex + 3).trim();
-            // Skip generic "See Instagram photos and videos" text
-            if (!bioFromMeta.toLowerCase().includes('see instagram photos') && 
-                !bioFromMeta.toLowerCase().includes('voir les photos')) {
-              foundBio = bioFromMeta.substring(0, 300);
-            }
-          }
-        }
-      }
-      
-      return foundBio;
+      return { bio: foundBio, fullName: foundFullName };
     });
     
-    if (bio) {
-      console.log(`   📋 Bio trouvée (${bio.length} chars): "${bio.substring(0, 60)}..."`);
-    } else {
-      console.log('   ℹ️  Aucune bio trouvée sur le profil');
-    }
+    if (data.fullName) console.log(`   👤 Nom trouvé : "${data.fullName}"`);
+    if (data.bio) console.log(`   📋 Bio trouvée (${data.bio.length} chars)`);
     
-    return bio;
+    return data;
     
   } catch (error) {
-    console.error('   ⚠️  Erreur scraping bio:', error.message);
-    return null;
+    console.error('   ⚠️  Erreur scraping profile data:', error.message);
+    return { bio: null, fullName: null };
   }
 }
 
@@ -629,16 +627,19 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       return result;
     }
     
-    // Step 2.5: Qualify lead BEFORE clicking contact (while still on profile)
-    // This avoids navigation issues with Instagram's SPA
+    // Step 2.5: Qualify lead and Get Profile Data BEFORE clicking contact
+    if (onProgress) onProgress('scraping_profile', username);
+    
+    // Scrape bio and name while we're still on the profile page
+    const profileData = await scrapeProfileData(newTab);
+    result.steps.push({ step: 'scrape_profile', bio: profileData.bio?.substring(0, 50), fullName: profileData.fullName });
+    result.fullName = profileData.fullName; // Return for DB update
+    
+    // Qualify if enabled
     if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
       if (onProgress) onProgress('qualifying', username);
       
-      // Scrape bio while we're still on the profile page
-      const bio = await scrapeBioFromProfile(newTab);
-      result.steps.push({ step: 'scrape_bio', bio: bio?.substring(0, 100) || null });
-      
-      const qualification = await qualifyLead(bio);
+      const qualification = await qualifyLead(profileData.bio);
       result.steps.push({ step: 'qualify', ...qualification });
       
       if (!qualification.qualified) {
@@ -650,7 +651,25 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
         return result;
       }
       
-      console.log(`      ✅ @${username} qualifié - poursuite outreach`);
+      console.log(`      ✅ @${username} qualifié pour outreach`);
+    }
+
+    // Personalize message with actual name if found
+    if (profileData.fullName) {
+      const actualFirstName = extractFirstName(profileData.fullName, username);
+      const oldFirstName = extractFirstName(null, username); // What we likely used
+      
+      if (actualFirstName !== oldFirstName && actualFirstName !== 'there') {
+        const greetingPattern = /^(Salut|Hello|Hey|Coucou)\s+[^\s,!?]+/;
+        if (greetingPattern.test(message)) {
+          const newMessage = message.replace(greetingPattern, `$1 ${actualFirstName}`);
+          if (newMessage !== message) {
+            console.log(`      ✨ Message personnalisé : "Salut ${actualFirstName}" (au lieu de "${oldFirstName}")`);
+            message = newMessage;
+            result.personalizedName = actualFirstName;
+          }
+        }
+      }
     }
     
     // Step 3: Click "Contacter" button to open DM popup

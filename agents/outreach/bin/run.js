@@ -32,6 +32,7 @@ program
   .option('--live', 'Actually send messages (dangerous!)', false)
   .option('--browser-data <path>', 'Path to browser data directory', './browser-data')
   .option('--min-engagement <score>', 'Minimum engagement score (uses .env default)', parseInt)
+  .option('--simple', 'Send a simple greeting: "Hey [FirstName]!"', false)
   .parse();
 
 const opts = program.opts();
@@ -84,7 +85,8 @@ async function handlePreview() {
     niche: opts.niche,
     topic: opts.topic,
     minEngagementScore: opts.minEngagement,
-    targetStatus: opts.status
+    targetStatus: opts.status,
+    isSimple: opts.simple
   });
   
   console.log('\nTo send these messages, run:');
@@ -110,7 +112,8 @@ async function handleSend() {
     dryRun,
     userDataDir: opts.browserData,
     minEngagementScore: opts.minEngagement,
-    targetStatus: opts.status
+    targetStatus: opts.status,
+    isSimple: opts.simple
   });
   
   console.log('\n--- Results ---');

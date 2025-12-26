@@ -138,7 +138,8 @@ export function generateOutreachMessages(leads, options = {}) {
   const {
     niche = 'fitness',
     topic = 'their goals',
-    customTemplate = null
+    customTemplate = null,
+    isSimple = false
   } = options;
   
   const messages = [];
@@ -147,7 +148,8 @@ export function generateOutreachMessages(leads, options = {}) {
     const generated = generateFirstMessage(lead, lead.comments || [], {
       niche,
       topic,
-      customTemplate
+      customTemplate,
+      isSimple
     });
     
     const validation = validateMessage(generated.message);
@@ -171,7 +173,8 @@ export async function previewOutreach(options = {}) {
   const {
     limit = 5,
     niche = 'fitness',
-    topic = 'their goals'
+    topic = 'their goals',
+    isSimple = false
   } = options;
   
   console.log('\n=== Outreach Preview ===\n');
@@ -185,7 +188,7 @@ export async function previewOutreach(options = {}) {
   
   console.log(`Found ${leads.length} eligible leads:\n`);
   
-  const messages = generateOutreachMessages(leads, { niche, topic });
+  const messages = generateOutreachMessages(leads, { niche, topic, isSimple: options.isSimple });
   
   for (let i = 0; i < messages.length; i++) {
     const { lead, message, template_category, reasoning, validation } = messages[i];
@@ -226,7 +229,8 @@ export async function runOutreach(options = {}) {
     niche = 'fitness',
     topic = 'their goals',
     dryRun = true,
-    userDataDir = './browser-data'
+    userDataDir = './browser-data',
+    isSimple = false
   } = options;
   
   /* DEFENSIVE CODING: Cast params */
@@ -280,7 +284,7 @@ export async function runOutreach(options = {}) {
         console.log(`   Fetched batch of ${leads.length} candidates.`);
 
         // Generate messages for this batch
-        const messages = generateOutreachMessages(leads, { niche, topic });
+        const messages = generateOutreachMessages(leads, { niche, topic, isSimple });
         
         // Handle Invalid Messages: Mark them as failed so we don't infinite loop on them
         const invalidMessages = messages.filter(m => !m.validation.valid);
@@ -371,14 +375,22 @@ export async function runOutreach(options = {}) {
                     batchResults.tabsOpen++;
                     batchResults.details.push(result);
                     
-                    // Mark as pending send
+                    // Mark as pending send and update profile data
                      await loadDatabase();
                      db.prepare(`
                         UPDATE leads SET 
                           status = 'outreach',
-                          dm_url = ?
+                          dm_url = ?,
+                          full_name = COALESCE(?, full_name),
+                          bio = COALESCE(?, bio),
+                          updated_at = datetime('now')
                         WHERE username = ?
-                      `).run(result.dmUrl || null, result.username);
+                      `).run(
+                        result.dmUrl || null, 
+                        result.fullName || null,
+                        result.steps.find(s => s.step === 'scrape_profile')?.bio || null,
+                        result.username
+                      );
                 } else if (result.skipped) {
                     batchResults.skipped++;
                     // UPDATE DB Status so we don't fetch again!

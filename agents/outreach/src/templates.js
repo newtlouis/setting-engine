@@ -151,6 +151,37 @@ export function fillTemplate(template, data) {
 }
 
 /**
+ * Extract first name from full name or username
+ * 
+ * @param {string} fullName - Profile full name
+ * @param {string} username - Instagram username
+ * @returns {string} Extracted first name
+ */
+export function extractFirstName(fullName, username) {
+  if (fullName && fullName.trim().length > 0) {
+    // Split by space, comma, or common separators
+    const nameParts = fullName.trim().split(/[\s,]+/);
+    if (nameParts.length > 0) {
+      const name = nameParts[0];
+      // Basic check: name shouldn't be too long or a weird symbol
+      if (name.length > 2 && name.length < 15 && !/[^a-zA-ZÀ-ÿ\-]/.test(name)) {
+        return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+      }
+    }
+  }
+  
+  // Fallback to username
+  let firstName = username
+    .replace(/[_0-9.]+/g, ' ')
+    .trim()
+    .split(' ')[0];
+  
+  if (!firstName || firstName.length < 2) return 'there'; // Ultra fallback
+  
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+}
+
+/**
  * Generate a personalized first message
  * 
  * @param {Object} lead - Lead data
@@ -163,8 +194,25 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
     niche = 'fitness',
     topic = 'their goals',
     creatorName = null,
-    customTemplate = null
+    customTemplate = null,
+    isSimple = false
   } = options;
+  
+  // Extract first name using improved logic
+  const firstName = extractFirstName(lead.full_name, lead.username);
+
+  // Handle Simple Message Mode
+  if (isSimple) {
+    const message = firstName !== 'there' ? `Hey ${firstName} !` : `Hey !`;
+    return {
+      message,
+      template_id: 'simple_greeting',
+      template_category: 'simple',
+      reasoning: 'Using simple message mode',
+      variables_used: { firstName },
+      needs_review: false
+    };
+  }
   
   // Use custom template if provided
   let selectedTemplate;
@@ -177,13 +225,6 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
   } else {
     selectedTemplate = selectTemplate(lead, comments);
   }
-  
-  // Extract first name from username (full_name removed)
-  let firstName = lead.username
-      .replace(/[_0-9]+/g, ' ')
-      .trim()
-      .split(' ')[0];
-  firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
   
   // Extract pain point from most recent comment
   let painPoint = 'what you mentioned';
