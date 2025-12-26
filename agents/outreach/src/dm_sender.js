@@ -627,50 +627,10 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       return result;
     }
     
-    // Step 2.5: Qualify lead and Get Profile Data BEFORE clicking contact
+    // Step 2.5: Get Profile Data BEFORE clicking contact (while still on profile)
     if (onProgress) onProgress('scraping_profile', username);
-    
-    // Scrape bio and name while we're still on the profile page
     const profileData = await scrapeProfileData(newTab);
-    result.steps.push({ step: 'scrape_profile', bio: profileData.bio?.substring(0, 50), fullName: profileData.fullName });
     result.fullName = profileData.fullName; // Return for DB update
-    
-    // Qualify if enabled
-    if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
-      if (onProgress) onProgress('qualifying', username);
-      
-      const qualification = await qualifyLead(profileData.bio);
-      result.steps.push({ step: 'qualify', ...qualification });
-      
-      if (!qualification.qualified) {
-        result.skipped = true;
-        result.isCompetitor = true;
-        result.error = qualification.reason || 'competitor_detected';
-        console.log(`      🚫 @${username} est un concurrent - outreach annulé`);
-        await newTab.close().catch(() => {});
-        return result;
-      }
-      
-      console.log(`      ✅ @${username} qualifié pour outreach`);
-    }
-
-    // Personalize message with actual name if found
-    if (profileData.fullName) {
-      const actualFirstName = extractFirstName(profileData.fullName, username);
-      const oldFirstName = extractFirstName(null, username); // What we likely used
-      
-      if (actualFirstName !== oldFirstName && actualFirstName !== 'there') {
-        const greetingPattern = /^(Salut|Hello|Hey|Coucou)\s+[^\s,!?]+/;
-        if (greetingPattern.test(message)) {
-          const newMessage = message.replace(greetingPattern, `$1 ${actualFirstName}`);
-          if (newMessage !== message) {
-            console.log(`      ✨ Message personnalisé : "Salut ${actualFirstName}" (au lieu de "${oldFirstName}")`);
-            message = newMessage;
-            result.personalizedName = actualFirstName;
-          }
-        }
-      }
-    }
     
     // Step 3: Click "Contacter" button to open DM popup
     if (onProgress) onProgress('clicking_contact', username);
@@ -694,6 +654,44 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       console.log(`      💬 @${username} already has ${existingCheck.messageCount} message(s) - marking as conversation`);
       await newTab.close().catch(() => {});
       return result;
+    }
+
+    // Step 3.7: NOW qualify lead (after confirmation that we can actually message them)
+    // This ensures we only call OpenAI for leads we can actually contact
+    if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
+      if (onProgress) onProgress('qualifying', username);
+      
+      const qualification = await qualifyLead(profileData.bio);
+      result.steps.push({ step: 'qualify', ...qualification });
+      
+      if (!qualification.qualified) {
+        result.skipped = true;
+        result.isCompetitor = true;
+        result.error = qualification.reason || 'competitor_detected';
+        console.log(`      🚫 @${username} est un concurrent - outreach annulé`);
+        await newTab.close().catch(() => {});
+        return result;
+      }
+      
+      console.log(`      ✅ @${username} qualifié pour outreach`);
+    }
+
+    // Step 3.9: Personalize message with actual name if found
+    if (profileData.fullName) {
+      const actualFirstName = extractFirstName(profileData.fullName, username);
+      const oldFirstName = extractFirstName(null, username); // What we likely used
+      
+      if (actualFirstName !== oldFirstName && actualFirstName !== 'there') {
+        const greetingPattern = /^(Salut|Hello|Hey|Coucou)\s+[^\s,!?]+/;
+        if (greetingPattern.test(message)) {
+          const newMessage = message.replace(greetingPattern, `$1 ${actualFirstName}`);
+          if (newMessage !== message) {
+            console.log(`      ✨ Message personnalisé : "Salut ${actualFirstName}" (au lieu de "${oldFirstName}")`);
+            message = newMessage;
+            result.personalizedName = actualFirstName;
+          }
+        }
+      }
     }
     
     // Step 4: Type message (but DON'T send, DON'T clear - keep it ready)
