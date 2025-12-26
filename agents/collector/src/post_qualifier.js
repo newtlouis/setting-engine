@@ -268,17 +268,37 @@ export async function batchQualifyPosts(page, posts, options = {}) {
 
 /**
  * Load already-scraped posts from tracking file
+ * Returns a Map where key=url, value=timestamp (ms)
  * 
  * @param {string} trackingFile - Path to tracking file
- * @returns {Promise<Set>} Set of already-scraped post URLs
+ * @returns {Promise<Map<string, number>>} Map of scraped info
  */
 export async function loadScrapedPosts(trackingFile) {
   try {
     const data = await fs.readFile(trackingFile, 'utf-8');
-    const scraped = JSON.parse(data);
-    return new Set(scraped.posts || []);
+    const parsed = JSON.parse(data);
+    
+    // Handle legacy format (array of strings)
+    if (Array.isArray(parsed.posts)) {
+      const map = new Map();
+      // If we don't have timestamps, use file modified time or existing last_updated
+      // defaulting to now to prevent immediate re-scrape of everything
+      const defaultTime = parsed.last_updated ? new Date(parsed.last_updated).getTime() : Date.now();
+      
+      parsed.posts.forEach(url => {
+        map.set(url, defaultTime);
+      });
+      return map;
+    }
+    
+    // Handle new format (object: url -> timestamp)
+    if (parsed.posts && typeof parsed.posts === 'object') {
+       return new Map(Object.entries(parsed.posts));
+    }
+    
+    return new Map();
   } catch {
-    return new Set();
+    return new Map();
   }
 }
 
@@ -286,13 +306,26 @@ export async function loadScrapedPosts(trackingFile) {
  * Save scraped posts to tracking file
  * 
  * @param {string} trackingFile - Path to tracking file
- * @param {Set} scrapedPosts - Set of scraped post URLs
+ * @param {Map<string, number>|Set<string>} scrapedPosts - Map of url->timestamp (or legacy Set)
  */
 export async function saveScrapedPosts(trackingFile, scrapedPosts) {
+  let postsObj = {};
+  
+  if (scrapedPosts instanceof Set) {
+    // Convert legacy Set to new format
+    const now = Date.now();
+    for (const url of scrapedPosts) {
+      postsObj[url] = now;
+    }
+  } else if (scrapedPosts instanceof Map) {
+    // Convert Map to Object
+    postsObj = Object.fromEntries(scrapedPosts);
+  }
+
   const data = {
     last_updated: new Date().toISOString(),
-    count: scrapedPosts.size,
-    posts: Array.from(scrapedPosts)
+    count: Object.keys(postsObj).length,
+    posts: postsObj
   };
   
   await fs.writeFile(trackingFile, JSON.stringify(data, null, 2));
@@ -302,11 +335,33 @@ export async function saveScrapedPosts(trackingFile, scrapedPosts) {
  * Filter out already-scraped posts
  * 
  * @param {Array} posts - Array of post objects
- * @param {Set} scrapedPosts - Set of already-scraped post URLs
+ * @param {Map<string, number>|Set<string>} scrapedPosts - Map of url->timestamp
  * @returns {Object} { newPosts: Array, skippedCount: number }
  */
 export function filterAlreadyScraped(posts, scrapedPosts) {
-  const newPosts = posts.filter(post => !scrapedPosts.has(post.post_url));
+  const RE_SCRAPE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  
+  const newPosts = posts.filter(post => {
+    // If using legacy Set
+    if (scrapedPosts instanceof Set) {
+      return !scrapedPosts.has(post.post_url);
+    }
+    
+    // If using new Map
+    if (scrapedPosts.has(post.post_url)) {
+      const lastScraped = scrapedPosts.get(post.post_url);
+      const now = Date.now();
+      // If scraped recently (< 24h), skip it
+      if (now - lastScraped < RE_SCRAPE_INTERVAL_MS) {
+        return false;
+      }
+      // Else (older than 24h), treat as "new" (allow re-scrape)
+      return true;
+    }
+    
+    return true; // Not in history, definitely new
+  });
+
   return {
     newPosts,
     skippedCount: posts.length - newPosts.length

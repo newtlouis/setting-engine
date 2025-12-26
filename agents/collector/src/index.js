@@ -215,8 +215,8 @@ export async function runCollector(config) {
             console.log(`      → No comments found`);
           }
           
-          // Mark post as scraped
-          alreadyScraped.add(post.post_url);
+          // Mark post as scraped (update timestamp)
+          alreadyScraped.set(post.post_url, Date.now());
           
           // Random delay between posts
           const delayMs = CONFIG.MIN_DELAY + Math.random() * (CONFIG.MAX_DELAY - CONFIG.MIN_DELAY);

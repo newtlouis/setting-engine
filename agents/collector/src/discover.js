@@ -177,11 +177,12 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
  * @param {Page} page - Playwright page object
  * @param {string[]} profiles - Array of Instagram profile URLs or usernames
  * @param {number} maxPosts - Maximum NEW posts to collect per profile
- * @param {Set<string>} alreadyScraped - Set of already scraped URLs (optional)
+ * @param {Map<string, number>|Set<string>} alreadyScraped - History of scraped URLs
  * @returns {Promise<Array>} Array of post objects
  */
-export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScraped = new Set()) {
+export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScraped = new Map()) {
   const allPosts = [];
+  const RE_SCRAPE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   for (const profile of profiles) {
     // Extract username from URL or use as-is
@@ -233,7 +234,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
       let consecutiveNoNewPosts = 0;
       let totalProcessedCandidates = 0;
 
-      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring ${alreadyScraped.size} history)`);
+      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring history < 24h)`);
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
         // Extract post links - try multiple methods
@@ -264,10 +265,24 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
            seenUrls.add(cleanLink);
            totalProcessedCandidates++;
 
-           if (alreadyScraped.has(cleanLink) || alreadyScraped.has(link)) {
+           // Check logic
+           let shouldSkip = false;
+           if (alreadyScraped instanceof Map) {
+               if (alreadyScraped.has(cleanLink)) {
+                   const lastScraped = alreadyScraped.get(cleanLink);
+                   if (Date.now() - lastScraped < RE_SCRAPE_INTERVAL_MS) {
+                       shouldSkip = true;
+                   }
+               }
+           } else if (alreadyScraped.has(cleanLink)) {
+               shouldSkip = true;
+           }
+
+           if (shouldSkip) {
              continue; // Skip history
            }
 
+           // Check limit
            if (posts.length >= maxPosts) break;
            
            posts.push({
@@ -282,7 +297,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
             newAddedThisScroll++;
         }
         
-        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${newAddedThisScroll} NEW posts (Status: ${posts.length}/${maxPosts} collected, Processed ${totalProcessedCandidates} links)`);
+        console.log(`      → Scroll ${scrollAttempts + 1}: Found ${newAddedThisScroll} new/re-scraphable posts (Status: ${posts.length}/${maxPosts} collected, Processed ${totalProcessedCandidates} links)`);
 
         if (posts.length >= maxPosts) {
             console.log(`      ✨ Goal reached: ${posts.length} new posts.`);
