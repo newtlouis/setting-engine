@@ -18,133 +18,126 @@ import { CONFIG } from './config.js';
  * @param {Page} page - Playwright page object
  * @returns {Promise<boolean>} True if sort was changed successfully
  */
+/**
+ * Sort comments by "Most Recent" / "Les plus récents"
+ * This ensures we get the freshest leads first
+ * 
+ * @param {Page} page - Playwright page object
+ * @returns {Promise<boolean>} True if sort was changed successfully
+ */
 async function sortCommentsByRecent(page) {
   try {
     console.log(`      → Looking for sort dropdown...`);
     
-    // Try using Playwright's locator API for more reliable clicking
-    // Look for the dropdown trigger containing sort text
+    // STRATEGY: Find the sort button using the robust `aria-haspopup="menu"` attribute
+    // User provided HTML confirms: <div aria-expanded="false" aria-haspopup="menu" role="button" ...>
+    // This is much safer than generic text matching which might hit "Suggested for you" headers.
+
+    let dropdownTrigger = null;
     
-    // Method 1: Try clicking on text "Les plus récents" or "Pour vous" (the current sort selection)
-    const sortTexts = ['Les plus récents', 'Pour vous', 'Most recent', 'For you'];
-    let dropdownOpened = false;
+    // 1. Selector based on aria-haspopup (Standard Instagram Sort Button)
+    // We look for this specific role AND containing one of our keywords or the chevron
+    const triggerTexts = ['Pour vous', 'For you', 'Most relevant', 'Pertinence', 'Plus récents', 'Most recent'];
     
-    for (const sortText of sortTexts) {
-      try {
-        // Find a clickable element containing this text
-        const locator = page.locator(`[role="button"]:has-text("${sortText}")`).first();
-        const isVisible = await locator.isVisible({ timeout: 2000 }).catch(() => false);
+    // Try to find the button specifically
+    const candidateButtons = page.locator('div[aria-haspopup="menu"][role="button"], button[aria-haspopup="menu"]');
+    const count = await candidateButtons.count();
+    
+    console.log(`      → Found ${count} buttons with popup menu`);
+
+    for (let i = 0; i < count; i++) {
+        const btn = candidateButtons.nth(i);
+        const text = await btn.textContent();
+        // Check if it contains relevant text OR has the chevron icon
+        const hasChevron = await btn.locator('svg[aria-label*="chevron"], svg[aria-label*="Chevron"]').count() > 0;
         
-        if (isVisible) {
-          console.log(`      → Found sort button with text: "${sortText}"`);
-          await locator.click({ timeout: 3000 });
-          dropdownOpened = true;
-          await delay(1500);
-          break;
-        }
-      } catch (e) {
-        // Try next text
-        continue;
-      }
-    }
-    
-    // Method 2: If no text found, try finding by chevron icon
-    if (!dropdownOpened) {
-      try {
-        const chevronButton = page.locator('[aria-haspopup="menu"]:has(svg)').first();
-        const isVisible = await chevronButton.isVisible({ timeout: 2000 }).catch(() => false);
+        // Check for text match
+        const matchesText = triggerTexts.some(t => text.includes(t));
         
-        if (isVisible) {
-          const buttonText = await chevronButton.textContent();
-          if (buttonText && (buttonText.includes('récent') || buttonText.includes('vous') || 
-                            buttonText.includes('recent') || buttonText.includes('you'))) {
-            console.log(`      → Found sort button via aria-haspopup`);
-            await chevronButton.click({ timeout: 3000 });
-            dropdownOpened = true;
-            await delay(1500);
-          }
+        if (matchesText || hasChevron) {
+            dropdownTrigger = btn;
+            console.log(`      → Identified sort trigger (Has text: ${matchesText}, Has chevron: ${hasChevron})`);
+            break;
         }
-      } catch (e) {
-        // Continue
-      }
     }
-    
-    if (!dropdownOpened) {
-      console.log(`      → Sort dropdown not found on this post`);
-      return false;
+
+    // 2. Fallback: If no aria-haspopup found (structure change?), strictly look for text in a button
+    if (!dropdownTrigger) {
+         console.log(`      → aria-haspopup strategy failed, trying strict text match...`);
+         for (const text of triggerTexts) {
+            const el = page.locator(`:is(button, div[role="button"]):has-text("${text}")`).first();
+            if (await el.count() > 0) {
+                dropdownTrigger = el;
+                break;
+            }
+         }
     }
-    
-    // Now click on "Les plus récents" in the dropdown menu
-    console.log(`      → Dropdown opened, looking for "Most recent" option...`);
-    
-    // Wait a bit more for menu to fully render
-    await delay(1000);
-    
-    // Try to click "Les plus récents" / "Most recent" option
-    const recentTexts = ['Les plus récents', 'Most recent'];
+
+    if (!dropdownTrigger) {
+        console.log(`      ⚠️  Sort trigger not found.`);
+    } else {
+        // Ensure it's in view - User suspected scrolling issue
+        try {
+            await dropdownTrigger.scrollIntoViewIfNeeded();
+        } catch (e) {
+            // If scrollIntoViewIfNeeded not supported or fails, try generic evaluate
+            await dropdownTrigger.evaluate(el => el.scrollIntoView({ block: 'center' }));
+        }
+        
+        await delay(500);
+        
+        // Check visibility handling
+        if (await dropdownTrigger.isVisible()) {
+             await dropdownTrigger.click();
+             await delay(1500); // Wait for menu to appear
+        } else {
+             console.log(`      ⚠️  Trigger found but not visible even after scroll.`);
+             // Force click via evaluate as last resort
+             await dropdownTrigger.evaluate(el => el.click());
+             await delay(1500);
+        }
+    }
+
+    // NOW FIND "Most recent" / "Les plus récents" in the menu
+    // The menu is usually a separate layer at the end of DOM
+    const recentOptions = ['Les plus récents', 'Most recent', 'Newest'];
     let optionClicked = false;
-    
-    for (const recentText of recentTexts) {
-      try {
-        // Look for the menu item - it should be a role="button" that appeared after clicking
-        const menuItem = page.locator(`[role="button"]:has-text("${recentText}")`);
-        const count = await menuItem.count();
+
+    for (const opt of recentOptions) {
+        // Look for the specific menu item
+        const menuOption = page.locator(`div[role="button"], div[role="menuitem"], span`).filter({ hasText: opt }).last();
         
-        // There might be multiple matches - the dropdown trigger and the menu option
-        // Click the second one (index 1) if it exists, otherwise the first
-        if (count > 1) {
-          await menuItem.nth(1).click({ timeout: 3000 });
-          optionClicked = true;
-          console.log(`      ✅ Clicked "${recentText}" (menu option)`);
-          break;
-        } else if (count === 1) {
-          // Check if this is already showing as selected (might not need to click)
-          const element = menuItem.first();
-          const hasCheckmark = await element.locator('svg polyline, svg path').count() > 0;
-          if (!hasCheckmark) {
-            await element.click({ timeout: 3000 });
-            optionClicked = true;
-            console.log(`      ✅ Clicked "${recentText}"`);
-            break;
-          } else {
-            console.log(`      → "${recentText}" already selected`);
+        if (await menuOption.isVisible().catch(() => false)) {
+            console.log(`      → Found option "${opt}", clicking...`);
+            await menuOption.click();
             optionClicked = true;
             break;
-          }
         }
-      } catch (e) {
-        continue;
-      }
     }
-    
+
     if (!optionClicked) {
-      // Try clicking by evaluating in page context as fallback
-      const clicked = await page.evaluate(() => {
-        const allButtons = document.querySelectorAll('[role="button"]');
-        for (const btn of allButtons) {
-          const text = btn.textContent.trim();
-          if (text === 'Les plus récents' || text === 'Most recent') {
-            btn.click();
-            return true;
-          }
-        }
-        return false;
-      });
-      
-      if (clicked) {
-        console.log(`      ✅ Clicked "Most recent" via evaluate`);
-        optionClicked = true;
-      }
+        console.log(`      → "Most recent" option not visible, trying fallback (evaluate click)...`);
+        optionClicked = await page.evaluate(() => {
+            const all = document.querySelectorAll('span, div');
+            for (const el of all) {
+                if (el.textContent === 'Les plus récents' || el.textContent === 'Most recent') {
+                    el.click();
+                    return true;
+                }
+            }
+            return false;
+        });
     }
-    
+
     if (optionClicked) {
-      await delay(2000); // Wait for comments to reload
-      return true;
+        console.log(`      ✅ Clicked "Most recent"`);
+        await delay(2000); // Verify reload
+        return true;
     }
-    
-    // Close dropdown by pressing Escape or clicking elsewhere
-    await page.keyboard.press('Escape').catch(() => {});
-    console.log(`      → Could not select "Most recent" option`);
+
+    console.log(`      ⚠️  Could not select "Most recent" (maybe already active?)`);
+    // Close menu if open by clicking body
+    await page.mouse.click(10, 10).catch(() => {});
     return false;
 
   } catch (error) {
@@ -238,18 +231,60 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
     // Click "View more comments" / "View replies" buttons
     console.log(`      → Clicking load-more buttons...`);
     const clicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+      // Select buttons that might be "Load more"
+      // Exclude buttons near the top (header) to avoid options menu
+      const buttons = Array.from(document.querySelectorAll('div[role="button"], button'));
       let count = 0;
       
       for (const btn of buttons) {
-        const text = btn.textContent.toLowerCase();
-        if (text.includes('view') || 
-            text.includes('more') || 
-            text.includes('comment') ||
-            text.includes('repl') ||
-            text.includes('voir') ||
-            text.includes('afficher')) {
+        const text = btn.textContent.toLowerCase().trim();
+        const label = btn.getAttribute('aria-label') || '';
+        
+        // SKIP: Options menu, Share, Save, etc.
+        if (text === '' && !label) continue; // Skip empty buttons (likely icons without label)
+        if (label.includes('option') || label.includes('more') || label.includes('plus')) {
+            // "More options" usually has this label. 
+            // BUT "View more comments" might also have "more".
+            // We need to distinguish.
+            
+            // The options menu usually has an SVG child
+            if (btn.querySelector('svg')) {
+                // Determine if it's the 3-dots menu
+                // usually distinct from text-based "View more comments"
+                const svgTitle = btn.querySelector('title')?.textContent || '';
+                if (svgTitle.includes('option') || svgTitle.includes('more')) continue;
+                
+                // If it's just an icon button with "More options" label, skip
+                if (label.toLowerCase().includes('option')) continue;
+            }
+        }
+
+        // TEXT MATCHING: Be more specific
+        // Must contain "view" or "voir" or "afficher" AND "comment" or "repl" or "répon"
+        // OR be exactly "View more" / "Voir plus" in the context of comments
+        const isLoadMore = (
+            (text.includes('view') || text.includes('voir') || text.includes('afficher')) &&
+            (text.includes('comment') || text.includes('repl') || text.includes('répon'))
+        ) || (
+            // Sometimes just "View more" (replies)
+           (text === 'view more' || text === 'voir plus') 
+        ) || (
+            // Plus symbol often used for replies
+            text.includes('+') && (text.includes('repl') || text.includes('répon'))
+        );
+
+        // EXTRA SAFEGUARDS
+        if (text.includes('option')) continue;
+        if (text.includes('share')) continue;
+        if (text.includes('save')) continue;
+        if (text.includes('report')) continue;
+        if (text.includes('signaler')) continue;
+        if (text.includes('partager')) continue;
+
+        if (isLoadMore) {
           try {
+            // Scroll into view to avoid clicks being intercepted
+            btn.scrollIntoView({ block: 'center', inline: 'center' });
             btn.click();
             count++;
             if (count >= 12) break;
