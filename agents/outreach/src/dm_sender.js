@@ -438,93 +438,81 @@ export async function scrapeProfileData(page) {
       
       // Helper to validate if a string looks like a real name
       function isValidName(text) {
-        if (!text || text.length < 2 || text.length > 30) return false;
+        if (!text || text.length < 2 || text.length > 40) return false; // Allowed slightly longer names
         // Should not have numbers (unless it's like "3rd") but Instagram names usually don't have digits if they are real names
-        if (/\d/.test(text)) return false;
+        // Relaxed rule: allow some digits if complex, but generally avoid stats
+        if (/^\d+$/.test(text) || text.includes('followers')) return false;
         // Should not contain @
         if (text.includes('@')) return false;
         // Should not be a common UI button text
-        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis)$/i.test(text)) return false;
-        // Should not be stats
-        if (/^\d+/.test(text)) return false;
+        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner)$/i.test(text)) return false;
         return true;
       }
 
-      // Strategy 1: Find name in specific location (User provided structure)
-      // We look for span[dir="auto"] in the typical name location within header
-      const header = document.querySelector('header');
-      if (header) {
-        const allSpans = Array.from(header.querySelectorAll('span[dir="auto"]'));
-        
-        // Filter potential names
-        const nameCandidates = allSpans.map(s => s.textContent.trim()).filter(text => {
-           return isValidName(text) && 
-                  !text.includes('followers') && 
-                  !text.includes('following') &&
-                  !text.includes('posts');
-        });
-
-        // The name is usually the first "valid" text that appears in the header (before bio)
-        // or specifically in the h1 area if structure allows
-        if (nameCandidates.length > 0) {
-           // Heuristic: The name is often the shortest valid string that isn't a UI element
-           // But bio is also often in span[dir="auto"].
-           // Usually Name comes BEFORE Bio in DOM order.
-           foundFullName = nameCandidates[0];
-        }
-
-        // Also try standard H1/H2 as strong signals
-        const nameEl = header.querySelector('h1:not([class*="x"])') || 
-                       header.querySelector('h2') || 
-                       header.querySelector('section > div:first-child > span');
-                       
-        if (nameEl) {
-           const hText = nameEl.textContent.trim();
-           if (isValidName(hText)) {
-             foundFullName = hText;
-           }
-        }
-        
-        // Scraping Bio (remaining logic)
-        const potentialBios = allSpans.map(s => s.textContent.trim()).filter(text => {
-            // Bio is usually longer than name
-            return text.length > 5 && 
-                   text !== foundFullName && 
-                   !/^(followers?|following|posts?|abonnés?|abonnements?|publications?)$/i.test(text) &&
-                   !/^\d/.test(text); // No stats
-        });
-        
-        if (potentialBios.length > 0) {
-          // Take the longest text as the bio
-          const longestText = potentialBios.reduce((a, b) => a.length >= b.length ? a : b);
-          if (longestText.length >= 10) foundBio = longestText.substring(0, 300);
-        }
-      }
+      // STRATEGY 1: Targeted Name Element (User Request)
+      // The user indicated the name is often in a specific span with dir="auto"
+      // We look for spans that are likely the "Name" field:
+      // - Inside header
+      // - Separate from the bio
+      // - Often bold or distinct
       
-      // Strategy 2: Try specific Instagram classes
-      if (!foundBio || !foundFullName) {
-        const bioSection = document.querySelector('section.xqui205') || 
-                          document.querySelector('header section') ||
-                          document.querySelector('div[id="mount_0_0_"] main section');
-        if (bioSection) {
-          if (!foundFullName) {
-            const nameEl = bioSection.querySelector('h1') || bioSection.querySelector('h2');
-            if (nameEl) foundFullName = nameEl.textContent.trim();
+      const header = document.querySelector('main header') || document.querySelector('header');
+      
+      if (header) {
+          // 1. Look for the span that is explicitly the name (often h1's child or sibling)
+          // Try H1 first - technically Instagram puts username in H2 and Real Name in span usually, but varies.
+          
+          // Capture all standard text spans in header
+          const allSpans = Array.from(header.querySelectorAll('span[dir="auto"]'));
+          
+          // Filter candidate spans
+          const candidates = allSpans
+              .map(s => s.textContent.trim())
+              .filter(text => isValidName(text));
+              
+          // HEURISTIC: The "Real Name" is usually the FIRST valid text span in the header content
+          // (Username is often in an H2 or distinct element)
+          if (candidates.length > 0) {
+              // The bio is usually longer. The name is usually short (2-3 words).
+              // We pick the first candidate that isn't clearly a bio (long paragraph)
+              
+              for (const c of candidates) {
+                  // If it's short and looks like a name
+                  if (c.length < 50 && !c.includes('\n')) {
+                      foundFullName = c;
+                      break; // Found it
+                  }
+              }
           }
           
-          if (!foundBio) {
-            const bioEl = bioSection.querySelector('span._ap3a._aaco._aacu._aacx._aad7._aade[dir="auto"]') ||
-                          bioSection.querySelector('span[dir="auto"] div[role="button"] span') ||
-                          bioSection.querySelector('h1')?.parentElement?.nextElementSibling?.querySelector('span');
-            if (bioEl) foundBio = bioEl.textContent.trim().substring(0, 500);
+          // If we found a name, try to distinguish Bio (appearing after name)
+          if (foundFullName) {
+               const bioCandidates = candidates.filter(c => c !== foundFullName && c.length > 5);
+               // Pick the longest remaining one as Bio
+               if (bioCandidates.length > 0) {
+                   foundBio = bioCandidates.reduce((a, b) => a.length > b.length ? a : b);
+               }
           }
-        }
       }
       
+      // Fallback: Generic Meta tags
+      if (!foundFullName) {
+         // Sometimes meta tags have it: "Name (@username) • Instagram photos"
+         const metaTitle = document.querySelector('meta[property="og:title"]')?.content;
+         if (metaTitle) {
+             const match = metaTitle.match(/^(.+?)\s+\(@/);
+             if (match && isValidName(match[1])) {
+                 foundFullName = match[1];
+             }
+         }
+      }
+
       return { bio: foundBio, fullName: foundFullName };
     });
     
     if (data.fullName) console.log(`   👤 Nom trouvé : "${data.fullName}"`);
+    else console.log(`   👤 Nom non trouvé (sera fallback sur username)`);
+    
     if (data.bio) console.log(`   📋 Bio trouvée (${data.bio.length} chars)`);
     
     return data;
