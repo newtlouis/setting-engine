@@ -37,10 +37,15 @@ export const CONFIG = {
     // Profile page - "Contacter" button (FR) or "Message" button (EN)
     // This button opens the DM popup directly from the profile
     CONTACT_BUTTON: [
-      'div[role="button"]:has-text("Contacter")',  // French
-      'div[role="button"]:has-text("Message")',     // English
-      'button:has-text("Contacter")',
-      'button:has-text("Message")'
+      'main header div[role="button"]:has-text("Contacter")',  // French (scoped to profile header)
+      'main header div[role="button"]:has-text("Message")',    // English
+      'main header button:has-text("Contacter")',
+      'main header button:has-text("Message")',
+       // Fallback for some layouts (mobile/responsive) where header might be different but still in main
+      'main div[role="button"]:has-text("Contacter")',
+      'main div[role="button"]:has-text("Message")',
+      'main button:has-text("Contacter")',
+      'main button:has-text("Message")'
     ],
     
     // DM popup - contenteditable message input

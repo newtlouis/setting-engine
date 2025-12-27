@@ -371,10 +371,23 @@ export async function goToProfile(page, username, targetUrl = null) {
     const { canContact } = await checkCanContact(page);
     
     if (!canContact) {
+      if (isPrivate) {
+         return { success: true, canContact: false, error: 'private_account_no_contact' };
+      }
+
+      // If Public but no contact button
+      // Check if we see "Follow" to confirm page structure is valid (and we are not just seeing a blank page)
+      const hasFollowButton = await page.$('button:has-text("Follow"), button:has-text("Suivre"), button:has-text("S’abonner")').catch(() => null);
+      
+      if (hasFollowButton) {
+          console.log(`      ℹ️  Profile is Public but likely settings prevent generic messaging (No Contact button).`);
+          return { success: true, canContact: false, error: 'public_no_contact_button' };
+      }
+
       return { 
         success: true, 
         canContact: false, 
-        error: isPrivate ? 'private_account_no_contact' : 'no_contact_button'
+        error: 'no_contact_button'
       };
     }
     
