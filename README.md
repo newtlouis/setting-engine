@@ -49,16 +49,10 @@ cd ../dmresponder && npm install
 npx playwright install chromium
 ```
 
-### 2. Configure Auto-Login
+### 2. Connect Your Account
 
-Run the setup script in the collector directory to securely store your credentials:
-
-```bash
-cd agents/collector
-./setup-autologin.sh
-cd agents/collector
-./setup-autologin.sh
-```
+The system uses a **real browser** (Playwright) to interact with Instagram safely.
+On the first run (for each profile), you will need to log in manually. The session will be saved for future runs.
 
 ### 3. Multi-Account Support (Optional)
 
