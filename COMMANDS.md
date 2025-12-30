@@ -16,6 +16,25 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 
 ---
 
+## 🎭 Gestion Multi-Comptes (Nouveau)
+
+Le système supporte désormais l'utilisation de plusieurs comptes Instagram en parallèle sans conflit de cookies/session.
+Utilisez simplement l'option `--profile <nom>` sur le Collector et l'Outreach.
+
+**Exemple :**
+```bash
+# Pour le compte "lifestyle"
+npm run scrape -- --profile lifestyle -t yoga
+npm run send -- --profile lifestyle
+
+# Pour le compte "business"
+npm run scrape -- --profile business -t marketing
+npm run send -- --profile business
+```
+Chaque profil possède son propre dossier de données (`browser-data-<nom>`). La première fois, vous devrez vous connecter manuellement pour chaque profil.
+
+---
+
 ## 🤖 Détail des Agents & Options
 
 ### 1. Dashboard (Interface Visuelle)
@@ -39,11 +58,16 @@ npm run scrape -- -p https://instagram.com/competitor_profile/ --max-posts 50
 ```
 
 **Options Principales :**
+- `--profile <nom>` : **Nouveau**. Utilise un profil de navigateur spécifique (ex: `compte1`).
 - `-t, --hashtags <tags>` : Hashtags à cibler.
 - `-p, --profiles <urls>` : Profils concurrents à analyser.
 - `--max-posts <n>` : Nombre max de posts à scanner.
 - `--max-comments <n>` : Nombre max de commentaires à récupérer par post (défaut: 50).
 - `--scrape-profiles` : Active le scan approfondi des profils trouvés (plus lent mais plus riche).
+
+✅ **Améliorations récentes :**
+- **Résolution Interactive** : Si un CAPTCHA apparaît, le script se met en pause et sonne pour vous laisser le résoudre manuellement.
+- **Détection Intelligente** : Ignore automatiquement les posts déjà scrapés (même session ou précédent).
 
 ---
 
@@ -63,10 +87,18 @@ npm run send -- --status failed_outreach --limit 5
 ```
 
 **Options Principales :**
-- `--limit <n>` : Nombre max de messages à envoyer (le script s'arrête une fois atteint ou si plus de leads).
+- `--profile <nom>` : **Nouveau**. Utilise le profil spécifié pour l'envoi.
+- `--limit <n>` : Nombre max de messages à envoyer.
+- `--simple` : **Nouveau**. Envoie un message court ("Hey Prénom !") au lieu des templates complexes.
 - `--status <s_status>` : Filtrer les leads par statut (`new`, `failed`, `qualified`, etc.). Défaut: `new`.
-- `--preview` : Mode simulation (ne lance pas le navigateur, affiche juste le plan).
-- `--live` : Confirme l'envoi réel des messages (requis si pas en mode preview).
+- `--preview` : Mode simulation (ne lance pas le navigateur).
+- `--live` : Confirme l'envoi réel.
+
+✅ **Améliorations récentes :**
+- **Gestion "Pas de Contact"** : Détecte et ignore proprement les profils publics sans bouton "Contacter/Message".
+- **Comptes Privés** : Ne tente plus d'ouvrir les DMs des comptes privés non suivis (évite les erreurs).
+- **Extraction Prénom** : Cherche d'abord le "Vrai Nom" dans la bio avant d'utiliser le username.
+- **Pause Challenge** : Comme le collector, se met en pause si Instagram demande une vérification.
 
 ---
 

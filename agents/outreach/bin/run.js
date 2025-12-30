@@ -31,6 +31,7 @@ program
   .option('-t, --topic <topic>', 'Topic to reference in messages', 'their goals')
   .option('--live', 'Actually send messages (dangerous!)', false)
   .option('--browser-data <path>', 'Path to browser data directory', './browser-data')
+  .option('--profile <name>', 'Browser profile name (auto-sets browser-data path)')
   .option('--min-engagement <score>', 'Minimum engagement score (uses .env default)', parseInt)
   .option('--simple', 'Send a simple greeting: "Hey [FirstName]!"', false)
   .parse();
@@ -104,13 +105,20 @@ async function handleSend() {
     console.log('Messages will be sent to Instagram users.');
     console.log('This action is irreversible.\n');
   }
+
+  // Handle Profile logic
+  let userDataDir = opts.browserData;
+  if (opts.profile) {
+      userDataDir = `./browser-data-${opts.profile}`;
+      console.log(`👤 Using Browser Profile: ${opts.profile} (${userDataDir})`);
+  }
   
   const results = await runOutreach({
     limit: opts.limit,
     niche: opts.niche,
     topic: opts.topic,
     dryRun,
-    userDataDir: opts.browserData,
+    userDataDir: userDataDir,
     minEngagementScore: opts.minEngagement,
     targetStatus: opts.status,
     isSimple: opts.simple

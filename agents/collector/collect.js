@@ -35,12 +35,16 @@ function runCommand(command, args = []) {
   return new Promise((resolve, reject) => {
     console.log(`\n${'─'.repeat(60)}`);
     console.log(`▶ Running: ${command} ${args.join(' ')}`);
+    if (process.env.IG_PROFILE) {
+        console.log(`   (Profile: ${process.env.IG_PROFILE})`);
+    }
     console.log('─'.repeat(60));
     
     const proc = spawn(command, args, {
       cwd: __dirname,
       stdio: 'inherit',
-      shell: true
+      shell: true,
+      env: { ...process.env } // Explicitly pass env
     });
     
     proc.on('close', (code) => {
@@ -104,9 +108,18 @@ async function main() {
     .option('--only-build', 'Only build Excel from existing database')
     .option('--only-profiles', 'Only scrape profiles for leads missing profile data')
     
+    // Multi-account support
+    .option('--profile <name>', 'Browser profile name (creates separate session data)')
+
     .parse();
 
   const options = program.opts();
+  
+  // Set profile env var if provided
+  if (options.profile) {
+      process.env.IG_PROFILE = options.profile;
+      console.log(`👤 Using Browser Profile: ${options.profile}`);
+  }
   
   console.log('\n🚀 Instagram Lead Collection Pipeline');
   console.log('=====================================\n');

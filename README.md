@@ -56,9 +56,21 @@ Run the setup script in the collector directory to securely store your credentia
 ```bash
 cd agents/collector
 ./setup-autologin.sh
+cd agents/collector
+./setup-autologin.sh
 ```
 
-### 3. Run Your First Scrape (Collector)
+### 3. Multi-Account Support (Optional)
+
+You can manage multiple Instagram accounts by using the `--profile` flag. This creates separate browser sessions for each account.
+
+```bash
+# Run with a specific profile name (e.g., 'lifestyle')
+npm run scrape -- --profile lifestyle -t fitness
+npm run send -- --profile lifestyle
+```
+
+### 4. Run Your First Scrape (Collector)
 
 ```bash
 npm run scrape -- --hashtags fitness --target-prospects 20
