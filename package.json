@@ -15,7 +15,8 @@
         "send": "cd agents/outreach && npm run send",
         "reply": "cd agents/dmresponder && npm run reply",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
-        "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser"
+        "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
+        "backup": "node agents/collector/scripts/backup.js"
     },
     "author": "Louis",
     "license": "ISC",

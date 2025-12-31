@@ -135,3 +135,47 @@ npm run db:admin
 ```
 - Ouvre une interface web sur `http://localhost:8081`.
 - Vous pouvez exécuter des requêtes SQL, supprimer des lignes, ou exporter des données.
+
+---
+
+### 6. Backup (Sauvegarde)
+Sauvegarde vos données critiques (base SQLite, config) en local et/ou sur Google Drive.
+
+**Exemples :**
+```bash
+# Backup local uniquement
+cd agents/collector && node scripts/backup.js
+
+# Backup + upload vers Google Drive
+node scripts/backup.js --upload
+
+# Garder 14 backups au lieu de 7
+node scripts/backup.js --upload --keep 14
+```
+
+**Options :**
+- `--upload` : Upload le backup vers Google Drive via rclone.
+- `--keep <n>` : Nombre de backups à conserver (défaut: 7). Les plus anciens sont supprimés automatiquement.
+
+**Fichiers sauvegardés :**
+- `permanent-data/leads.db` (+ fichiers WAL/SHM)
+- `permanent-data/scraped_posts.json`
+- `.env`
+
+**Configuration Google Drive (une seule fois) :**
+```bash
+# Installer rclone
+brew install rclone
+
+# Configurer le remote "gdrive"
+rclone config
+# Suivre les instructions pour Google Drive
+```
+
+**Automatisation (cron) :**
+Pour lancer le backup tous les soirs à 2h :
+```bash
+crontab -e
+# Ajouter :
+0 2 * * * cd /chemin/vers/agents/collector && node scripts/backup.js --upload >> /tmp/backup.log 2>&1
+```

@@ -61,3 +61,11 @@ permanent-data/
 tmp/
 temp/
 *.tmp
+
+# SQLite temporary files
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Backups
+backups/
