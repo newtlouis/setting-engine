@@ -47,7 +47,8 @@ export async function getOutreachCandidates(options = {}) {
   const {
     limit = 10,
     minEngagementScore = OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE,
-    targetStatus = 'new'
+    targetStatus = 'new',
+    accountId = null
   } = options;
   
   await loadDatabase();
@@ -73,6 +74,12 @@ export async function getOutreachCandidates(options = {}) {
   `;
   
   const params = [cleanMinScore];
+
+  // Account Filtering
+  if (accountId) {
+    query += " AND l.account_id = ?";
+    params.push(accountId);
+  }
   
   // Status Filtering
   if (targetStatus === 'new') {
@@ -213,13 +220,18 @@ export async function previewOutreach(options = {}) {
  */
 export async function runOutreach(options = {}) {
   const {
-    limit = CONFIG.MAX_DMS_PER_SESSION,
-    niche = 'fitness',
     topic = 'their goals',
     dryRun = true,
     userDataDir = './browser-data',
-    isSimple = false
+    isSimple = false,
+    profile = process.env.IG_PROFILE || 'default'
   } = options;
+  
+  await loadDatabase();
+  const account = dbFunctions.getOrCreateAccount(profile);
+  const accountId = account.id;
+  
+  userDataDir = path.join(path.dirname(userDataDir), `browser-data-${profile}`);
   
   /* DEFENSIVE CODING: Cast params */
   const cleanLimit = Number(limit) || 10;
@@ -261,7 +273,7 @@ export async function runOutreach(options = {}) {
         const leads = await getOutreachCandidates({ 
             ...options, 
             limit: fetchLimit,
-            // excludeContacted is handled by targetStatus in options
+            accountId: accountId
         });
 
         if (leads.length === 0) {
@@ -457,17 +469,28 @@ export async function runOutreach(options = {}) {
 /**
  * Get outreach statistics
  */
-export async function getOutreachStats() {
+export async function getOutreachStats(accountId = null) {
   await loadDatabase();
   
+  const accountFilter = accountId ? ' AND account_id = ?' : '';
+  const accountParam = accountId ? [accountId] : [];
+  
   const stats = {
-    total_leads: db.prepare('SELECT COUNT(*) as count FROM leads WHERE is_ignored = 0').get().count,
-    new_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'new' AND is_ignored = 0").get().count,
-    contacted_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'contacted' AND is_ignored = 0").get().count,
-    replied_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'replied' AND is_ignored = 0").get().count,
+    total_leads: db.prepare('SELECT COUNT(*) as count FROM leads WHERE is_ignored = 0' + accountFilter).get(...accountParam).count,
+    new_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'new' AND is_ignored = 0" + accountFilter).get(...accountParam).count,
+    contacted_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'contacted' AND is_ignored = 0" + accountFilter).get(...accountParam).count,
+    replied_leads: db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'replied' AND is_ignored = 0" + accountFilter).get(...accountParam).count,
     
-    messages_sent: db.prepare("SELECT COUNT(*) as count FROM conversations c JOIN leads l ON c.lead_id = l.id WHERE c.role = 'assistant' AND l.is_ignored = 0").get().count,
-    messages_received: db.prepare("SELECT COUNT(*) as count FROM conversations c JOIN leads l ON c.lead_id = l.id WHERE c.role = 'user' AND l.is_ignored = 0").get().count,
+    messages_sent: db.prepare(`
+      SELECT COUNT(*) as count FROM conversations c 
+      JOIN leads l ON c.lead_id = l.id 
+      WHERE c.role = 'assistant' AND l.is_ignored = 0 ${accountFilter ? 'AND l' + accountFilter : ''}
+    `).get(...accountParam).count,
+    messages_received: db.prepare(`
+      SELECT COUNT(*) as count FROM conversations c 
+      JOIN leads l ON c.lead_id = l.id 
+      WHERE c.role = 'user' AND l.is_ignored = 0 ${accountFilter ? 'AND l' + accountFilter : ''}
+    `).get(...accountParam).count,
     
     min_engagement_threshold: OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE,
     
@@ -477,14 +500,16 @@ export async function getOutreachStats() {
         AND is_ignored = 0
         AND engagement_score >= ?
         AND (is_private IS NULL OR is_private = 0)
-    `).get(OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE).count,
+        ${accountFilter}
+    `).get(OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE, ...accountParam).count,
     
     by_engagement: db.prepare(`
       SELECT warmth as level, COUNT(*) as count 
       FROM leads 
       WHERE status = 'new' AND is_ignored = 0
+      ${accountFilter}
       GROUP BY warmth
-    `).all()
+    `).all(...accountParam)
   };
   
   return stats;

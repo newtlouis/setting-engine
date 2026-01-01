@@ -1,12 +1,44 @@
 let selectedLeads = new Set();
 let currentLeads = []; // Track currently visible leads for "Select All"
+let currentAccountId = null; // Selected account filter
+let currentFilter = 'new';
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
+    loadAccounts();
     loadBookings();
     loadStats();
     loadLeads('new');
 });
+
+// Load Accounts
+async function loadAccounts() {
+    const select = document.getElementById('accountSelect');
+    try {
+        const res = await fetch('/api/accounts');
+        const accounts = await res.json();
+        
+        // Clear and repopulate
+        select.innerHTML = '<option value="">Tous les comptes</option>';
+        accounts.forEach(acc => {
+            if (acc.id) {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = acc.name;
+                select.appendChild(opt);
+            }
+        });
+    } catch (e) {
+        console.error('Accounts load error', e);
+    }
+}
+
+// Account change handler
+function onAccountChange(accountId) {
+    currentAccountId = accountId || null;
+    loadStats();
+    loadLeads(currentFilter);
+}
 
 // Load Bookings (Dedicated Section)
 async function loadBookings() {
@@ -78,7 +110,8 @@ async function toggleBooking(username, completed) {
 // Load Stats
 async function loadStats() {
     try {
-        const res = await fetch('/api/stats');
+        const params = currentAccountId ? `?account_id=${currentAccountId}` : '';
+        const res = await fetch('/api/stats' + params);
         const data = await res.json();
         
         document.getElementById('stat-new').textContent = data.new;
@@ -118,7 +151,11 @@ async function loadLeads(filter) {
     clearSelection();
 
     try {
-        const res = await fetch(`/api/leads?status=${filter}&limit=100`);
+        let url = `/api/leads?status=${filter}&limit=100`;
+        if (currentAccountId) {
+            url += `&account_id=${currentAccountId}`;
+        }
+        const res = await fetch(url);
         const leads = await res.json();
         currentLeads = leads; // Store for Select All
         

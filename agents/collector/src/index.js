@@ -13,6 +13,7 @@ import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
+import { initDatabase, getOrCreateAccount } from './database.js';
 import path from 'path';
 
 /**
@@ -48,6 +49,12 @@ export async function runCollector(config) {
 
   // Ensure output directory exists
   await ensureOutputDir(config.outputDir);
+
+  // Initialize database and get account
+  await initDatabase();
+  const profileName = process.env.IG_PROFILE || 'default';
+  const account = getOrCreateAccount(profileName);
+  console.log(`📁 Account: ${account.name} (id: ${account.id})\n`);
 
   let allPosts = [];
   let allComments = [];
@@ -206,7 +213,8 @@ export async function runCollector(config) {
             // Add source to each comment
             const commentsWithSource = comments.map(comment => ({
               ...comment,
-              source: source
+              source: source,
+              account_id: account.id
             }));
             
             allComments.push(...commentsWithSource);

@@ -50,9 +50,18 @@ program
   .option('--interactive', 'Interactive mode: prompt for user message', false)
   .option('--list', 'List active conversations from database', false)
   .option('--save', 'Save response to database (with --username)', false)
+  .option('--profile <name>', 'Browser profile name', 'default')
   .action(async (options) => {
     try {
       console.log('\n=== DM Responder Agent ===\n');
+
+      // Resolve Account ID
+      const { getOrCreateAccount, initDatabase } = await import('../../collector/src/database.js');
+      await initDatabase();
+      const account = getOrCreateAccount(options.profile);
+      const accountId = account.id;
+      console.log(`👤 Profile: ${options.profile} (Account ID: ${accountId})`);
+      process.env.IG_PROFILE = options.profile;
 
       console.log('REMINDERS:');
       console.log('  - This agent generates SUGGESTIONS only');
@@ -61,7 +70,7 @@ program
 
       // List mode: show active conversations
       if (options.list) {
-        await handleListMode();
+        await handleListMode(accountId);
         return;
       }
 
@@ -73,7 +82,7 @@ program
 
       // URL mode: scrape the conversation first
       if (options.url) {
-        const scrapeResult = await scrapeConversation(options.url);
+        const scrapeResult = await scrapeConversation(options.url, { profile: options.profile });
         conversationHistory = scrapeResult.conversationHistory;
         page = scrapeResult.page;
         browser = scrapeResult.browser;
@@ -81,7 +90,7 @@ program
       // Database mode: load by username
       } else if (options.username) {
         currentUsername = options.username;
-        const result = await handleDatabaseMode(options);
+        const result = await handleDatabaseMode(options, accountId);
         conversationHistory = result.conversationHistory;
         leadContext = result.leadContext;
         
@@ -134,7 +143,7 @@ program
 
       // Save to database if requested
       if (options.save && currentUsername) {
-        await addMessage(currentUsername, 'assistant', response.next_message, response.message_type);
+        await addMessage(currentUsername, 'assistant', response.next_message, response.message_type, accountId);
         await updateConversationStage(currentUsername, response.conversation_stage);
         console.log(`Response saved to database for @${currentUsername}\n`);
       }
@@ -161,14 +170,14 @@ program.parse();
 /**
  * Handle database mode
  */
-async function handleDatabaseMode(options) {
+async function handleDatabaseMode(options, accountId) {
   const username = options.username;
   console.log(`Loading data for @${username} from database...\n`);
   
   await initDB();
   
   // Get lead context
-  const leadContext = await getLeadWithContext(username);
+  const leadContext = await getLeadWithContext(username, accountId);
   if (!leadContext) {
     throw new Error(`Lead not found: @${username}`);
   }
@@ -192,7 +201,7 @@ async function handleDatabaseMode(options) {
     console.log(`  "${options.message}"\n`);
     
     // Save to DB
-    await addMessage(username, 'user', options.message);
+    await addMessage(username, 'user', options.message, null, accountId);
     
     // Add to history
     conversationHistory.push({
@@ -266,11 +275,11 @@ async function handleFileMode(conversationFile) {
 /**
  * Handle list mode - show active conversations
  */
-async function handleListMode() {
+async function handleListMode(accountId) {
   console.log('Active Conversations:\n');
   
   await initDB();
-  const conversations = await getActiveConversations();
+  const conversations = await getActiveConversations(accountId);
   
   if (conversations.length === 0) {
     console.log('No active conversations found.\n');

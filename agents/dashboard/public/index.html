@@ -56,8 +56,35 @@
             font-weight: 700;
             margin: 0;
             background: var(--gradient);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        /* Account Selector */
+        .account-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .account-selector label {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .account-selector select {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .account-selector select:hover {
+            border-color: var(--accent);
         }
 
         /* Stats Grid */
@@ -320,8 +347,12 @@
             <div class="logo">
                 <h1>Instagram Lead Engine</h1>
             </div>
-            <div class="actions">
-                <!-- Buttons if needed -->
+            <div class="account-selector">
+                <label for="accountSelect">Compte:</label>
+                <select id="accountSelect" onchange="onAccountChange(this.value)">
+                    <option value="">Tous les comptes</option>
+                    <!-- Options populated by JS -->
+                </select>
             </div>
         </header>
 

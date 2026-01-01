@@ -44,11 +44,11 @@ export async function initDB() {
  * @param {string} username - Instagram username
  * @returns {Promise<Object|null>} Lead with context
  */
-export async function getLeadWithContext(username) {
+export async function getLeadWithContext(username, accountId = null) {
   await initDB();
   if (!db) return null;
   
-  const lead = dbFunctions.getLeadByUsername(username);
+  const lead = dbFunctions.getLeadByUsername(username, accountId);
   if (!lead) return null;
   
   // Get comments for context
@@ -166,11 +166,11 @@ export async function getConversationHistory(username) {
  * @param {string} messageType - Type of message (empathy, qualification, etc.)
  * @returns {Promise<boolean>} Success
  */
-export async function addMessage(username, role, message, messageType = null) {
+export async function addMessage(username, role, message, messageType = null, accountId = null) {
   await initDB();
   if (!db) return false;
   
-  const lead = dbFunctions.getLeadByUsername(username);
+  const lead = dbFunctions.getLeadByUsername(username, accountId);
   if (!lead) {
     console.error(`Lead not found: ${username}`);
     return false;
@@ -214,7 +214,7 @@ export async function updateConversationStage(username, stage) {
  * 
  * @returns {Promise<Array>} List of leads with active conversations
  */
-export async function getActiveConversations() {
+export async function getActiveConversations(accountId = null) {
   await initDB();
   if (!db) return [];
   
@@ -227,6 +227,7 @@ export async function getActiveConversations() {
       AND l.conversation_stage NOT IN ('closed_won', 'closed_lost')
       AND l.total_messages_sent > 0
       AND l.is_ignored = 0
+      ${accountId ? 'AND l.account_id = ' + accountId : ''}
     ORDER BY last_message_at DESC
   `).all();
   
@@ -237,13 +238,14 @@ export async function getActiveConversations() {
  * Get conversation summary for display
  * 
  * @param {string} username - Instagram username
+ * @param {number} accountId - Optional account ID for filtering
  * @returns {Promise<Object>} Conversation summary
  */
-export async function getConversationSummary(username) {
+export async function getConversationSummary(username, accountId = null) {
   await initDB();
   if (!db) return null;
   
-  const lead = dbFunctions.getLeadByUsername(username);
+  const lead = dbFunctions.getLeadByUsername(username, accountId);
   if (!lead) return null;
   
   const messages = await getConversationHistory(username);

@@ -32,18 +32,32 @@ try {
 
 // API Routes
 
+// GET /api/accounts - List all accounts
+app.get('/api/accounts', (req, res) => {
+    try {
+        const accounts = db.prepare('SELECT * FROM accounts ORDER BY name').all();
+        res.json(accounts);
+    } catch (err) {
+        // Table might not exist yet
+        res.json([{ id: null, name: 'Tous les comptes' }]);
+    }
+});
+
 // GET /api/stats
 app.get('/api/stats', (req, res) => {
     try {
+        const { account_id } = req.query;
+        const accountFilter = account_id ? ' AND account_id = ?' : '';
+        const accountParam = account_id ? [parseInt(account_id)] : [];
+        
         const stats = {
-            total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0').get().c,
-            new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new' AND is_ignored = 0").get().c,
-            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'outreach' AND is_ignored = 0").get().c,
-            // conversation/bookings status should probably also check is_ignored
-            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL AND is_ignored = 0").get().c,
-            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored = 0").get().c,
-            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0").get().c,
-            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0").get().c
+            total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0' + accountFilter).get(...accountParam).c,
+            new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c
         };
         res.json(stats);
     } catch (err) {
@@ -54,7 +68,7 @@ app.get('/api/stats', (req, res) => {
 // GET /api/leads
 app.get('/api/leads', (req, res) => {
     try {
-        const { page = 1, limit = 50, status, search } = req.query;
+        const { page = 1, limit = 50, status, search, account_id } = req.query;
         const offset = (page - 1) * limit;
         
         // Build dynamic query
@@ -62,12 +76,18 @@ app.get('/api/leads', (req, res) => {
             SELECT id, username,
                    engagement_score, 
                    status, warmth, booking_status,
-                   lead_source, lead_type, bio,
+                   lead_source, lead_type, bio, account_id,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE is_ignored = 0
         `;
         const params = [];
+        
+        // Account filter
+        if (account_id) {
+            sql += ' AND account_id = ?';
+            params.push(parseInt(account_id));
+        }
 
         if (status && status !== 'all') {
             if (status === 'contacted') {

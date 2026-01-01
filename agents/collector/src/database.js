@@ -168,6 +168,45 @@ export function closeDatabase() {
 }
 
 // ============================================
+// ACCOUNT OPERATIONS
+// ============================================
+
+/**
+ * Get or create an account by name
+ * @param {string} name - Account/profile name
+ * @returns {Object} Account with id
+ */
+export function getOrCreateAccount(name) {
+  if (!name) name = 'default';
+  
+  const existing = db.prepare('SELECT * FROM accounts WHERE name = ?').get(name);
+  if (existing) return existing;
+  
+  const result = db.prepare(`
+    INSERT INTO accounts (name) VALUES (?)
+    RETURNING *
+  `).get(name);
+  
+  console.log(`📁 Created new account: ${name} (id: ${result.id})`);
+  return result;
+}
+
+/**
+ * Get all accounts
+ * @returns {Array} List of accounts
+ */
+export function getAllAccounts() {
+  return db.prepare('SELECT * FROM accounts ORDER BY name').all();
+}
+
+/**
+ * Get account by ID
+ */
+export function getAccountById(id) {
+  return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+}
+
+// ============================================
 // LEAD OPERATIONS
 // ============================================
 
@@ -259,8 +298,16 @@ export function saveLeads(leadsData) {
 /**
  * Get a lead by username
  */
-export function getLeadByUsername(username) {
-  return db.prepare('SELECT * FROM leads WHERE username = ?').get(username);
+export function getLeadByUsername(username, account_id = null) {
+  let query = 'SELECT * FROM leads WHERE username = ?';
+  const params = [username];
+  
+  if (account_id) {
+    query += ' AND account_id = ?';
+    params.push(account_id);
+  }
+  
+  return db.prepare(query).get(...params);
 }
 
 /**
@@ -277,6 +324,12 @@ export function getLeads(filters = {}) {
   let query = 'SELECT * FROM leads WHERE 1=1';
   const params = {};
   
+  // Account filter (REQUIRED for multi-account)
+  if (filters.account_id) {
+    query += ' AND account_id = @account_id';
+    params.account_id = filters.account_id;
+  }
+  
   if (filters.status) {
     query += ' AND status = @status';
     params.status = filters.status;
@@ -290,6 +343,11 @@ export function getLeads(filters = {}) {
   if (filters.min_engagement_score) {
     query += ' AND engagement_score >= @min_engagement_score';
     params.min_engagement_score = filters.min_engagement_score;
+  }
+  
+  // Exclude ignored by default (unless explicitly requested)
+  if (filters.include_ignored !== true) {
+    query += ' AND is_ignored = 0';
   }
   
   query += ' ORDER BY engagement_score DESC, last_seen_at DESC';
@@ -406,8 +464,8 @@ export function markLeadFailed(username, reason) {
  */
 function upsertLead(lead) {
   const stmt = db.prepare(`
-    INSERT INTO leads (username, profile_url, lead_source, lead_type, last_seen_at)
-    VALUES (@username, @profile_url, @lead_source, @lead_type, datetime('now'))
+    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, last_seen_at)
+    VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, datetime('now'))
     ON CONFLICT(username) DO UPDATE SET 
       last_seen_at = datetime('now'),
       lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source)
@@ -418,7 +476,8 @@ function upsertLead(lead) {
     username: lead.username,
     profile_url: lead.profile_url || `https://instagram.com/${lead.username}`,
     lead_source: lead.lead_source || null,
-    lead_type: lead.lead_type || 'cold'
+    lead_type: lead.lead_type || 'cold',
+    account_id: lead.account_id || null
   });
 }
 
@@ -437,7 +496,8 @@ export function insertComment(comment) {
     username: comment.username,
     profile_url: comment.profile_url,
     lead_source: leadSource,
-    lead_type: leadType
+    lead_type: leadType,
+    account_id: comment.account_id || null  // Propagate account
   });
   
   // Check for duplicate (same user, same post, similar text)
@@ -725,31 +785,45 @@ export function getLeadsForResponder(filters = {}) {
 /**
  * Get database statistics
  */
-export function getStats() {
+export function getStats(accountId = null) {
   const stats = {};
+  const accountFilter = accountId ? ' WHERE account_id = ?' : '';
+  const accountParam = accountId ? [accountId] : [];
   
-  stats.total_leads = db.prepare('SELECT COUNT(*) as count FROM leads').get().count;
-  stats.total_comments = db.prepare('SELECT COUNT(*) as count FROM comments').get().count;
-  stats.total_posts = db.prepare('SELECT COUNT(*) as count FROM posts').get().count;
-  stats.spam_comments = db.prepare('SELECT COUNT(*) as count FROM comments WHERE is_spam = 1').get().count;
+  stats.total_leads = db.prepare('SELECT COUNT(*) as count FROM leads' + accountFilter).get(...accountParam).count;
+  stats.total_comments = db.prepare(`
+    SELECT COUNT(*) as count FROM comments c
+    JOIN leads l ON c.lead_id = l.id
+    ${accountId ? 'WHERE l.account_id = ?' : ''}
+  `).get(...accountParam).count;
+  stats.total_posts = db.prepare('SELECT COUNT(*) as count FROM posts' + accountFilter).get(...accountParam).count;
+  stats.spam_comments = db.prepare(`
+    SELECT COUNT(*) as count FROM comments c
+    JOIN leads l ON c.lead_id = l.id
+    WHERE c.is_spam = 1 ${accountId ? 'AND l.account_id = ?' : ''}
+  `).get(...accountParam).count;
   
   stats.leads_by_status = db.prepare(`
     SELECT status, COUNT(*) as count 
     FROM leads 
+    ${accountId ? 'WHERE account_id = ?' : ''}
     GROUP BY status
-  `).all();
+  `).all(...accountParam);
   
   stats.leads_by_engagement = db.prepare(`
     SELECT warmth as level, COUNT(*) as count 
     FROM leads 
+    ${accountId ? 'WHERE account_id = ?' : ''}
     GROUP BY warmth
-  `).all();
+  `).all(...accountParam);
   
   stats.comments_by_source = db.prepare(`
-    SELECT source, COUNT(*) as count 
-    FROM comments 
-    GROUP BY source
-  `).all();
+    SELECT c.source, COUNT(*) as count 
+    FROM comments c
+    JOIN leads l ON c.lead_id = l.id
+    ${accountId ? 'WHERE l.account_id = ?' : ''}
+    GROUP BY c.source
+  `).all(...accountParam);
   
   return stats;
 }

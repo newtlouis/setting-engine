@@ -90,11 +90,13 @@ async function typeHumanLike(page, text) {
  */
 export async function initBrowser(options = {}) {
   const {
-    userDataDir = './browser-data',
+    profile = 'default',
     headless = CONFIG.HEADLESS
   } = options;
   
+  const userDataDir = `./browser-data-${profile}`;
   console.log('\n=== Initializing Browser ===');
+  console.log(`   Profile: ${profile}`);
   console.log(`   User data: ${userDataDir}`);
   console.log(`   Headless: ${headless}`);
   

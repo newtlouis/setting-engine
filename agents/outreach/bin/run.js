@@ -44,21 +44,32 @@ async function main() {
   console.log('========================================\n');
   
   try {
+    // Resolve Account ID if profile is provided
+    let accountId = null;
+    if (opts.profile) {
+        process.env.IG_PROFILE = opts.profile; // Set env for consistency
+        const { getOrCreateAccount, initDatabase } = await import('../../collector/src/database.js');
+        await initDatabase();
+        const account = getOrCreateAccount(opts.profile);
+        accountId = account.id;
+        console.log(`👤 Profile: ${opts.profile} (Account ID: ${accountId})`);
+    }
+
     switch (opts.mode) {
       case 'preview':
-        await handlePreview();
+        await handlePreview(accountId);
         break;
         
       case 'send':
-        await handleSend();
+        await handleSend(accountId);
         break;
         
       case 'status':
-        await handleStatus();
+        await handleStatus(accountId);
         break;
         
       case 'list':
-        await handleList();
+        await handleList(accountId);
         break;
         
       default:
@@ -78,7 +89,7 @@ async function main() {
   }
 }
 
-async function handlePreview() {
+async function handlePreview(accountId) {
   console.log('MODE: Preview (no messages will be sent)\n');
   
   await previewOutreach({
@@ -87,14 +98,15 @@ async function handlePreview() {
     topic: opts.topic,
     minEngagementScore: opts.minEngagement,
     targetStatus: opts.status,
-    isSimple: opts.simple
+    isSimple: opts.simple,
+    accountId: accountId
   });
   
   console.log('\nTo send these messages, run:');
   console.log(`   node bin/run.js --mode send --limit ${opts.limit} --live\n`);
 }
 
-async function handleSend() {
+async function handleSend(accountId) {
   const dryRun = !opts.live;
   
   if (dryRun) {
@@ -102,26 +114,19 @@ async function handleSend() {
     console.log('To actually send messages, add --live flag\n');
   } else {
     console.log('MODE: LIVE SEND\n');
-    console.log('Messages will be sent to Instagram users.');
-    console.log('This action is irreversible.\n');
+    process.stdout.write('\x07'); // Beep!
   }
 
-  // Handle Profile logic
-  let userDataDir = opts.browserData;
-  if (opts.profile) {
-      userDataDir = `./browser-data-${opts.profile}`;
-      console.log(`👤 Using Browser Profile: ${opts.profile} (${userDataDir})`);
-  }
-  
   const results = await runOutreach({
     limit: opts.limit,
     niche: opts.niche,
     topic: opts.topic,
     dryRun,
-    userDataDir: userDataDir,
+    userDataDir: opts.browserData,
     minEngagementScore: opts.minEngagement,
     targetStatus: opts.status,
-    isSimple: opts.simple
+    isSimple: opts.simple,
+    profile: opts.profile
   });
   
   console.log('\n--- Results ---');
@@ -135,10 +140,10 @@ async function handleSend() {
   }
 }
 
-async function handleStatus() {
+async function handleStatus(accountId) {
   console.log('MODE: Status\n');
   
-  const stats = await getOutreachStats();
+  const stats = await getOutreachStats(accountId);
   
   console.log('=== Lead Pipeline ===');
   console.log(`Total leads:           ${stats.total_leads}`);
@@ -167,13 +172,14 @@ async function handleStatus() {
   }
 }
 
-async function handleList() {
+async function handleList(accountId) {
   console.log('MODE: List candidates\n');
   
   const leads = await getOutreachCandidates({
     limit: opts.limit,
     minEngagementScore: opts.minEngagement,
-    targetStatus: opts.status
+    targetStatus: opts.status,
+    accountId: accountId
   });
   
   if (leads.length === 0) {
