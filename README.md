@@ -54,14 +54,21 @@ npx playwright install chromium
 The system uses a **real browser** (Playwright) to interact with Instagram safely.
 On the first run (for each profile), you will need to log in manually. The session will be saved for future runs.
 
-### 3. Multi-Account Support (Optional)
+### 3. Multi-Account Support
 
-You can manage multiple Instagram accounts by using the `--profile` flag. This creates separate browser sessions for each account.
+You can manage multiple Instagram accounts independently. Data is isolated by `account_id` in the database, and browser sessions are kept in separate folders.
+
+Always use the `--profile` flag to specify which account you are using:
 
 ```bash
-# Run with a specific profile name (e.g., 'lifestyle')
-npm run scrape -- --profile lifestyle -t fitness
-npm run send -- --profile lifestyle
+# Collect leads for 'fitness_coach'
+npm run scrape -- --profile fitness_coach -t gym
+
+# Run outreach for 'fitness_coach'
+npm run outreach -- --profile fitness_coach
+
+# Respond to messages for 'fitness_coach'
+npm run reply -- --profile fitness_coach
 ```
 
 ### 4. Run Your First Scrape (Collector)
@@ -93,22 +100,21 @@ node bin/run.js --interactive
 ### 6. Tools & Monitoring
 
 #### 📊 Lead Dashboard
-Monitor your leads, stats, and confirm bookings in real-time.
+Monitor leads, track conversions, and switch between accounts in real-time.
 
 ```bash
-# From project root
 npm run ui
 ```
-*Access at: http://localhost:3000*
+- **Access**: http://localhost:3000
+- **Features**: Interactive stats, **Account Selector**, bulk actions, and live logs.
 
 #### 🗄️ Database Admin
 Explore the SQLite database directly with a web interface.
 
 ```bash
-# From project root (requires sqlite-web)
 npm run db:admin
 ```
-*Access at: http://localhost:8081*
+- **Access**: http://localhost:8081
 
 #### 💾 Backup
 Backup your database and critical files locally or to Google Drive.
@@ -139,11 +145,13 @@ The system is built around a shared **SQLite database** located in `agents/colle
 ```mermaid
 graph TD
     A[Instagram] -->|Collector Agent| B[(SQLite DB)]
-    B -->|Filter: High Engagement| C[Outreach Agent]
+    B -->|Filter: account_id| C[Outreach Agent]
     C -->|Send DM| A
     A -->|Reply| D[DM Responder Agent]
+    D -->|Filter: account_id| B
     D -->|Suggestion| E[User Review]
     E -->|Send| A
+    F[Dashboard] -->|Account Selector| B
 ```
 
 1.  **Collector**: Ingests raw data -> `leads` table.

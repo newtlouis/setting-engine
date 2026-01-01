@@ -52,6 +52,8 @@ test-results/
 # Browser session data (Playwright persistent context)
 browser-data/
 **/browser-data/
+browser-data-default/
+**/browser-data-default/
 
 # Persistent local data (SQLite, etc.)
 permanent-data/

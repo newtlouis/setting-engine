@@ -19,18 +19,23 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 ## 🎭 Gestion Multi-Comptes (Nouveau)
 
 Le système supporte désormais l'utilisation de plusieurs comptes Instagram en parallèle sans conflit de cookies/session.
-Utilisez simplement l'option `--profile <nom>` sur le Collector et l'Outreach.
+Utilisez l'option `--profile <nom>` sur **tous les agents** (Collector, Outreach, DM Responder).
+Chaque profil possède son propre dossier de données (`browser-data-<nom>`) et son propre `account_id` dans la base de données.
 
 **Exemple :**
 ```bash
 # Pour le compte "lifestyle"
 npm run scrape -- --profile lifestyle -t yoga
 npm run send -- --profile lifestyle
+npm run reply -- --profile lifestyle
 
 # Pour le compte "business"
 npm run scrape -- --profile business -t marketing
 npm run send -- --profile business
+npm run reply -- --profile business
 ```
+**Note** : Dans le Dashboard, utilisez le sélecteur de compte en haut à droite pour basculer la vue.
+
 Chaque profil possède son propre dossier de données (`browser-data-<nom>`). La première fois, vous devrez vous connecter manuellement pour chaque profil.
 
 ---
@@ -107,23 +112,24 @@ npm run send -- --status failed_outreach --limit 5
 
 Aide à rédiger des réponses contextuelles grâce à l'IA.
 
-**Mode Interactif**
+**Mode Interactif (recommandé)**
 Lance l'interface pour générer des réponses aux messages reçus.
 ```bash
-npm run reply -- --interactive
+npm run reply -- --interactive --profile mon_compte
 ```
 *Le script vous demandera de coller le message du prospect et vous proposera une réponse.*
 
 **Mode Automatique (Cron)**
 Vérifie les nouveaux messages des leads suivis et génère des suggestions.
 ```bash
-npm run reply:auto
+npm run reply:auto -- --profile mon_compte
 ```
 *Note : Cela visitera les profils via leur URL DM stockée en base.*
 
 **Options :**
-- `--list` : Affiche les conversations actives nécessitant une attention.
-- `--username <user>` : Charge l'historique d'un utilisateur spécifique depuis la base.
+- `--profile <nom>` : **Nouveau**. Isole la session et les données par compte.
+- `--list` : Affiche les conversations actives du compte spécifié.
+- `--username <user>` : Charge l'historique d'un utilisateur depuis la base.
 
 ---
 
