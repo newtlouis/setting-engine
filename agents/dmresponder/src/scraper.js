@@ -94,7 +94,9 @@ export async function initBrowser(options = {}) {
     headless = CONFIG.HEADLESS
   } = options;
   
-  const userDataDir = `./browser-data-${profile}`;
+  const userDataDir = (!profile || profile === 'default')
+    ? './browser-data'
+    : `./browser-data-${profile}`;
   console.log('\n=== Initializing Browser ===');
   console.log(`   Profile: ${profile}`);
   console.log(`   User data: ${userDataDir}`);

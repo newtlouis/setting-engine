@@ -220,9 +220,11 @@ export async function previewOutreach(options = {}) {
  */
 export async function runOutreach(options = {}) {
   const {
+    limit = CONFIG.MAX_DMS_PER_SESSION,
+    niche = 'fitness',
     topic = 'their goals',
     dryRun = true,
-    userDataDir = './browser-data',
+    userDataDir: baseUserDataDir = './browser-data',
     isSimple = false,
     profile = process.env.IG_PROFILE || 'default'
   } = options;
@@ -231,7 +233,9 @@ export async function runOutreach(options = {}) {
   const account = dbFunctions.getOrCreateAccount(profile);
   const accountId = account.id;
   
-  userDataDir = path.join(path.dirname(userDataDir), `browser-data-${profile}`);
+  const userDataDir = (!profile || profile === 'default')
+    ? baseUserDataDir
+    : path.join(path.dirname(baseUserDataDir), `browser-data-${profile}`);
   
   /* DEFENSIVE CODING: Cast params */
   const cleanLimit = Number(limit) || 10;

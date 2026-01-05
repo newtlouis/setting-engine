@@ -29,9 +29,9 @@ export const CONFIG = {
   
   // Persistent browser data for session storage
   // Support for multiple profiles via IG_PROFILE env var
-  USER_DATA_DIR: process.env.IG_PROFILE 
-    ? path.join(process.cwd(), `browser-data-${process.env.IG_PROFILE}`)
-    : path.join(process.cwd(), 'browser-data'),
+  USER_DATA_DIR: (!process.env.IG_PROFILE || process.env.IG_PROFILE === 'default')
+    ? path.join(process.cwd(), 'browser-data')
+    : path.join(process.cwd(), `browser-data-${process.env.IG_PROFILE}`),
 
   // Instagram selectors (centralized for easy updates)
   // FIX NOTE: Update these selectors if Instagram changes their DOM structure

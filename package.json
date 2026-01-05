@@ -10,10 +10,10 @@
         "agents/dmresponder"
     ],
     "scripts": {
-        "ui": "cd agents/collector && npm run ui",
-        "scrape": "cd agents/collector && npm run scrape",
-        "send": "cd agents/outreach && npm run send",
-        "reply": "cd agents/dmresponder && npm run reply",
+        "ui": "cd agents/collector && npm run ui --",
+        "scrape": "cd agents/collector && npm run scrape --",
+        "send": "cd agents/outreach && npm run send --",
+        "reply": "cd agents/dmresponder && npm run reply --",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
         "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
         "backup": "node agents/collector/scripts/backup.js"
