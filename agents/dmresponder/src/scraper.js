@@ -11,6 +11,7 @@ import { chromium } from 'playwright';
 import dotenv from 'dotenv';
 import { createInterface } from 'readline';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
+import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
 
 dotenv.config();
 
@@ -19,8 +20,8 @@ dotenv.config();
 // ============================================
 const CONFIG = {
   HEADLESS: process.env.HEADLESS === 'true',
-  SLOW_MO: parseInt(process.env.SLOW_MO, 10) || 50,
-  PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 30000,
+  SLOW_MO: parseInt(process.env.SLOW_MO, 10) || 80,
+  PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 60000,
   
   SELECTORS: {
     CONTACT_BUTTON: [
@@ -104,12 +105,17 @@ export async function initBrowser(options = {}) {
   console.log(`   Headless: ${headless}`);
   
   const timeout = CONFIG.PAGE_TIMEOUT;
+  const viewport = getRandomViewport();
   
   browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport,
+    userAgent: USER_AGENT,
+    locale: 'en-US',
+    timezoneId: 'Europe/Paris',
+    args: STEALTH_ARGS,
+    ignoreDefaultArgs: ['--enable-automation'],
     timeout
   });
   
@@ -117,6 +123,9 @@ export async function initBrowser(options = {}) {
   
   workingPage = await browserContext.newPage();
   workingPage.setDefaultTimeout(timeout);
+  
+  // Apply stealth init script
+  await applyStealthToPage(workingPage);
   
   // Navigate to Instagram
   console.log(`   Loading Instagram...`);
@@ -260,6 +269,10 @@ async function createNewTab() {
   }
   const newPage = await browserContext.newPage();
   newPage.setDefaultTimeout(CONFIG.PAGE_TIMEOUT);
+  
+  // Apply stealth to new tab
+  await applyStealthToPage(newPage);
+  
   return newPage;
 }
 

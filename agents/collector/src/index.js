@@ -14,6 +14,7 @@ import { createInterface } from 'readline';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
 import { initDatabase, getOrCreateAccount } from './database.js';
+import { STEALTH_ARGS, applyStealthToPage, getRandomViewport } from '../../../shared/stealth.js';
 import path from 'path';
 
 /**
@@ -31,21 +32,23 @@ import path from 'path';
 export async function runCollector(config) {
   console.log('🚀 Starting Instagram data collection...\n');
 
-  // Launch persistent context
+  // Launch persistent context with stealth options
+  const viewport = getRandomViewport();
   const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, {
     headless: config.headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport: { width: 1280, height: 720 },
+    viewport,
     userAgent: CONFIG.USER_AGENT,
     locale: 'en-US',
-    timezoneId: 'America/New_York',
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process'
-    ]
+    timezoneId: 'Europe/Paris',
+    args: STEALTH_ARGS,
+    ignoreDefaultArgs: ['--enable-automation']
   });
 
   const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
+  
+  // Apply stealth init script to hide automation markers
+  await applyStealthToPage(page);
 
   // Ensure output directory exists
   await ensureOutputDir(config.outputDir);

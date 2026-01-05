@@ -22,6 +22,7 @@ import { qualifyLead } from './qualify_lead.js';
 import { extractFirstName } from './templates.js';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { createInterface } from 'readline';
+import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -217,12 +218,17 @@ export async function initBrowser(options = {}) {
   console.log(`   Headless: ${headless}`);
   
   const timeout = CONFIG.PAGE_TIMEOUT || 90000;
+  const viewport = getRandomViewport();
   
   browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport,
+    userAgent: USER_AGENT,
+    locale: 'en-US',
+    timezoneId: 'Europe/Paris',
+    args: STEALTH_ARGS,
+    ignoreDefaultArgs: ['--enable-automation'],
     timeout: timeout
   });
   
@@ -232,6 +238,9 @@ export async function initBrowser(options = {}) {
   // Create working page (for checking profiles)
   workingPage = await browserContext.newPage();
   workingPage.setDefaultTimeout(timeout);
+  
+  // Apply stealth init script
+  await applyStealthToPage(workingPage);
   
   // Navigate to Instagram to check login status
   console.log(`   Loading Instagram (timeout: ${timeout/1000}s)...`);
@@ -378,6 +387,10 @@ async function createNewTab() {
   const timeout = CONFIG.PAGE_TIMEOUT || 90000;
   const newPage = await browserContext.newPage();
   newPage.setDefaultTimeout(timeout);
+  
+  // Apply stealth to new tab
+  await applyStealthToPage(newPage);
+  
   return newPage;
 }
 

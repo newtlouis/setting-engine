@@ -5,6 +5,7 @@
 import path from 'path';
 import dotenv from 'dotenv';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
+import { USER_AGENT } from '../../../shared/stealth.js';
 dotenv.config();
 
 const profile = process.env.IG_PROFILE || 'default';
@@ -20,8 +21,8 @@ export const CONFIG = {
   PAGE_LOAD_TIMEOUT: 60000,
   SELECTOR_TIMEOUT: 15000,
 
-  // User Agent (updated periodically to match real browsers)
-  USER_AGENT: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // User Agent (from stealth module - updated periodically)
+  USER_AGENT,
 
   // Default limits
   DEFAULT_MAX_POSTS: 50,
