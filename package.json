@@ -12,6 +12,7 @@
     "scripts": {
         "ui": "cd agents/collector && npm run ui --",
         "scrape": "cd agents/collector && npm run scrape --",
+        "collect": "cd agents/collector && npm run collect --",
         "send": "cd agents/outreach && npm run send --",
         "reply": "cd agents/dmresponder && npm run reply --",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",

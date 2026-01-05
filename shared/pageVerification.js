@@ -146,10 +146,25 @@ async function validatePostPage(page, expectedPostUrl) {
       return { valid: false, reason: 'URL is not a post or reel' };
     }
     
-    // Check for article element (post container)
+    // Check for article element (post container) or post-specific buttons
     const hasArticle = await page.$('article').catch(() => null);
-    if (!hasArticle) {
-      return { valid: false, reason: 'No article element found' };
+    if (hasArticle) return { valid: true };
+    
+    // Fallback: Check for action buttons (Like, Comment, Save)
+    const postSignals = await page.evaluate(() => {
+      return !!(
+        document.querySelector('svg[aria-label="Like"]') ||
+        document.querySelector('svg[aria-label="J’aime"]') ||
+        document.querySelector('svg[aria-label="Comment"]') ||
+        document.querySelector('svg[aria-label="Commenter"]') ||
+        document.querySelector('svg[aria-label="Save"]') ||
+        document.querySelector('svg[aria-label="Enregistrer"]') ||
+        document.querySelector('textarea[aria-label*="comment"]')
+      );
+    });
+    
+    if (!postSignals) {
+      return { valid: false, reason: 'No article or post action buttons found' };
     }
     
     return { valid: true };
@@ -227,14 +242,23 @@ async function validateHashtagPage(page, expectedHashtag) {
   try {
     const url = page.url();
     
-    // URL should contain /explore/tags/
-    if (!url.includes('/explore/tags/')) {
-      return { valid: false, reason: 'Not on a hashtag page' };
+    // URL should contain /explore/tags/ OR /explore/search/keyword/
+    const isHashtagUrl = url.includes('/explore/tags/');
+    const isSearchUrl = url.includes('/explore/search/keyword/');
+    
+    if (!isHashtagUrl && !isSearchUrl) {
+      return { valid: false, reason: 'Not on a hashtag or search results page' };
     }
     
-    // Hashtag should be in URL
-    if (expectedHashtag && !url.toLowerCase().includes(expectedHashtag.toLowerCase())) {
-      return { valid: false, reason: `URL doesn't contain hashtag: ${expectedHashtag}` };
+    // Hashtag or keyword should be in URL
+    if (expectedHashtag) {
+      const cleanHashtag = expectedHashtag.replace(/^#/, '');
+      const searchPattern = encodeURIComponent(expectedHashtag).toLowerCase();
+      const cleanPattern = encodeURIComponent(cleanHashtag).toLowerCase();
+      
+      if (!url.toLowerCase().includes(searchPattern) && !url.toLowerCase().includes(cleanPattern)) {
+        return { valid: false, reason: `URL doesn't contain hashtag or keyword: ${expectedHashtag}` };
+      }
     }
     
     return { valid: true };
