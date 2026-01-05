@@ -8,7 +8,8 @@
  * - <time datetime="..."> for timestamp
  */
 
-import { delay, detectChallenge, saveContextJSON } from './utils.js';
+import { delay, saveContextJSON } from './utils.js';
+import { verifyPostPage } from '../../../shared/pageVerification.js';
 import { CONFIG } from './config.js';
 
 /**
@@ -158,8 +159,9 @@ export async function scrapePostComments(page, postUrl, maxComments, excludeUser
   await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await delay(3000 + Math.random() * 3000);
 
-  if (await detectChallenge(page)) {
-    throw new Error('Challenge detected while loading post');
+  const verifyResult = await verifyPostPage(page, postUrl);
+  if (!verifyResult.success) {
+    throw new Error(`Post verification failed: ${verifyResult.reason}`);
   }
 
   const comments = [];

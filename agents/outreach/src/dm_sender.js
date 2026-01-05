@@ -23,6 +23,7 @@ import { extractFirstName } from './templates.js';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { createInterface } from 'readline';
 import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
+import { verifyProfilePage, verifyHomePage, checkForChallenge } from '../../../shared/pageVerification.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -75,126 +76,6 @@ async function typeHumanLike(page, text) {
 /**
  * Check if page shows any challenge or rate limit
  */
-/**
- * Detect Instagram challenge or rate limit page
- * AND pause for manual resolution if detected.
- * 
- * @param {Page} page - Playwright page object
- * @returns {Promise<{blocked: boolean, reason?: string}>}
- */
-async function detectChallenge(page) {
-  const url = page.url();
-  
-  // Check URL patterns
-  let isChallenge = url.includes('/challenge/') || url.includes('/accounts/suspended/');
-
-  // Check for challenge text content
-  if (!isChallenge) {
-      const challengeText = await page.$('text=/suspicious activity|verify|challenge|confirm|robot|identité/i').catch(() => null);
-      if (challengeText) isChallenge = true;
-  }
-  
-  // Check for specific rate limit dialogs
-  if (!isChallenge) {
-      const rateLimitIndicators = [
-        'text="Try Again Later"',
-        'text="Action Blocked"', 
-        'text="We limit how often"',
-        'text="You\'re Temporarily Blocked"',
-        '[role="dialog"]:has-text("try again")'
-      ];
-      for (const selector of rateLimitIndicators) {
-         if (await page.$(selector).catch(() => null)) {
-             isChallenge = true; 
-             break;
-         }
-      }
-  }
-
-  if (isChallenge) {
-      console.log('\n🛑 🛑 🛑 CHALLENGE / BLOCK DETECTED 🛑 🛑 🛑');
-      console.log('   Instagram has flagged this activity.');
-      console.log('   👉 Please go to the browser window NOW.');
-      console.log('   👉 Solve the CAPTCHA, enter SMS code, or click "Tell us" if blocked.');
-      console.log('   👉 Navigate back to the profile or home page.');
-      console.log('   ⌨️  Press [ENTER] in this terminal when you are done to continue...');
-      
-      process.stdout.write('\x07'); // Beep
-
-      // Wait for manual resolution
-      const { createInterface } = await import('readline');
-      await new Promise((resolve) => {
-        const rl = createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
-        rl.question('', () => {
-          rl.close();
-          resolve();
-        });
-      });
-
-      console.log('   🔄 Verifying if challenge is cleared...');
-      await delay(3000, 4000);
-      
-      // Re-check
-      const newUrl = page.url();
-      const stillChallenge = newUrl.includes('/challenge/') || 
-                             newUrl.includes('/accounts/suspended/') ||
-                             (await page.$('text=/suspicious activity|verify|challenge|confirm|try again/i').catch(() => null));
-                             
-      if (stillChallenge) {
-          console.log('   ❌ Challenge still detected. Stopping script.');
-          return { blocked: true, reason: 'unresolved_challenge' };
-      } else {
-          console.log('   ✅ Challenge cleared! Resuming...');
-          return { blocked: false };
-      }
-  }
-  
-  return { blocked: false };
-}
-
-/**
- * Verify that the profile page is actually loaded
- * Confirms we are seeing the specific user's page, not a generic page or error
- * 
- * @param {Page} page 
- * @param {string} username 
- */
-async function verifyProfileLoaded(page, username) {
-    try {
-        // Check 1: URL should contain username
-        if (!page.url().includes(username)) {
-            // It might be acceptable if redirected (e.g. login), but suspicious
-        }
-
-        // Check 2: Look for username in header (h2, h1, or specific spans)
-        // Instagram usually puts the username in an h2 at the top
-        const usernameSelectors = [
-            `h2:has-text("${username}")`,
-            `h1:has-text("${username}")`,
-            `header h2`, 
-            `span[role="link"]:has-text("${username}")` // sometimes in nav
-        ];
-
-        for (const selector of usernameSelectors) {
-            const el = await page.$(selector).catch(() => null);
-            if (el) {
-                const text = await el.textContent();
-                if (text.includes(username)) return true;
-            }
-        }
-        
-        // Fallback: Check for "Follow" or "Message" which implies a profile
-        const actionButton = await page.$('button:has-text("Follow"), button:has-text("Suivre"), button:has-text("Message"), button:has-text("Contacter")');
-        if (actionButton) return true;
-
-        return false;
-    } catch (e) {
-        return false;
-    }
-}
 
 /**
  * Initialize browser with existing session
@@ -258,6 +139,9 @@ export async function initBrowser(options = {}) {
     });
   }
   await delay(2000, 3000);
+
+  // Check for challenge after loading home
+  await checkForChallenge(workingPage);
   
   // Check if logged in
   const isLoggedIn = await workingPage.evaluate(() => {
@@ -416,24 +300,10 @@ export async function goToProfile(page, username, targetUrl = null) {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
     await delay(2000, 3000);
     
-    // Check for blocks / challenges interactively
-    const blockStatus = await detectChallenge(page);
-    if (blockStatus.blocked) {
-      return { success: false, canContact: false, error: blockStatus.reason };
-    }
-
-    // Verify profile loaded correctly (CRITICAL User Fix)
-    const isLoaded = await verifyProfileLoaded(page, username);
-    if (!isLoaded) {
-        // If not loaded, it might be a subtle challenge (CAPTCHA page)
-        // Check challenge one more time explicitly
-        const retryBlock = await detectChallenge(page);
-        if (retryBlock.blocked) {
-             return { success: false, canContact: false, error: retryBlock.reason };
-        }
-        
-        console.log(`      ⚠️  Profile @${username} does not verify (username not found in header).`);
-        // We could return error, or assume it's a 404/unavailable
+    // Verify we are on the profile page and no challenge
+    const verifyResult = await verifyProfilePage(page, username);
+    if (!verifyResult.success) {
+      return { success: false, canContact: false, error: verifyResult.reason };
     }
     
     // Check if profile exists (multiple languages)

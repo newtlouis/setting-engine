@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 import { createInterface } from 'readline';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
+import { verifyProfilePage, verifyHomePage, checkForChallenge } from '../../../shared/pageVerification.js';
 
 dotenv.config();
 
@@ -144,6 +145,11 @@ export async function initBrowser(options = {}) {
   }
   await delay(2000, 3000);
   
+  // Check for challenge immediately after loading home
+  if (await checkForChallenge(workingPage)) {
+    console.log('   Note: Challenge check completed on home page load.');
+  }
+
   // Check if logged in
   const isLoggedIn = await workingPage.evaluate(() => {
     return !!(
@@ -288,6 +294,12 @@ async function goToProfileAndOpenDM(page, profileUrl) {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
     await delay(2000, 3000);
     
+    // Verify we are on the profile page
+    const verifyResult = await verifyProfilePage(page, profileUrl.split('/').filter(Boolean).pop());
+    if (!verifyResult.success) {
+      return { success: false, error: `verification_failed: ${verifyResult.reason}` };
+    }
+
     // Find and click Contact button
     const selectors = CONFIG.SELECTORS.CONTACT_BUTTON;
     

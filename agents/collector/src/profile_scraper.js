@@ -7,7 +7,8 @@
  * Integrated with SQLite database for persistent storage.
  */
 
-import { delay, detectChallenge } from './utils.js';
+import { delay } from './utils.js';
+import { verifyProfilePage, checkForChallenge } from '../../../shared/pageVerification.js';
 import { getDatabase, updateLeadProfile, getLeadByUsername } from './database.js';
 
 /**
@@ -38,9 +39,10 @@ export async function scrapeProfileData(page, username, saveToDb = true) {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await delay(2000 + Math.random() * 1500);
 
-    // Check for challenge
-    if (await detectChallenge(page)) {
-      profileData.scrape_error = 'challenge_detected';
+    // Verify profile page
+    const verifyResult = await verifyProfilePage(page, username);
+    if (!verifyResult.success) {
+      profileData.scrape_error = `verification_failed: ${verifyResult.reason}`;
       return profileData;
     }
 
@@ -411,7 +413,7 @@ export async function batchScrapeProfiles(page, usernames, options = {}) {
     
     // Check for challenge every 10 profiles
     if ((i + 1) % 10 === 0) {
-      if (await detectChallenge(page)) {
+      if (await checkForChallenge(page)) {
         console.log(`   ⚠️  Challenge detected after ${i + 1} profiles. Stopping.`);
         break;
       }

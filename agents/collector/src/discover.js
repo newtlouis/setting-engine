@@ -4,7 +4,8 @@
  * Handles post discovery from hashtags and competitor profiles.
  */
 
-import { delay, detectChallenge, extractPostMetadata } from './utils.js';
+import { delay, extractPostMetadata } from './utils.js';
+import { verifyHashtagPage, verifyProfilePage } from '../../../shared/pageVerification.js';
 import { CONFIG } from './config.js';
 
 /**
@@ -29,9 +30,10 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await delay(3000 + Math.random() * 3000);
 
-      // Check for challenge
-      if (await detectChallenge(page)) {
-        console.error('   ⚠️  Challenge detected on hashtag page. Skipping.');
+      // Verify we are on the hashtag page and no challenge
+      const verifyResult = await verifyHashtagPage(page, cleanTag);
+      if (!verifyResult.success) {
+        console.error(`   ⚠️  Verification failed for #${hashtag}: ${verifyResult.reason}`);
         continue;
       }
 
@@ -198,9 +200,10 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await delay(3000 + Math.random() * 3000);
 
-      // Check for challenge
-      if (await detectChallenge(page)) {
-        console.error('   ⚠️  Challenge detected on profile page. Skipping.');
+      // Verify we are on the profile page and no challenge
+      const verifyResult = await verifyProfilePage(page, username);
+      if (!verifyResult.success) {
+        console.error(`   ⚠️  Verification failed for @${username}: ${verifyResult.reason}`);
         continue;
       }
 
