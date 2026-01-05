@@ -10,6 +10,7 @@
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
 import { createInterface } from 'readline';
+import { getCredentialsForProfile } from '../../../shared/credentials.js';
 
 dotenv.config();
 
@@ -144,8 +145,7 @@ export async function initBrowser(options = {}) {
   });
   
   if (!isLoggedIn) {
-    const username = process.env.INSTAGRAM_USERNAME;
-    const password = process.env.INSTAGRAM_PASSWORD;
+    const { username, password } = getCredentialsForProfile(profile);
     
     if (!username || !password) {
       console.log('\n   ⚠️  MANUAL LOGIN REQUIRED');

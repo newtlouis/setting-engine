@@ -4,7 +4,11 @@
 
 import path from 'path';
 import dotenv from 'dotenv';
+import { getCredentialsForProfile } from '../../../shared/credentials.js';
 dotenv.config();
+
+const profile = process.env.IG_PROFILE || 'default';
+const credentials = getCredentialsForProfile(profile);
 
 export const CONFIG = {
   // Delays (in milliseconds)
@@ -24,8 +28,8 @@ export const CONFIG = {
   DEFAULT_MAX_COMMENTS: 100,
 
   // Instagram credentials (optional - for auto-login)
-  INSTAGRAM_USERNAME: process.env.INSTAGRAM_USERNAME || '',
-  INSTAGRAM_PASSWORD: process.env.INSTAGRAM_PASSWORD || '',
+  INSTAGRAM_USERNAME: credentials.username,
+  INSTAGRAM_PASSWORD: credentials.password,
   
   // Persistent browser data for session storage
   // Support for multiple profiles via IG_PROFILE env var

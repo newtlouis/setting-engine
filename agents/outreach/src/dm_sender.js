@@ -20,6 +20,8 @@ import { chromium } from 'playwright';
 import { CONFIG } from './config.js';
 import { qualifyLead } from './qualify_lead.js';
 import { extractFirstName } from './templates.js';
+import { getCredentialsForProfile } from '../../../shared/credentials.js';
+import { createInterface } from 'readline';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -206,6 +208,10 @@ export async function initBrowser(options = {}) {
     headless = CONFIG.HEADLESS
   } = options;
   
+  // Extract profile name from userDataDir if possible
+  const profileMatch = userDataDir.match(/browser-data-(.+)$/);
+  const profile = profileMatch ? profileMatch[1] : 'default';
+  
   console.log('\n=== Initializing Browser ===');
   console.log(`   User data: ${userDataDir}`);
   console.log(`   Headless: ${headless}`);
@@ -255,16 +261,103 @@ export async function initBrowser(options = {}) {
   });
   
   if (!isLoggedIn) {
-    console.log('\n   MANUAL LOGIN REQUIRED');
-    console.log('   Please log in to Instagram in the browser window.');
-    console.log('   Press Enter in this terminal when done...');
+    const { username, password } = getCredentialsForProfile(profile);
     
-    // Wait for user to log in
-    await new Promise(resolve => {
-      process.stdin.once('data', resolve);
-    });
+    if (!username || !password) {
+      console.log('\n   ⚠️  MANUAL LOGIN REQUIRED');
+      console.log('   (Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login)');
+      console.log('   Please log in to Instagram in the browser window.');
+      console.log('   Press Enter in this terminal when done...');
+      
+      await new Promise(resolve => {
+        process.stdin.once('data', resolve);
+      });
+    } else {
+      console.log('   Logging in automatically...');
+      
+      // --- COOKIE POPUP HANDLING ---
+      try {
+        console.log('   Checking for cookie consent popup...');
+        const cookieSelectors = [
+          'button:has-text("Allow all cookies")',
+          'button:has-text("Autoriser tous les cookies")',
+          'button:has-text("Allow essential and optional cookies")',
+          'button:has-text("Uniquement les cookies essentiels")',
+          'button._a9--._ap36._asz1', 
+          'button._a9--._a9_0',
+          'div[role="dialog"] button:has-text("Allow")',
+          'div[role="dialog"] button:has-text("Autoriser")'
+        ];
+
+        let cookieHandled = false;
+        for (const selector of cookieSelectors) {
+          try {
+            const button = await workingPage.$(selector);
+            if (button && await button.isVisible()) {
+              console.log(`   Found cookie button: ${selector}`);
+              await button.click();
+              cookieHandled = true;
+              await delay(1000, 1500);
+              break;
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+
+        if (!cookieHandled) {
+          // Fallback: JavaScript click
+          await workingPage.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const target = buttons.find(b => 
+              b.innerText.includes('Allow all cookies') || 
+              b.innerText.includes('Autoriser tous les cookies') ||
+              b.innerText.includes('Decline optional cookies') ||
+              b.innerText.includes('Refuser')
+            );
+            if (target) target.click();
+          });
+          await delay(1000, 1500);
+        }
+      } catch (error) {
+        console.log('   Cookie popup check failed (or none present)');
+      }
+      // ----------------------------
+      
+      // Wait for login form
+      try {
+        await workingPage.waitForSelector('input[name="username"]', { timeout: 10000 });
+      } catch (e) {
+        console.log('   Login form not found, waiting longer...');
+        await delay(2000, 3000);
+      }
+      
+      // Type credentials
+      await workingPage.type('input[name="username"]', username, { delay: 50 + Math.random() * 100 });
+      await delay(500, 1000);
+      await workingPage.type('input[name="password"]', password, { delay: 50 + Math.random() * 100 });
+      await workingPage.click('button[type="submit"]');
+      
+      // Wait for login to complete
+      try {
+        await workingPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (e) {
+        console.log('   Login navigation slow, continuing...');
+      }
+      await delay(2000, 3000);
+      
+      // Handle "Save Login Info?" popup
+      try {
+        const notNowBtn = workingPage.locator('text=Not Now').or(workingPage.locator('button:has-text("Not Now")'));
+        await notNowBtn.click({ timeout: 5000 });
+        console.log('   Dismissed "Save Login" popup.');
+      } catch (e) {
+        // No popup
+      }
+      
+      console.log('   ✅ Login successful!');
+    }
     
-    // Verify login
     await workingPage.reload({ waitUntil: 'domcontentloaded' });
     await delay(2000, 3000);
   }
