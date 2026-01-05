@@ -64,7 +64,8 @@ export async function writeComments(comments, outputDir) {
       { id: 'source', title: 'source' },
       { id: 'is_spam', title: 'is_spam' },
       { id: 'spam_reason', title: 'spam_reason' },
-      { id: 'quality_score', title: 'quality_score' }
+      { id: 'quality_score', title: 'quality_score' },
+      { id: 'account_id', title: 'account_id' }
     ]
   });
 

@@ -34,12 +34,24 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
   // Enable WAL mode for better concurrent access
   db.pragma('journal_mode = WAL');
   
+  // 1. Create Accounts table first
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      ig_username TEXT,
+      description TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Create tables
   db.exec(`
     -- Leads table: one row per unique Instagram user
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
+      username TEXT NOT NULL,
+      account_id INTEGER REFERENCES accounts(id),
       engagement_score REAL DEFAULT 0,
       total_comments INTEGER DEFAULT 0,
       total_messages_sent INTEGER DEFAULT 0,
@@ -77,7 +89,8 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       first_seen_at TEXT DEFAULT (datetime('now')),
       last_seen_at TEXT DEFAULT (datetime('now')),
       created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(username, account_id)
     );
     
     -- Comments table: all comments from each lead
@@ -105,6 +118,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE TABLE IF NOT EXISTS posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_url TEXT UNIQUE NOT NULL,
+      account_id INTEGER REFERENCES accounts(id),
       source_type TEXT,  -- hashtag, profile
       source_name TEXT,
       post_date TEXT,
@@ -136,12 +150,32 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_leads_warmth ON leads(warmth);
+    CREATE INDEX IF NOT EXISTS idx_leads_account_id ON leads(account_id);
     CREATE INDEX IF NOT EXISTS idx_comments_lead_id ON comments(lead_id);
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
+    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(account_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
   `);
   
+  // 2. SELF-HEALING MIGRATIONS (Add columns if missing in existing DB)
+  try {
+    const leadsColumns = db.prepare("PRAGMA table_info(leads)").all();
+    const hasAccountId = leadsColumns.some(col => col.name === 'account_id');
+    if (!hasAccountId) {
+      console.log('🔄 Migrating: Adding account_id to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN account_id INTEGER REFERENCES accounts(id)`);
+    }
+    
+    const postsColumns = db.prepare("PRAGMA table_info(posts)").all();
+    if (!postsColumns.some(col => col.name === 'account_id')) {
+      console.log('🔄 Migrating: Adding account_id to posts table...');
+      db.exec(`ALTER TABLE posts ADD COLUMN account_id INTEGER REFERENCES accounts(id)`);
+    }
+  } catch (err) {
+    console.error('⚠️ Migration check failed:', err.message);
+  }
+
   console.log(`📦 Database initialized: ${dbPath}`);
   
   return db;
@@ -220,10 +254,10 @@ export function saveLeads(leadsData) {
   // Prepare bulk insert statement
   const insert = db.prepare(`
     INSERT INTO leads (
-      username, profile_url, lead_source, lead_type,
+      username, profile_url, lead_source, lead_type, account_id,
       last_seen_at
     ) VALUES (
-      @username, @profile_url, @lead_source, @lead_type,
+      @username, @profile_url, @lead_source, @lead_type, @account_id,
       datetime('now')
     )
     ON CONFLICT(username) DO UPDATE SET
@@ -263,7 +297,8 @@ export function saveLeads(leadsData) {
           username: lead.username,
           profile_url: lead.profileUrl || `https://instagram.com/${lead.username}`,
           lead_source: lead.source || null, // Allow passing source
-          lead_type: lead.type || 'cold'    // Default to cold
+          lead_type: lead.type || 'cold',    // Default to cold
+          account_id: lead.account_id || null
         });
         
         // Get lead ID
