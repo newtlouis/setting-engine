@@ -11,6 +11,7 @@ import { scrapePostComments } from './scrape_post.js';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
 import { initDatabase, getOrCreateAccount } from './database.js';
+import { CONFIG } from './config.js';
 import { STEALTH_ARGS, applyStealthToPage, getRandomViewport } from '../../../shared/stealth.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
 import path from 'path';
