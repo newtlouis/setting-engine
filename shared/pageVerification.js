@@ -78,6 +78,11 @@ async function detectChallenge(page) {
       // Create a clone of the body to manipulate it safely
       const bodyClone = document.body.cloneNode(true);
       
+      // CRITICAL FIX: Remove script, style, and noscript tags first!
+      // innerText on detached nodes can include script content (like JSON blobs), causing false positives.
+      const scripts = bodyClone.querySelectorAll('script, style, noscript, iframe, svg');
+      scripts.forEach(el => el.remove());
+
       // Remove articles and comment sections to avoid false positives in captions/comments
       const contentToIgnore = bodyClone.querySelectorAll('article, [role="main"] section:last-child, .x1n2onr6');
       contentToIgnore.forEach(el => el.remove());
