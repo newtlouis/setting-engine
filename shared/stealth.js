@@ -50,8 +50,10 @@ export const STEALTH_ARGS = [
  * Slight variations make fingerprint more unique
  */
 export function getRandomViewport() {
-  const widths = [1366, 1440, 1536, 1920, 1280];
-  const heights = [768, 900, 864, 1080, 720];
+  // Use conservative sizes that fit most laptop screens (MacBooks)
+  // while remaining large enough for Instagram's UI to not switch to mobile mode
+  const widths = [1200, 1280, 1150, 1100];
+  const heights = [800, 750, 850, 700];
   const idx = Math.floor(Math.random() * widths.length);
   return { width: widths[idx], height: heights[idx] };
 }
