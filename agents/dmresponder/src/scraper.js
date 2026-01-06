@@ -294,6 +294,11 @@ async function goToProfileAndOpenDM(page, profileUrl) {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
     await delay(2000, 3000);
     
+    // Explicitly check for challenges nicely before verifying (blocks if needed)
+    if (await checkForChallenge(page)) {
+       return { success: false, error: 'challenge_detected_unresolved' };
+    }
+
     // Verify we are on the profile page
     const verifyResult = await verifyProfilePage(page, profileUrl.split('/').filter(Boolean).pop());
     if (!verifyResult.success) {

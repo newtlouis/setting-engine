@@ -300,6 +300,12 @@ export async function goToProfile(page, username, targetUrl = null) {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
     await delay(2000, 3000);
     
+    // Explicitly check for challenges nicely before verifying (blocks if needed)
+    if (await checkForChallenge(page)) {
+       // If checkForChallenge returns true even after blocking, it means user didn't solve it
+       return { success: false, canContact: false, error: 'challenge_detected' };
+    }
+
     // Verify we are on the profile page and no challenge
     const verifyResult = await verifyProfilePage(page, username);
     if (!verifyResult.success) {
