@@ -8,13 +8,11 @@
 import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
 import { scrapePostComments } from './scrape_post.js';
-import { ensureOutputDir, writePosts, writeComments, delay, detectChallenge, autoLoginInstagram } from './utils.js';
-import { CONFIG } from './config.js';
-import { createInterface } from 'readline';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
 import { initDatabase, getOrCreateAccount } from './database.js';
 import { STEALTH_ARGS, applyStealthToPage, getRandomViewport } from '../../../shared/stealth.js';
+import { checkForChallenge } from '../../../shared/pageVerification.js';
 import path from 'path';
 
 /**
@@ -200,7 +198,7 @@ export async function runCollector(config) {
         console.log(`   [${i + 1}/${qualifiedPosts.length}] Scraping: ${post.post_url}`);
         
         // Check for challenges
-        if (await detectChallenge(page)) {
+        if (await checkForChallenge(page)) {
           console.error('⚠️  Challenge detected! Stopping to avoid account restrictions.');
           break;
         }

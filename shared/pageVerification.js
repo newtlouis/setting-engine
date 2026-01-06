@@ -41,47 +41,71 @@ function delay(ms) {
 async function detectChallenge(page) {
   const url = page.url();
   
-  // URL-based detection
-  if (url.includes('/challenge/')) {
-    return { isChallenge: true, reason: 'URL contains /challenge/' };
-  }
-  if (url.includes('/accounts/suspended/')) {
-    return { isChallenge: true, reason: 'Account suspended' };
-  }
-  if (url.includes('/accounts/login/two_factor')) {
-    return { isChallenge: true, reason: '2FA required' };
-  }
-  
-  // Text-based detection
-  const challengePatterns = [
-    'suspicious activity',
-    'verify',
-    'challenge',
-    'confirm your identity',
-    'robot',
-    'identité',
-    'confirmer',
-    'activité suspecte',
-    'vérification',
-    'try again later',
-    'action blocked',
-    'we limit how often'
+  // 1. Robust URL-based detection
+  const challengeUrls = [
+    '/challenge/',
+    '/checkpoint/',
+    '/accounts/suspended/',
+    '/accounts/login/two_factor',
+    'instagram.com/logging_out'
   ];
   
+  for (const pattern of challengeUrls) {
+    if (url.includes(pattern)) {
+      return { isChallenge: true, reason: `URL contains sensitive pattern: ${pattern}` };
+    }
+  }
+  
+  // 2. Text-based detection - more restrictive to avoid false positives in content
+  const challengePatterns = [
+    'suspicious activity',
+    'confirm your identity',
+    'confirmer votre identité',
+    'activité suspecte',
+    'try again later',
+    'action blocked',
+    'we limit how often',
+    'verify it\'s you',
+    'help us confirm'
+  ];
+  
+  // We exclude common words like "challenge", "verify", "robot" from general text search
+  // because they are too common in post captions/comments.
+  
   try {
-    const bodyText = await page.evaluate(() => document.body?.innerText?.toLowerCase() || '');
+    // Check main headings or body text but ignore content-heavy areas like articles/comments
+    const bodyText = await page.evaluate(() => {
+      // Create a clone of the body to manipulate it safely
+      const bodyClone = document.body.cloneNode(true);
+      
+      // Remove articles and comment sections to avoid false positives in captions/comments
+      const contentToIgnore = bodyClone.querySelectorAll('article, [role="main"] section:last-child, .x1n2onr6');
+      contentToIgnore.forEach(el => el.remove());
+      
+      return bodyClone.innerText?.toLowerCase() || '';
+    });
     
     for (const pattern of challengePatterns) {
       if (bodyText.includes(pattern.toLowerCase())) {
-        // Avoid false positives - check if it's in a meaningful context
-        // (not just a random word in content)
-        const selector = `text=/${pattern}/i`;
-        const element = await page.$(selector).catch(() => null);
-        if (element) {
-          return { isChallenge: true, reason: `Text detected: "${pattern}"` };
-        }
+        return { isChallenge: true, reason: `Critical text detected: "${pattern}"` };
       }
     }
+    
+    // Check for explicit "Help Us Confirm It's You" or similar challenge headers
+    const headerChallenge = await page.evaluate(() => {
+      const h2s = Array.from(document.querySelectorAll('h2'));
+      const challengeTitles = ['help us confirm', 'votre compte', 'suspicious activity', 'verify'];
+      return h2s.find(h2 => {
+        const text = h2.innerText.toLowerCase();
+        // For H2, we can be slightly more liberal but still careful
+        return challengeTitles.some(title => text.includes(title)) && text.length < 50;
+      });
+    });
+    
+    if (headerChallenge) {
+      return { isChallenge: true, reason: 'Challenge header detected' };
+    }
+
   } catch (e) {
     // Ignore evaluation errors
   }

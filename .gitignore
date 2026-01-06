@@ -55,6 +55,7 @@ browser-data/
 browser-data-default/
 **/browser-data-default/
 **/browser-data-louis/
+**/browser-data-hercule/
 
 # Persistent local data (SQLite, etc.)
 permanent-data/

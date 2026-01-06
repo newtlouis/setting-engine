@@ -106,61 +106,8 @@ export async function delay(ms) {
  * @returns {Promise<boolean>} True if challenge persists (script should stop), False if resolved (continue)
  */
 export async function detectChallenge(page) {
-  const url = page.url();
-  
-  // Check URL patterns
-  let isChallenge = url.includes('/challenge/') || url.includes('/accounts/suspended/');
-
-  // Check for challenge text content
-  if (!isChallenge) {
-      // FIX NOTE: Challenge detection text may vary by locale - add more patterns if needed
-      const challengeText = await page.$('text=/suspicious activity|verify|challenge|confirm|robot|identité/i').catch(() => null);
-      if (challengeText) isChallenge = true;
-  }
-  
-  if (isChallenge) {
-      console.log('\n🛑 🛑 🛑 CHALLENGE DETECTED 🛑 🛑 🛑');
-      console.log('   Instagram has flagged this activity.');
-      console.log('   👉 Please go to the browser window NOW.');
-      console.log('   👉 Solve the CAPTCHA or enter the SMS code manually.');
-      console.log('   👉 Navigate back to the home page or the post.');
-      console.log('   ⌨️  Press [ENTER] in this terminal when you are done to continue...');
-      
-      // Play a sound/bell if possible (terminal bell)
-      process.stdout.write('\x07');
-
-      // Wait for manual resolution
-      const { createInterface } = await import('readline');
-      await new Promise((resolve) => {
-        const rl = createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
-        rl.question('', () => {
-          rl.close();
-          resolve();
-        });
-      });
-
-      console.log('   🔄 Verifying if challenge is cleared...');
-      await delay(3000);
-      
-      // Re-check
-      const newUrl = page.url();
-      const stillChallenge = newUrl.includes('/challenge/') || 
-                             newUrl.includes('/accounts/suspended/') ||
-                             (await page.$('text=/suspicious activity|verify|challenge|confirm/i').catch(() => null));
-                             
-      if (stillChallenge) {
-          console.log('   ❌ Challenge still detected. Stopping script to be safe.');
-          return true;
-      } else {
-          console.log('   ✅ Challenge cleared! Resuming...');
-          return false;
-      }
-  }
-
-  return false;
+  const { checkForChallenge } = await import('../../../shared/pageVerification.js');
+  return checkForChallenge(page);
 }
 
 /**
