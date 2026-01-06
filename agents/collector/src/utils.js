@@ -165,32 +165,54 @@ export async function autoLoginInstagram(page, username, password) {
     console.log('🔐 Checking for existing Instagram session...');
     
     // Navigate to homepage first to see if we are already logged in
-    await page.goto('https://www.instagram.com/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000
-    });
+    // Note: If we are logged in, Instagram might redirect us or show the feed
+    try {
+        await page.goto('https://www.instagram.com/', {
+          waitUntil: 'domcontentloaded',
+          timeout: 60000
+        });
+    } catch (e) {
+        // Ignore navigation timeout if we partly loaded
+    }
     
-    await delay(2000 + Math.random() * 2000);
+    await delay(3000 + Math.random() * 2000);
 
-    // If we're on the home page or reels page, check if we're logged in
-    // Logged in users usually have a different title or specific navigation elements
+    // ROBUST SESSION CHECK
+    // We check for multiple indicators of being logged in:
+    // 1. URL is valid (not login page)
+    // 2. Presence of specific UI elements (Home icon, Profile link, "Accounts Center")
+    // 3. Absence of login form
     const isLoggedIn = await page.evaluate(() => {
-      // Common indicators of being logged in:
-      // 1. Presence of "Messages" or "Create" in side nav
-      // 2. Absence of login inputs
-      const navText = document.body.innerText.toLowerCase();
-      const hasMessages = navText.includes('messages') || navText.includes('notifications');
-      const hasLoginInput = !!document.querySelector('input[name="username"]');
+      const url = window.location.href;
       
-      return hasMessages && !hasLoginInput;
+      // If we are definitely on a login page, we are NOT logged in
+      if (url.includes('/accounts/login')) return false;
+      
+      // Selectors for logged-in state (language agnostic where possible)
+      // SVG paths for Home, Messenger, New Post, Compass (Explore) often have aria-labels
+      const hasHomeIcon = !!document.querySelector('svg[aria-label="Home"]') || 
+                          !!document.querySelector('svg[aria-label="Accueil"]');
+                          
+      const hasMessenger = !!document.querySelector('a[href^="/direct/inbox"]');
+      
+      const hasProfileLink = !!document.querySelector('a[href*="/' + (window.__additionalData?.username || '') + '/"]');
+      
+      // Check for navigation rail (desktop) or bottom bar (mobile view)
+      const hasNav = !!document.querySelector('[role="navigation"]');
+      
+      // Check for feed container
+      const hasFeed = !!document.querySelector('[role="main"]');
+      
+      // If we have navigation AND main content, we are likely logged in
+      return (hasHomeIcon || hasMessenger || (hasNav && hasFeed));
     });
 
     if (isLoggedIn) {
-      console.log('   ✅ Valid session found! Skipping login.');
+      console.log('   ✅ Valid session found! (Home/Feed detected)');
       return true;
     }
 
-    console.log('   👤 No active session, proceeding to login...');
+    console.log('   👤 No active session detected, proceeding to login...');
     
     // If we're not on the login page, go there
     if (!page.url().includes('accounts/login')) {
