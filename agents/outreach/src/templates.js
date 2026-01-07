@@ -330,4 +330,4 @@ export function validateMessage(message) {
   };
 }
 
-export default TEMPLATES;
+export default DEFAULT_TEMPLATES;
