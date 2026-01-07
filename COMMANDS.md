@@ -144,24 +144,26 @@ npm run db:admin
 
 ---
 
-### 6. Backup (Sauvegarde)
-Sauvegarde vos données critiques (base SQLite, config) en local et/ou sur Google Drive.
+*Alias racine : `npm run backup` ou `npm run restore`*
 
 **Exemples :**
 ```bash
-# Backup local uniquement
-cd agents/collector && node scripts/backup.js
+# Sauvegarde locale uniquement
+npm run backup
 
-# Backup + upload vers Google Drive
-node scripts/backup.js --upload
+# Sauvegarde + upload vers Google Drive
+npm run backup -- --upload
 
-# Garder 14 backups au lieu de 7
-node scripts/backup.js --upload --keep 14
+# Restauration interactive (Local)
+npm run restore
+
+# Restauration interactive (Google Drive)
+npm run restore:remote
 ```
 
-**Options :**
+**Options Sauvegarde :**
 - `--upload` : Upload le backup vers Google Drive via rclone.
-- `--keep <n>` : Nombre de backups à conserver (défaut: 7). Les plus anciens sont supprimés automatiquement.
+- `--keep <n>` : Nombre de backups à conserver (défaut: 7). 
 
 **Fichiers sauvegardés :**
 - `permanent-data/leads.db` (+ fichiers WAL/SHM)

@@ -17,7 +17,9 @@
         "reply": "cd agents/dmresponder && npm run reply --",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
         "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
-        "backup": "node agents/collector/scripts/backup.js"
+        "backup": "node agents/collector/scripts/backup.js",
+        "restore": "node agents/collector/scripts/restore.js",
+        "restore:remote": "node agents/collector/scripts/restore.js --remote"
     },
     "author": "Louis",
     "license": "ISC",

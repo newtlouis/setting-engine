@@ -116,24 +116,26 @@ npm run db:admin
 ```
 - **Access**: http://localhost:8081
 
-#### 💾 Backup
-Backup your database and critical files locally or to Google Drive.
+#### 💾 Sauvegarde & Restauration
+
+Protégez vos données critiques (base SQLite, config) en local et/ou sur Google Drive.
 
 ```bash
-# Local backup only
-cd agents/collector && node scripts/backup.js
+# Sauvegarder (Local)
+npm run backup
 
-# Backup + upload to Google Drive (requires rclone)
-node scripts/backup.js --upload
+# Sauvegarder + Upload vers Google Drive (Cloud)
+npm run backup -- --upload
 
-# Keep more backups (default: 7)
-node scripts/backup.js --upload --keep 14
+# Restaurer (Interface interactive)
+npm run restore         # Depuis local
+npm run restore:remote  # Depuis Google Drive
 ```
 
-**Setup rclone for Google Drive:**
+**Configuration Google Drive (via rclone) :**
 ```bash
 brew install rclone
-rclone config  # Create remote named "gdrive"
+rclone config  # Créer un remote nommé "gdrive"
 ```
 
 ---
