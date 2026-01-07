@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +18,7 @@ export function normalizeProfileName(name) {
 
 /**
  * Load profile configuration
+ * Supports both .js (preferred) and .json files.
  * 
  * @param {string} profileName - Name of the profile (e.g. 'hercule')
  * @returns {Promise<Object>} Profile configuration object or null if not found
@@ -26,17 +27,34 @@ export async function loadProfileConfig(profileName) {
   if (!profileName) return null;
 
   const normalizedName = normalizeProfileName(profileName);
-  const configPath = path.join(PROJECT_ROOT, 'config', 'profiles', `${normalizedName}.json`);
-
+  const profilesDir = path.join(PROJECT_ROOT, 'config', 'profiles');
+  
+  // Try .js first (for multi-line support)
+  const jsPath = path.join(profilesDir, `${normalizedName}.config.js`);
   try {
-    const data = await fs.readFile(configPath, 'utf-8');
+    // Dynamic import needs file:// URL on Windows/Mac for absolute paths sometimes
+    const moduleUrl = pathToFileURL(jsPath).href;
+    const module = await import(moduleUrl);
+    console.log(`✅ Loaded JavaScript configuration for profile: ${normalizedName}`);
+    return module.default;
+  } catch (err) {
+    // If JS doesn't exist or fails, try .json
+    if (err.code !== 'ERR_MODULE_NOT_FOUND' && !err.message.includes('Cannot find module')) {
+        console.warn(`⚠️ Error importing JS config for ${normalizedName}: ${err.message}`);
+    }
+  }
+
+  // Fallback to .json
+  const jsonPath = path.join(profilesDir, `${normalizedName}.json`);
+  try {
+    const data = await fs.readFile(jsonPath, 'utf-8');
     const config = JSON.parse(data);
-    console.log(`✅ Loaded configuration for profile: ${normalizedName}`);
+    console.log(`✅ Loaded JSON configuration for profile: ${normalizedName}`);
     return config;
   } catch (err) {
     if (err.code === 'ENOENT') {
       console.warn(`⚠️  No configuration file found for profile: ${normalizedName}`);
-      console.warn(`   Expected at: ${configPath}`);
+      console.warn(`   Checked: ${jsPath} and ${jsonPath}`);
       return null;
     }
     console.error(`❌ Error loading profile config: ${err.message}`);
