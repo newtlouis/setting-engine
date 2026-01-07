@@ -41,6 +41,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       name TEXT UNIQUE NOT NULL,
       ig_username TEXT,
       description TEXT,
+      is_default INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -148,11 +149,16 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       console.log('🔄 Migrating: Adding account_id to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN account_id INTEGER REFERENCES accounts(id)`);
     }
-    
     const postsColumns = db.prepare("PRAGMA table_info(posts)").all();
     if (!postsColumns.some(col => col.name === 'account_id')) {
       console.log('🔄 Migrating: Adding account_id to posts table...');
       db.exec(`ALTER TABLE posts ADD COLUMN account_id INTEGER REFERENCES accounts(id)`);
+    }
+
+    const accountsColumns = db.prepare("PRAGMA table_info(accounts)").all();
+    if (!accountsColumns.some(col => col.name === 'is_default')) {
+      console.log('🔄 Migrating: Adding is_default to accounts table...');
+      db.exec(`ALTER TABLE accounts ADD COLUMN is_default INTEGER DEFAULT 0`);
     }
 
     // Ensure composite unique index exists (Crucial for UPSERT)
@@ -225,6 +231,30 @@ export function getAllAccounts() {
  */
 export function getAccountById(id) {
   return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+}
+
+/**
+ * Set an account as the default dashboard account
+ * @param {number} accountId 
+ */
+export function setDefaultAccount(accountId) {
+  const transaction = db.transaction(() => {
+    // Reset all
+    db.prepare('UPDATE accounts SET is_default = 0').run();
+    // Set new default
+    if (accountId) {
+      db.prepare('UPDATE accounts SET is_default = 1 WHERE id = ?').run(accountId);
+    }
+  });
+  transaction();
+  return { success: true };
+}
+
+/**
+ * Get the default dashboard account
+ */
+export function getDefaultAccount() {
+  return db.prepare('SELECT * FROM accounts WHERE is_default = 1').get();
 }
 
 // ============================================

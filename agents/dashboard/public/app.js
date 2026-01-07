@@ -4,11 +4,12 @@ let currentAccountId = null; // Selected account filter
 let currentFilter = 'new';
 
 // Init
-document.addEventListener('DOMContentLoaded', () => {
-    loadAccounts();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadAccounts();
+    await loadDefaultAccount(); // New: Load default account filter
     loadBookings();
     loadStats();
-    loadLeads('new');
+    loadLeads(currentFilter);
 });
 
 // Load Accounts
@@ -30,6 +31,42 @@ async function loadAccounts() {
         });
     } catch (e) {
         console.error('Accounts load error', e);
+    }
+}
+
+// Load Default Account
+async function loadDefaultAccount() {
+    try {
+        const res = await fetch('/api/accounts/default');
+        const defaultAcc = await res.json();
+        
+        if (defaultAcc && defaultAcc.id) {
+            currentAccountId = defaultAcc.id;
+            document.getElementById('accountSelect').value = defaultAcc.id;
+            console.log(`📌 Default account set to: ${defaultAcc.name}`);
+        }
+    } catch (e) {
+        console.error('Default account load error', e);
+    }
+}
+
+// Set Current as Default
+async function setDefaultAccount() {
+    try {
+        const res = await fetch('/api/accounts/set-default', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: currentAccountId })
+        });
+        
+        if (res.ok) {
+            alert('📌 Ce compte sera maintenant affiché par défaut au démarrage.');
+        } else {
+            alert('Erreur lors de la définition du compte par défaut');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erreur réseau');
     }
 }
 

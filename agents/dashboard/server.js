@@ -3,12 +3,13 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
+import { getDatabase } from '../collector/src/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Path to shared database
 const DB_PATH = path.join(__dirname, '..', 'collector', 'permanent-data', 'leads.db');
@@ -20,14 +21,10 @@ app.use(express.json());
 // Initialize DB safely
 let db;
 try {
-    console.log(`🔌 Connecting to database at: ${DB_PATH}`);
-    db = new Database(DB_PATH, { fileMustExist: true });
-    console.log('✅ Connected to SQLite.');
+    db = await getDatabase(DB_PATH);
+    console.log('✅ Connected to SQLite via shared module.');
 } catch (err) {
-    console.error('❌ Database connection failed:', err.message);
-    if (!DB_PATH.includes('leads.db')) {
-        console.error('   Hint: Ensure "agents/collector/permanent-data/leads.db" exists.');
-    }
+    console.error('❌ Database initialization failed:', err.message);
 }
 
 // API Routes
@@ -40,6 +37,34 @@ app.get('/api/accounts', (req, res) => {
     } catch (err) {
         // Table might not exist yet
         res.json([{ id: null, name: 'Tous les comptes' }]);
+    }
+});
+
+// GET /api/accounts/default - Get the default account
+app.get('/api/accounts/default', (req, res) => {
+    try {
+        const defaultAccount = db.prepare('SELECT * FROM accounts WHERE is_default = 1').get();
+        res.json(defaultAccount || null);
+    } catch (err) {
+        res.json(null);
+    }
+});
+
+// POST /api/accounts/set-default - Set default account
+app.post('/api/accounts/set-default', (req, res) => {
+    try {
+        const { account_id } = req.body;
+        
+        db.transaction(() => {
+            db.prepare('UPDATE accounts SET is_default = 0').run();
+            if (account_id) {
+                db.prepare('UPDATE accounts SET is_default = 1 WHERE id = ?').run(account_id);
+            }
+        })();
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
