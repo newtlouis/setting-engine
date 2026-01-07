@@ -8,7 +8,7 @@ import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { USER_AGENT } from '../../../shared/stealth.js';
 dotenv.config();
 
-const profile = process.env.IG_PROFILE || 'default';
+const profile = process.env.IG_PROFILE;
 const credentials = getCredentialsForProfile(profile);
 
 export const CONFIG = {
@@ -33,10 +33,7 @@ export const CONFIG = {
   INSTAGRAM_PASSWORD: credentials.password,
   
   // Persistent browser data for session storage
-  // Support for multiple profiles via IG_PROFILE env var
-  USER_DATA_DIR: (!process.env.IG_PROFILE || process.env.IG_PROFILE === 'default')
-    ? path.join(process.cwd(), 'browser-data')
-    : path.join(process.cwd(), `browser-data-${process.env.IG_PROFILE}`),
+  USER_DATA_DIR: path.join(process.cwd(), `browser-data-${profile || 'anonymous'}`),
 
   // Instagram selectors (centralized for easy updates)
   // FIX NOTE: Update these selectors if Instagram changes their DOM structure

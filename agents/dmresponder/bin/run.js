@@ -50,10 +50,16 @@ program
   .option('--interactive', 'Interactive mode: prompt for user message', false)
   .option('--list', 'List active conversations from database', false)
   .option('--save', 'Save response to database (with --username)', false)
-  .option('--profile <name>', 'Browser profile name', 'default')
+  .option('--profile <name>', 'Browser profile name')
   .action(async (options) => {
     try {
       console.log('\n=== DM Responder Agent ===\n');
+
+      if (!options.profile) {
+        console.error('❌ Error: Profile name is required. Use --profile <name>');
+        console.error('   Example: npm run reply -- --profile hercule --username prospect_name');
+        process.exit(1);
+      }
 
       // Resolve Account ID
       const { getOrCreateAccount, initDatabase } = await import('../../collector/src/database.js');

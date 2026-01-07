@@ -82,6 +82,10 @@ async function main() {
   if (options.profile) {
       process.env.IG_PROFILE = options.profile;
       console.log(`👤 Using Browser Profile: ${options.profile}`);
+  } else if (!process.env.IG_PROFILE) {
+      console.error('\n❌ Error: You must specify a profile name using --profile <name>');
+      console.error('   Example: npm run collect -- --profile hercule -t fitness --max-posts 10');
+      process.exit(1);
   }
   
   console.log('\n🚀 Instagram Lead Collection Pipeline');

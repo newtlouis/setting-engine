@@ -57,6 +57,16 @@ function findNewMessages(scrapedMessages, dbHistory) {
 export async function runCronWatcher(options = {}) {
   await initDB();
   
+  const profile = options.profile || process.env.IG_PROFILE;
+  if (!profile) {
+    throw new Error('Profile name is required for DM Responder Cron. Use --profile <name>.');
+  }
+
+  // Resolve accountId
+  const account = dbFunctions.getOrCreateAccount(profile);
+  const accountId = account.id;
+  console.log(`👤 Profile: ${profile} (Account ID: ${accountId})`);
+
   const statuses = Array.isArray(options.statuses) && options.statuses.length > 0
     ? options.statuses
     : DEFAULT_STATUSES;
@@ -65,15 +75,12 @@ export async function runCronWatcher(options = {}) {
   const threads = await getTrackedDmThreads({
     statuses,
     onlyWithUrl: true,
-    limit
+    limit,
+    accountId // Filter threads by account
   });
   
   if (!threads || threads.length === 0) {
-    console.log('No DM threads matched the criteria.');
-    console.log('Criteria used:');
-    console.log(`  Statuses: ${statuses.join(', ')}`);
-    console.log(`  With DM URL: true`);
-    console.log(`  Limit: ${limit}`);
+    console.log(`No active DM threads matched the criteria for account ${profile}.`);
     return;
   }
 
@@ -87,15 +94,19 @@ export async function runCronWatcher(options = {}) {
   let successCount = 0;
   
   try {
+    // Determine browser data dir
+    const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
+
     // Step 1: Init browser (single login) - ALWAYS visible
     browser = await initBrowser({ 
-      userDataDir: './browser-data',
+      userDataDir,
+      profile,
       headless: false // Always visible
     });
     
     // Step 2: Process each thread
     for (const thread of threads) {
-      const result = await processThread(thread, options);
+      const result = await processThread(thread, { ...options, accountId, profile });
       if (result.success) {
         successCount++;
       }

@@ -226,8 +226,12 @@ export async function runOutreach(options = {}) {
     dryRun = true,
     userDataDir: baseUserDataDir = './browser-data',
     isSimple = false,
-    profile = process.env.IG_PROFILE || 'default'
+    profile = process.env.IG_PROFILE
   } = options;
+
+  if (!profile) {
+    throw new Error('Profile name is required. Use --profile <name> or set IG_PROFILE env var.');
+  }
   
   await loadDatabase();
   const account = dbFunctions.getOrCreateAccount(profile);

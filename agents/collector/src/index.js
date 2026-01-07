@@ -56,7 +56,10 @@ export async function runCollector(config) {
 
   // Initialize database and get account
   await initDatabase();
-  const profileName = process.env.IG_PROFILE || 'default';
+  const profileName = process.env.IG_PROFILE;
+  if (!profileName) {
+    throw new Error('IG_PROFILE environment variable missing. Ensure you passed --profile to the command.');
+  }
   const account = getOrCreateAccount(profileName);
   console.log(`📁 Account: ${account.name} (id: ${account.id})\n`);
 

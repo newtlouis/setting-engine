@@ -20,6 +20,7 @@ program
   .option('--statuses <list>', 'Comma-separated lead statuses to process', 'conversation')
   .option('--output-dir <dir>', 'Directory to store suggestion files')
   .option('--show-browser', 'Run Playwright in headed mode (default headless)', false)
+  .option('--profile <name>', 'Browser profile name')
   .action(async (options) => {
     const limit = parseInt(options.limit, 10) || 5;
     const statuses = options.statuses
@@ -31,7 +32,8 @@ program
         limit,
         statuses,
         outputDir: options.outputDir,
-        headless: !options.showBrowser
+        headless: !options.showBrowser,
+        profile: options.profile
       });
     } catch (error) {
       console.error('Cron watcher failed:', error.message);

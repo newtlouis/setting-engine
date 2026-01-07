@@ -211,7 +211,9 @@ export function closeDatabase() {
  * @returns {Object} Account with id
  */
 export function getOrCreateAccount(name) {
-  if (!name) name = 'default';
+  if (!name) {
+    throw new Error('Account name (profile) is required. Please specify it using the --profile flag.');
+  }
   
   const existing = db.prepare('SELECT * FROM accounts WHERE name = ?').get(name);
   if (existing) return existing;

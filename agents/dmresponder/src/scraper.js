@@ -8,6 +8,7 @@
  */
 
 import { chromium } from 'playwright';
+import path from 'path';
 import dotenv from 'dotenv';
 import { createInterface } from 'readline';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
@@ -93,13 +94,15 @@ async function typeHumanLike(page, text) {
  */
 export async function initBrowser(options = {}) {
   const {
-    profile = 'default',
+    profile = process.env.IG_PROFILE,
     headless = CONFIG.HEADLESS
   } = options;
   
-  const userDataDir = (!profile || profile === 'default')
-    ? './browser-data'
-    : `./browser-data-${profile}`;
+  if (!profile) {
+    throw new Error('Profile name is required. Use --profile <name> or set IG_PROFILE env var.');
+  }
+
+  const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
   console.log('\n=== Initializing Browser ===');
   console.log(`   Profile: ${profile}`);
   console.log(`   User data: ${userDataDir}`);

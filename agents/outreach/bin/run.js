@@ -53,6 +53,10 @@ async function main() {
         const account = getOrCreateAccount(opts.profile);
         accountId = account.id;
         console.log(`👤 Profile: ${opts.profile} (Account ID: ${accountId})`);
+    } else {
+        console.error('❌ Error: Profile name is required. Use --profile <name>');
+        console.error('   Example: npm run send -- --profile hercule --mode preview');
+        process.exit(1);
     }
 
     switch (opts.mode) {
