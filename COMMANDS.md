@@ -160,6 +160,9 @@ npm run backup:remote
 # Restauration interactive
 npm run restore         # Local
 npm run restore:remote  # Cloud
+
+# Tout réinitialiser (⚠️ SUPRESSION DÉFINITIVE)
+rm agents/collector/permanent-data/leads.db*
 ```
 
 **Options Sauvegarde :**

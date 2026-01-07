@@ -127,6 +127,9 @@ npm run backup:remote
 # Restaurer (Interface interactive)
 npm run restore         # Depuis local
 npm run restore:remote  # Depuis Google Drive
+
+# Réinitialiser la base de données (SUPPRIME TOUT)
+rm agents/collector/permanent-data/leads.db*
 ```
 
 **Configuration Google Drive (via rclone) :**

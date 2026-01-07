@@ -507,7 +507,6 @@ export async function getOutreachStats(accountId = null) {
       WHERE status = 'new' 
         AND is_ignored = 0
         AND engagement_score >= ?
-        AND (is_private IS NULL OR is_private = 0)
         ${accountFilter}
     `).get(OUTREACH_CRITERIA.MIN_ENGAGEMENT_SCORE, ...accountParam).count,
     

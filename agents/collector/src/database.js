@@ -52,42 +52,24 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL,
       account_id INTEGER REFERENCES accounts(id),
+      full_name TEXT,
+      bio TEXT,
+      email TEXT,
+      profile_url TEXT,
+      dm_url TEXT,
+      status TEXT DEFAULT 'new',
+      warmth TEXT DEFAULT 'cold',
       engagement_score REAL DEFAULT 0,
       total_comments INTEGER DEFAULT 0,
       total_messages_sent INTEGER DEFAULT 0,
       total_messages_received INTEGER DEFAULT 0,
-      
-      -- Outreach status: new, outreach, responding, replied, failed, closed
-      status TEXT DEFAULT 'new',
-      first_message_sent_at TEXT,
-      last_contact_at TEXT,
-      profile_url TEXT,
-      dm_url TEXT,
-      
-      -- Lead qualification
-      warmth TEXT DEFAULT 'cold',  -- cold, warm, hot
       lead_source TEXT,
       lead_type TEXT DEFAULT 'cold',
       booking_status TEXT, -- pending, completed
+      conversation_stage TEXT,
       is_ignored INTEGER DEFAULT 0,
-      is_private INTEGER DEFAULT 0,
-      is_verified INTEGER DEFAULT 0,
-      is_business INTEGER DEFAULT 0,
-      followers_count INTEGER,
-      following_count INTEGER,
-      posts_count INTEGER,
-      full_name TEXT,
-      bio TEXT,
-      external_url TEXT,
-      profile_scraped_at TEXT,
       pain_points TEXT,  -- JSON array
-      goals TEXT,  -- JSON array
-      objections TEXT,  -- JSON array
       notes TEXT,
-      
-      -- Timestamps
-      first_seen_at TEXT DEFAULT (datetime('now')),
-      last_seen_at TEXT DEFAULT (datetime('now')),
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(username, account_id)
@@ -172,6 +154,9 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       console.log('🔄 Migrating: Adding account_id to posts table...');
       db.exec(`ALTER TABLE posts ADD COLUMN account_id INTEGER REFERENCES accounts(id)`);
     }
+
+    // Ensure composite unique index exists (Crucial for UPSERT)
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_username_account_unique ON leads(username, account_id)`);
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }
@@ -256,14 +241,12 @@ export function saveLeads(leadsData) {
   // Prepare bulk insert statement
   const insert = db.prepare(`
     INSERT INTO leads (
-      username, profile_url, lead_source, lead_type, account_id,
-      last_seen_at
+      username, profile_url, lead_source, lead_type, account_id, updated_at
     ) VALUES (
-      @username, @profile_url, @lead_source, @lead_type, @account_id,
-      datetime('now')
+      @username, @profile_url, @lead_source, @lead_type, @account_id, datetime('now')
     )
-    ON CONFLICT(username) DO UPDATE SET
-      last_seen_at = datetime('now')
+    ON CONFLICT(username, account_id) DO UPDATE SET
+      updated_at = datetime('now')
   `); // Minimal update now since we don't have scraped profile data columns
 
   const insertComment = db.prepare(`
@@ -277,7 +260,6 @@ export function saveLeads(leadsData) {
   const updateLeadStats = db.prepare(`
     UPDATE leads SET 
       total_comments = (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0),
-      last_comment_date = datetime('now'),
       warmth = CASE 
         WHEN (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0) >= 3 THEN 'hot'
         WHEN (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id AND is_spam = 0) >= 1 THEN 'warm'
@@ -304,7 +286,7 @@ export function saveLeads(leadsData) {
         });
         
         // Get lead ID
-        const leadId = db.prepare('SELECT id FROM leads WHERE username = ?').get(lead.username).id;
+        const leadId = db.prepare('SELECT id FROM leads WHERE username = ? AND account_id = ?').get(lead.username, lead.account_id || null).id;
         
         // Insert Comment
         if (lead.comment) {
@@ -387,7 +369,7 @@ export function getLeads(filters = {}) {
     query += ' AND is_ignored = 0';
   }
   
-  query += ' ORDER BY engagement_score DESC, last_seen_at DESC';
+  query += ' ORDER BY engagement_score DESC, updated_at DESC';
   
   if (filters.limit) {
     query += ' LIMIT @limit';
@@ -438,14 +420,6 @@ export function updateLeadProfile(username, profileData) {
     UPDATE leads SET
       full_name = COALESCE(@full_name, full_name),
       bio = COALESCE(@bio, bio),
-      external_url = COALESCE(@external_url, external_url),
-      followers_count = COALESCE(@followers_count, followers_count),
-      following_count = COALESCE(@following_count, following_count),
-      posts_count = COALESCE(@posts_count, posts_count),
-      is_private = COALESCE(@is_private, is_private),
-      is_verified = COALESCE(@is_verified, is_verified),
-      is_business = COALESCE(@is_business, is_business),
-      profile_scraped_at = datetime('now'),
       updated_at = datetime('now')
     WHERE username = @username
   `);
@@ -453,14 +427,7 @@ export function updateLeadProfile(username, profileData) {
   return stmt.run({
     username,
     full_name: profileData.full_name || null,
-    bio: profileData.bio || null,
-    external_url: profileData.external_url || null,
-    followers_count: profileData.followers_count || null,
-    following_count: profileData.following_count || null,
-    posts_count: profileData.posts_count || null,
-    is_private: profileData.is_private ? 1 : 0,
-    is_verified: profileData.is_verified ? 1 : 0,
-    is_business: profileData.is_business ? 1 : 0
+    bio: profileData.bio || null
   });
 }
 
@@ -501,10 +468,10 @@ export function markLeadFailed(username, reason) {
  */
 function upsertLead(lead) {
   const stmt = db.prepare(`
-    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, last_seen_at)
+    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, updated_at)
     VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, datetime('now'))
-    ON CONFLICT(username) DO UPDATE SET 
-      last_seen_at = datetime('now'),
+    ON CONFLICT(username, account_id) DO UPDATE SET 
+      updated_at = datetime('now'),
       lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source)
     RETURNING *
   `);
@@ -524,7 +491,7 @@ function upsertLead(lead) {
  * @param {Object} comment - Comment data
  * @returns {Object|null} Inserted comment or null if duplicate
  */
-export function insertComment(comment) {
+export function insertComment(comment, forcedAccountId = null) {
   // Upsert lead (handles creation or update of last_seen/source)
   const leadSource = comment.source || 'unknown';
   const leadType = 'cold'; 
@@ -534,7 +501,7 @@ export function insertComment(comment) {
     profile_url: comment.profile_url,
     lead_source: leadSource,
     lead_type: leadType,
-    account_id: comment.account_id || null  // Propagate account
+    account_id: forcedAccountId || comment.account_id || null  // Propagate account
   });
   
   // Check for duplicate (same user, same post, similar text)
@@ -589,7 +556,7 @@ export function getCommentsForLead(leadId) {
  * Get all comments with optional filters
  */
 export function getComments(filters = {}) {
-  let query = 'SELECT c.*, l.full_name, l.followers_count FROM comments c JOIN leads l ON c.lead_id = l.id WHERE 1=1';
+  let query = 'SELECT c.*, l.full_name FROM comments c JOIN leads l ON c.lead_id = l.id WHERE 1=1';
   const params = {};
   
   if (filters.is_spam !== undefined) {
@@ -615,13 +582,13 @@ export function getComments(filters = {}) {
 /**
  * Batch insert comments (with transaction for performance)
  */
-export function insertCommentsBatch(comments) {
+export function insertCommentsBatch(comments, accountId = null) {
   const inserted = [];
   const skipped = [];
   
   const insertMany = db.transaction((comments) => {
     for (const comment of comments) {
-      const result = insertComment(comment);
+      const result = insertComment(comment, accountId);
       if (result) {
         inserted.push(result);
       } else {

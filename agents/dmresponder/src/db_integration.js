@@ -63,7 +63,7 @@ export async function getLeadWithContext(username, accountId = null) {
     
     // Profile data
     followers_count: 0, // removed from DB
-    bio: '[Bio not scraped]', // removed from DB
+    bio: lead.bio || '[Bio not scraped]',
     is_verified: false,
     is_business: false,
     is_private: false,
@@ -76,8 +76,6 @@ export async function getLeadWithContext(username, accountId = null) {
     // Qualification
     warmth: lead.warmth || 'cold',
     pain_points: lead.pain_points ? JSON.parse(lead.pain_points) : [],
-    goals: lead.goals ? JSON.parse(lead.goals) : [],
-    objections_likely: lead.objections ? JSON.parse(lead.objections) : [],
     
     // Conversation state
     conversation_stage: lead.conversation_stage,

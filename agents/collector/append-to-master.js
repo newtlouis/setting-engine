@@ -15,10 +15,11 @@ import { parse } from 'csv-parse/sync';
 import { fileURLToPath } from 'url';
 import {
   initDatabase,
-  closeDatabase,
+  getOrCreateAccount,
   insertCommentsBatch,
   recalculateAllEngagement,
-  getStats
+  getStats,
+  closeDatabase
 } from './src/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,14 @@ async function saveToDatabase() {
 
     // Initialize database
     await initDatabase(dbFile);
+
+    // Get current account from env or default
+    const profileName = process.env.IG_PROFILE;
+    if (!profileName) {
+        throw new Error('IG_PROFILE environment variable missing. Cannot save to database without an account context.');
+    }
+    const account = getOrCreateAccount(profileName);
+    console.log(`📁 Target Account: ${account.name} (id: ${account.id})`);
     
     // Get stats before
     const statsBefore = getStats();
@@ -63,7 +72,7 @@ async function saveToDatabase() {
 
     // Insert comments in batch
     console.log('\n💾 Saving comments to database...');
-    const { inserted, skipped } = insertCommentsBatch(comments);
+    const { inserted, skipped } = insertCommentsBatch(comments, account.id);
 
     console.log(`   ✅ Inserted ${inserted.length} new comments`);
     console.log(`   ⏭️  Skipped ${skipped.length} duplicates`);
