@@ -118,14 +118,11 @@ npm run db:admin
 
 #### 💾 Sauvegarde & Restauration
 
-Protégez vos données critiques (base SQLite, config) en local et/ou sur Google Drive.
+Le système est configuré pour être **ultra-sécurisé** : une sauvegarde (locale + Google Drive) est lancée **automatiquement** après chaque exécution réussie des agents.
 
 ```bash
-# Sauvegarder (Local)
-npm run backup
-
-# Sauvegarder + Upload vers Google Drive (Cloud)
-npm run backup -- --upload
+# Sauvegarder manuellement (Cloud)
+npm run backup:remote
 
 # Restaurer (Interface interactive)
 npm run restore         # Depuis local

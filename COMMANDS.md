@@ -146,19 +146,20 @@ npm run db:admin
 
 *Alias racine : `npm run backup` ou `npm run restore`*
 
-**Exemples :**
+> [!IMPORTANT]
+> Par sécurité, une sauvegarde vers Google Drive est lancée **automatiquement** à la fin de chaque commande `collect`, `send` et `reply`.
+
+**Commandes manuelles :**
 ```bash
 # Sauvegarde locale uniquement
 npm run backup
 
 # Sauvegarde + upload vers Google Drive
-npm run backup -- --upload
+npm run backup:remote
 
-# Restauration interactive (Local)
-npm run restore
-
-# Restauration interactive (Google Drive)
-npm run restore:remote
+# Restauration interactive
+npm run restore         # Local
+npm run restore:remote  # Cloud
 ```
 
 **Options Sauvegarde :**

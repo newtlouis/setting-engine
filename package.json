@@ -12,12 +12,13 @@
     "scripts": {
         "ui": "cd agents/collector && npm run ui --",
         "scrape": "cd agents/collector && npm run scrape --",
-        "collect": "cd agents/collector && npm run collect --",
-        "send": "cd agents/outreach && npm run send --",
-        "reply": "cd agents/dmresponder && npm run reply --",
-        "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
+        "collect": "cd agents/collector && npm run collect -- && npm run backup -- --upload",
+        "send": "cd agents/outreach && npm run send -- && npm run backup -- --upload",
+        "reply": "cd agents/dmresponder && npm run reply -- && npm run backup -- --upload",
+        "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser && npm run backup -- --upload",
         "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
         "backup": "node agents/collector/scripts/backup.js",
+        "backup:remote": "npm run backup -- --upload",
         "restore": "node agents/collector/scripts/restore.js",
         "restore:remote": "node agents/collector/scripts/restore.js --remote"
     },
