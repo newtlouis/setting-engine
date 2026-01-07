@@ -87,7 +87,8 @@ function getRemoteBackups() {
 
 async function restoreFrom(backup) {
   console.log(`\n📦 Restoring from: ${backup.name}`);
-  console.log('   ⚠️  This will overwrite current data!');
+  console.log('   ⚠️  WARNING: This will overwrite current data!');
+  console.log('   ⚠️  IMPORTANT: Ensure the Dashboard and all agents are CLOSED before proceeding.');
   
   if (!options.latest) {
     const confirm = await question('   Are you sure? (y/N): ');
@@ -101,6 +102,18 @@ async function restoreFrom(backup) {
   const permDataDir = path.join(ROOT_DIR, 'permanent-data');
   if (!fs.existsSync(permDataDir)) fs.mkdirSync(permDataDir, { recursive: true });
 
+  // CRITICAL: If we are restoring a .db, we MUST delete current WAL/SHM files
+  // otherwise SQLite might try to "recover" from the old WAL using the new DB.
+  const dbPath = path.join(ROOT_DIR, CONFIG.restoreTargets['leads.db']);
+  if (fs.existsSync(dbPath + '-wal')) {
+    console.log('   🧹 Cleaning up existing WAL file...');
+    fs.unlinkSync(dbPath + '-wal');
+  }
+  if (fs.existsSync(dbPath + '-shm')) {
+    console.log('   🧹 Cleaning up existing SHM file...');
+    fs.unlinkSync(dbPath + '-shm');
+  }
+
   for (const [filename, targetRelPath] of Object.entries(CONFIG.restoreTargets)) {
     const targetPath = path.join(ROOT_DIR, targetRelPath);
     
@@ -112,6 +125,18 @@ async function restoreFrom(backup) {
           `rclone copy "${backup.path}/${filename}" "${path.dirname(targetPath)}"`,
           { stdio: 'inherit' }
         );
+
+        // For DB, try to download WAL/SHM if they exist in backup
+        if (filename.endsWith('.db')) {
+           try {
+             execSync(`rclone copy "${backup.path}/${filename}-wal" "${path.dirname(targetPath)}"`, { stdio: 'ignore' });
+             console.log(`   ✅ Restored: ${filename}-wal`);
+           } catch(e) {}
+           try {
+             execSync(`rclone copy "${backup.path}/${filename}-shm" "${path.dirname(targetPath)}"`, { stdio: 'ignore' });
+             console.log(`   ✅ Restored: ${filename}-shm`);
+           } catch(e) {}
+        }
       } else {
         // Local copy
         const sourcePath = path.join(backup.path, filename);
@@ -120,8 +145,14 @@ async function restoreFrom(backup) {
           
           // Restore WAL/SHM if relevant
           if (filename.endsWith('.db')) {
-             if (fs.existsSync(sourcePath + '-wal')) fs.copyFileSync(sourcePath + '-wal', targetPath + '-wal');
-             if (fs.existsSync(sourcePath + '-shm')) fs.copyFileSync(sourcePath + '-shm', targetPath + '-shm');
+             if (fs.existsSync(sourcePath + '-wal')) {
+               fs.copyFileSync(sourcePath + '-wal', targetPath + '-wal');
+               console.log(`   ✅ Restored: ${filename}-wal`);
+             }
+             if (fs.existsSync(sourcePath + '-shm')) {
+               fs.copyFileSync(sourcePath + '-shm', targetPath + '-shm');
+               console.log(`   ✅ Restored: ${filename}-shm`);
+             }
           }
         } else {
           console.log(`   ⚠️  File not found in backup: ${filename}`);
