@@ -21,6 +21,7 @@ import {
   parseThreadMetadata,
   setDmThreadStatus
 } from './db_integration.js';
+import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -104,9 +105,15 @@ export async function runCronWatcher(options = {}) {
       headless: false // Always visible
     });
     
+    // Load Profile Config
+    const profileConfig = await loadProfileConfig(profile);
+    if (profileConfig && profileConfig.niche) {
+        console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
+    }
+
     // Step 2: Process each thread
     for (const thread of threads) {
-      const result = await processThread(thread, { ...options, accountId, profile });
+      const result = await processThread(thread, { ...options, accountId, profile, profileConfig });
       if (result.success) {
         successCount++;
       }
@@ -229,7 +236,8 @@ async function processThread(thread, options) {
     console.log(`   🤖 Generating response with ${updatedHistory.length} messages context...`);
     const response = await generateResponse({
       conversationHistory: updatedHistory,
-      leadContext
+      leadContext,
+      profileConfig: options.profileConfig
     });
     
     const message = response.next_message || response.message || response.suggested_message;

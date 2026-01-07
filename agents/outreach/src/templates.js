@@ -8,7 +8,7 @@
 /**
  * Template categories based on lead warmth and context
  */
-export const TEMPLATES = {
+export const DEFAULT_TEMPLATES = {
   // Leads expressing struggle (pain)
   pain_based: [
     {
@@ -82,7 +82,26 @@ export const TEMPLATES = {
  * @param {Array} comments - Lead's comments
  * @returns {Object} Selected template with reasoning
  */
-export function selectTemplate(lead, comments = []) {
+/**
+ * Select the best template based on lead data
+ * 
+ * @param {Object} lead - Lead data from database
+ * @param {Array} comments - Lead's comments
+ * @param {Object} profileConfig - (Optional) Profile specific configuration
+ * @returns {Object} Selected template with reasoning
+ */
+export function selectTemplate(lead, comments = [], profileConfig = null) {
+  // Merge defaults with profile specific templates
+  const TEMPLATES = { ...DEFAULT_TEMPLATES };
+  
+  if (profileConfig && profileConfig.outreach && profileConfig.outreach.templates) {
+      // Override or append templates based on category
+      for (const [category, customTemplates] of Object.entries(profileConfig.outreach.templates)) {
+          if (customTemplates && customTemplates.length > 0) {
+              TEMPLATES[category] = customTemplates;
+          }
+      }
+  }
   // Analyze comments to determine intent
   const commentTexts = comments.map(c => c.comment_text || '').join(' ').toLowerCase();
   
@@ -195,7 +214,8 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
     topic = 'their goals',
     creatorName = null,
     customTemplate = null,
-    isSimple = false
+    isSimple = false,
+    profileConfig = null
   } = options;
   
   // Extract first name using improved logic
@@ -223,7 +243,7 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
       reasoning: 'Using custom template provided'
     };
   } else {
-    selectedTemplate = selectTemplate(lead, comments);
+    selectedTemplate = selectTemplate(lead, comments, profileConfig);
   }
   
   // Extract pain point from most recent comment

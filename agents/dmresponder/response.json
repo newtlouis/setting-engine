@@ -1,0 +1,16 @@
+{
+  "next_message": "Ahah super question ! 😉 Écoute, juste avant de te dire qui je suis, dis-moi plutôt : qu'est-ce qui t'amène à m'écrire aujourd'hui ? Ça m'aidera à te donner la réponse la plus utile pour TOI !",
+  "conversation_stage": "creation_empathie",
+  "message_type": "empathie",
+  "reasoning": "L'utilisateur pose une question. Montrer de l'empathie tout en guidant doucement vers la qualification.",
+  "alternative_approaches": [
+    "Poser une question de suivi sur sa situation spécifique",
+    "Partager une brève histoire personnelle (1-2 phrases)",
+    "Valider ses sentiments et offrir de l'espoir"
+  ],
+  "next_steps": [
+    "Attendre sa réponse",
+    "Rechercher des signaux de qualification (délai, niveau d'engagement)",
+    "Continuer à construire la confiance avant de proposer une offre"
+  ]
+}

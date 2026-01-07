@@ -12,11 +12,11 @@ yarn.lock
 agents/*/output/
 agents/*/data/
 *.csv
-*.json
+# *.json
 !*schema.json
 !*example.json
-!package*.json
-!manifest.json
+!package# *.json
+# !manifest.json
 
 # Logs
 *.log

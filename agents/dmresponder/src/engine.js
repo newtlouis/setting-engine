@@ -20,7 +20,7 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
  * @param {Array} params.conversationHistory - Array of {role, text} objects
  * @returns {Promise<Object>} Response object with next_message, stage, reasoning, etc.
  */
-export async function generateResponse({ conversationHistory }) {
+export async function generateResponse({ conversationHistory, leadContext = null, profileConfig = null }) {
   // Validate input
   validateConversation(conversationHistory);
 
@@ -30,7 +30,7 @@ export async function generateResponse({ conversationHistory }) {
 
   try {
     // The user's last message is the prompt for the LLM
-    const llmResponseText = await getLlmResponse(conversationHistory);
+    const llmResponseText = await getLlmResponse(conversationHistory, leadContext, profileConfig);
 
     // Structure the response to match the expected output format
     return {
@@ -60,7 +60,7 @@ export async function generateResponse({ conversationHistory }) {
  * @param {Array} conversationHistory - The history of the conversation.
  * @returns {Promise<string>} The text of the next message.
  */
-async function getLlmResponse(conversationHistory, leadContext) {
+async function getLlmResponse(conversationHistory, leadContext, profileConfig = null) {
   const headers = {
     'Authorization': `Bearer ${OPENAI_API_KEY}`,
     'Content-Type': 'application/json',
@@ -78,9 +78,15 @@ async function getLlmResponse(conversationHistory, leadContext) {
     if (leadContext.notes) contextDescription += `- Notes: ${leadContext.notes}\n`;
   }
 
+  // Determine System Prompt
+  let systemPrompt = SYSTEM_PROMPT;
+  if (profileConfig && profileConfig.dm_responder && profileConfig.dm_responder.system_prompt) {
+      systemPrompt = profileConfig.dm_responder.system_prompt;
+  }
+
   // The messages payload starts with the system prompt + context
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT + contextDescription },
+    { role: 'system', content: systemPrompt + contextDescription },
     ...conversationHistory.map(msg => ({ role: msg.role, content: msg.text })),
   ];
 

@@ -17,6 +17,8 @@ import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMe
 // ExcelCRM removed
 
 
+import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+
 // Import database from collector (shared)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,7 +146,8 @@ export function generateOutreachMessages(leads, options = {}) {
       niche,
       topic,
       customTemplate,
-      isSimple
+      isSimple,
+      profileConfig: options.profileConfig || null
     });
     
     const validation = validateMessage(generated.message);
@@ -272,15 +275,26 @@ export async function runOutreach(options = {}) {
     while (successfulCount < cleanLimit && attempts < maxAttempts) {
         
         const remaining = cleanLimit - successfulCount;
+
         console.log(`\n--- Batch Progress: ${successfulCount}/${cleanLimit} ready (Need ${remaining} more) ---`);
-        
+
         // Fetch a bit more than needed to account for likely skips
         // e.g. if need 1, fetch 3. If need 5, fetch 8.
         const fetchLimit = remaining + Math.ceil(remaining * 0.5) + 2;
-        
-        const leads = await getOutreachCandidates({ 
-            ...options, 
+
+        /* LOAD PROFILE CONFIG */
+        let profileConfig = null;
+        if (profile) {
+            profileConfig = await loadProfileConfig(profile);
+            if (profileConfig && profileConfig.niche) {
+                console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
+            }
+        }
+
+        /* STEP 1: Get Candidates */
+        const leads = await getOutreachCandidates({
             limit: fetchLimit,
+            targetStatus: 'new', // Explicitly target new leads for outreach
             accountId: accountId
         });
 
@@ -288,12 +302,17 @@ export async function runOutreach(options = {}) {
             console.log('   No more eligible leads found in database.');
             break;
         }
-        
+
         console.log(`   Fetched batch of ${leads.length} candidates.`);
 
-        // Generate messages for this batch
-        const messages = generateOutreachMessages(leads, { niche, topic, isSimple });
-        
+        /* STEP 2: Generate Messages */
+        const messages = generateOutreachMessages(leads, {
+            niche,
+            topic,
+            isSimple,
+            profileConfig // Pass profileConfig here
+        });
+
         // Handle Invalid Messages: Mark them as failed so we don't infinite loop on them
         const invalidMessages = messages.filter(m => !m.validation.valid);
         if (invalidMessages.length > 0) {
