@@ -8,13 +8,14 @@
 import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
 import { scrapePostComments } from './scrape_post.js';
-import { ensureOutputDir, writePosts, writeComments, delay, autoLoginInstagram } from './utils.js';
+import { ensureOutputDir, writePosts, writeComments, delay, autoLoginInstagram, gotoWithRetry } from './utils.js';
 import { CONFIG } from './config.js';
 import { createInterface } from 'readline';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
 import { initDatabase, getOrCreateAccount } from './database.js';
-import { STEALTH_ARGS, applyStealthToPage, getRandomViewport } from '../../../shared/stealth.js';
+import { getStealthContextOptions, applyStealthToPage } from '../../../shared/stealth.js';
+import { cleanupBrowserLocks } from '../../../shared/paths.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
 import path from 'path';
 
@@ -33,18 +34,19 @@ import path from 'path';
 export async function runCollector(config) {
   console.log('🚀 Starting Instagram data collection...\n');
 
+  const profile = process.env.IG_PROFILE || 'anonymous';
+  
+  // 🧹 Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
+  cleanupBrowserLocks(profile);
+
   // Launch persistent context with stealth options
-  const viewport = getRandomViewport();
-  const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, {
+  const options = getStealthContextOptions(CONFIG.USER_DATA_DIR, {
     headless: config.headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport,
-    userAgent: CONFIG.USER_AGENT,
-    locale: 'en-US',
-    timezoneId: 'Europe/Paris',
-    args: STEALTH_ARGS,
-    ignoreDefaultArgs: ['--enable-automation']
+    diagnostic: config.diagnostic
   });
+  
+  const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, options);
 
   const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
   
@@ -79,7 +81,7 @@ export async function runCollector(config) {
         
         // Fallback to manual login
         console.log('📱 Opening Instagram...');
-        await page.goto('https://www.instagram.com/', {
+        await gotoWithRetry(page, 'https://www.instagram.com/', {
           waitUntil: 'domcontentloaded',
           timeout: 60000
         });
@@ -101,7 +103,7 @@ export async function runCollector(config) {
       console.log('📱 Opening Instagram...');
       console.log('💡 Tip: Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login\n');
       
-      await page.goto('https://www.instagram.com/accounts/login/', {
+      await gotoWithRetry(page, 'https://www.instagram.com/accounts/login/', {
         waitUntil: 'domcontentloaded',
         timeout: 60000
       });

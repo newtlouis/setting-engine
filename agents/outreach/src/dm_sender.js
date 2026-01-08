@@ -22,8 +22,10 @@ import { qualifyLead } from './qualify_lead.js';
 import { extractFirstName } from './templates.js';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { createInterface } from 'readline';
-import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
+import { cleanupBrowserLocks, getBrowserDataDir } from '../../../shared/paths.js';
+import { getStealthContextOptions, applyStealthToPage, humanDelay, TIMING } from '../../../shared/stealth.js';
 import { verifyProfilePage, verifyHomePage, checkForChallenge } from '../../../shared/pageVerification.js';
+import { gotoWithRetry } from '../../collector/src/utils.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -98,20 +100,18 @@ export async function initBrowser(options = {}) {
   console.log(`   User data: ${userDataDir}`);
   console.log(`   Headless: ${headless}`);
   
-  const timeout = CONFIG.PAGE_TIMEOUT || 90000;
-  const viewport = getRandomViewport();
+  // 🧹 Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
+  cleanupBrowserLocks(profile);
   
-  browserContext = await chromium.launchPersistentContext(userDataDir, {
+  const timeout = CONFIG.PAGE_TIMEOUT || 90000;
+  
+  const stealthOptions = getStealthContextOptions(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport,
-    userAgent: USER_AGENT,
-    locale: 'en-US',
-    timezoneId: 'Europe/Paris',
-    args: STEALTH_ARGS,
-    ignoreDefaultArgs: ['--enable-automation'],
-    timeout: timeout
+    timeout
   });
+  
+  browserContext = await chromium.launchPersistentContext(userDataDir, stealthOptions);
   
   // Reset tab tracking
   messageTabs = [];
@@ -126,17 +126,12 @@ export async function initBrowser(options = {}) {
   // Navigate to Instagram to check login status
   console.log(`   Loading Instagram (timeout: ${timeout/1000}s)...`);
   try {
-    await workingPage.goto('https://www.instagram.com/', { 
+    await gotoWithRetry(workingPage, 'https://www.instagram.com/', { 
       waitUntil: 'domcontentloaded',
       timeout: timeout
     });
   } catch (error) {
-    console.log('   Slow connection, retrying with extended timeout...');
-    await delay(3000, 5000);
-    await workingPage.goto('https://www.instagram.com/', { 
-      waitUntil: 'domcontentloaded',
-      timeout: timeout * 2  // Double timeout on retry
-    });
+    console.log(`   ⚠️ Initial navigation error (non-fatal): ${error.message}`);
   }
   await delay(2000, 3000);
 
@@ -734,7 +729,8 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     dryRun = true,  // In new flow, dryRun means "type but don't send"
     onProgress = null,
     onConversationReady = null,
-    profileUrl = null
+    profileUrl = null,
+    profileConfig = null
   } = options;
   
   const result = {
@@ -807,7 +803,10 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
       if (onProgress) onProgress('qualifying', username);
       
-      const qualification = await qualifyLead(profileData.bio);
+      const customPrompt = profileConfig?.qualification_prompt || null;
+      if (customPrompt) console.log(`      🧠 Using custom qualification prompt from profile`);
+
+      const qualification = await qualifyLead(profileData.bio, customPrompt);
       result.steps.push({ step: 'qualify', ...qualification });
       
       if (!qualification.qualified) {
@@ -1025,7 +1024,8 @@ export async function batchSendDMs(page, targets, options = {}) {
     maxPerSession = CONFIG.MAX_DMS_PER_SESSION,
     onProgress = null,
     onComplete = null,
-    onConversationReady = null
+    onConversationReady = null,
+    profileConfig = null
   } = options;
   
   const results = {
@@ -1063,7 +1063,8 @@ export async function batchSendDMs(page, targets, options = {}) {
       dryRun: true,  // Always just type, don't send
       onProgress,
       onConversationReady,
-      profileUrl: target.profileUrl
+      profileUrl: target.profileUrl,
+      profileConfig
     });
     
     // Check if we hit a rate limit/block during the attempt

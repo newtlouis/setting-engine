@@ -153,6 +153,34 @@ async function typeHumanLike(page, selector, text) {
 }
 
 /**
+ * Navigate with retry logic for resilience against temporary blocks or network issues
+ */
+export async function gotoWithRetry(page, url, options = {}, maxRetries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const waitTime = attempt * 5000;
+        console.log(`   ⏳ Retry attempt ${attempt}/${maxRetries} in ${waitTime/1000}s...`);
+        await delay(waitTime);
+      }
+      return await page.goto(url, options);
+    } catch (error) {
+      lastError = error;
+      console.log(`   ⚠️  Navigation attempt ${attempt + 1} failed: ${error.message}`);
+      
+      // If it's a specific "Response code failure" or interrupted navigation, we definitely want to retry
+      const shouldRetry = error.message.includes('ERR_HTTP_RESPONSE_CODE_FAILURE') || 
+                          error.message.includes('interrupted') ||
+                          error.message.includes('timeout');
+      
+      if (!shouldRetry || attempt === maxRetries) break;
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Auto-login to Instagram using credentials from environment variables
  * 
  * @param {Page} page - Playwright page object
@@ -165,14 +193,13 @@ export async function autoLoginInstagram(page, username, password) {
     console.log('🔐 Checking for existing Instagram session...');
     
     // Navigate to homepage first to see if we are already logged in
-    // Note: If we are logged in, Instagram might redirect us or show the feed
     try {
-        await page.goto('https://www.instagram.com/', {
+        await gotoWithRetry(page, 'https://www.instagram.com/', {
           waitUntil: 'domcontentloaded',
           timeout: 60000
         });
     } catch (e) {
-        // Ignore navigation timeout if we partly loaded
+        console.log(`   ⚠️  Initial navigation error (non-fatal): ${e.message}`);
     }
     
     await delay(3000 + Math.random() * 2000);
@@ -216,7 +243,7 @@ export async function autoLoginInstagram(page, username, password) {
     
     // If we're not on the login page, go there
     if (!page.url().includes('accounts/login')) {
-      await page.goto('https://www.instagram.com/accounts/login/', {
+      await gotoWithRetry(page, 'https://www.instagram.com/accounts/login/', {
         waitUntil: 'domcontentloaded',
         timeout: 60000
       });

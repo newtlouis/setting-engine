@@ -275,6 +275,12 @@ export async function setDmThreadStatus(username, status, updates = {}) {
   return dbFunctions.updateDmThreadStatus(username, status, updates);
 }
 
+export async function getOrCreateAccount(name) {
+  await initDB();
+  if (!dbFunctions?.getOrCreateAccount) return null;
+  return dbFunctions.getOrCreateAccount(name);
+}
+
 export function parseThreadMetadata(rawMetadata) {
   if (!rawMetadata) return {};
   if (typeof rawMetadata === 'object') return rawMetadata;
@@ -295,6 +301,7 @@ export function parseThreadMetadata(rawMetadata) {
    getConversationSummary,
    getTrackedDmThreads,
    setDmThreadStatus,
+   getOrCreateAccount,
    parseThreadMetadata
  };
 

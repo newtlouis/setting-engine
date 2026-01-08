@@ -6,7 +6,7 @@
  */
 
 // Current Chrome version (update periodically)
-const CHROME_VERSION = '131.0.0.0';
+const CHROME_VERSION = '131.0.6778.205';
 
 /**
  * Up-to-date Chrome User Agent for macOS
@@ -22,10 +22,6 @@ export const STEALTH_ARGS = [
   // Hide automation control flags
   '--disable-blink-features=AutomationControlled',
   
-  // Disable features that can leak automation
-  '--disable-features=IsolateOrigins,site-per-process',
-  '--disable-dev-shm-usage',
-  
   // Disable first-run behaviors
   '--no-first-run',
   '--no-default-browser-check',
@@ -38,11 +34,7 @@ export const STEALTH_ARGS = [
   
   // Disable sync and extensions
   '--disable-sync',
-  '--disable-extensions',
-  
-  // Memory and renderer optimizations
-  '--renderer-process-limit=1',
-  '--disable-gpu-sandbox'
+  '--disable-extensions'
 ];
 
 /**
@@ -120,15 +112,26 @@ export const STEALTH_INIT_SCRIPT = `
  * Default browser context options for all agents
  */
 export function getStealthContextOptions(userDataDir, options = {}) {
-  const { headless = false, slowMo = 50, timeout = 60000 } = options;
+  const { headless = false, slowMo = 50, timeout = 90000, diagnostic = false } = options;
   const viewport = getRandomViewport();
+  
+  if (diagnostic) {
+    console.log('🧪 Diagnostic mode: using minimal browser arguments');
+    return {
+      headless,
+      slowMo,
+      viewport,
+      timeout,
+      javaScriptEnabled: true
+    };
+  }
   
   return {
     headless,
     slowMo,
     viewport,
     userAgent: USER_AGENT,
-    locale: 'en-US',
+    locale: 'fr-FR',
     timezoneId: 'Europe/Paris',
     args: STEALTH_ARGS,
     timeout,

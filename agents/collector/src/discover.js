@@ -4,7 +4,7 @@
  * Handles post discovery from hashtags and competitor profiles.
  */
 
-import { delay, extractPostMetadata } from './utils.js';
+import { delay, extractPostMetadata, gotoWithRetry } from './utils.js';
 import { verifyHashtagPage, verifyProfilePage } from '../../../shared/pageVerification.js';
 import { CONFIG } from './config.js';
 
@@ -27,7 +27,7 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
     const url = `https://www.instagram.com/explore/tags/${encodeURIComponent(cleanTag)}/`;
 
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await gotoWithRetry(page, url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await delay(3000 + Math.random() * 3000);
 
       // Verify we are on the hashtag page and no challenge
@@ -197,7 +197,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
     const url = `https://www.instagram.com/${username}/`;
 
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await gotoWithRetry(page, url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await delay(3000 + Math.random() * 3000);
 
       // Verify we are on the profile page and no challenge

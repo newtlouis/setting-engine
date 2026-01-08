@@ -6,6 +6,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
 import { USER_AGENT } from '../../../shared/stealth.js';
+import { getBrowserDataDir } from '../../../shared/paths.js';
 dotenv.config();
 
 const profile = process.env.IG_PROFILE;
@@ -33,7 +34,7 @@ export const CONFIG = {
   INSTAGRAM_PASSWORD: credentials.password,
   
   // Persistent browser data for session storage
-  USER_DATA_DIR: path.join(process.cwd(), `browser-data-${profile || 'anonymous'}`),
+  USER_DATA_DIR: getBrowserDataDir(profile),
 
   // Instagram selectors (centralized for easy updates)
   // FIX NOTE: Update these selectors if Instagram changes their DOM structure

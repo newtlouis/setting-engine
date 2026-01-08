@@ -12,8 +12,10 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createInterface } from 'readline';
 import { getCredentialsForProfile } from '../../../shared/credentials.js';
-import { USER_AGENT, STEALTH_ARGS, applyStealthToPage, getRandomViewport, humanDelay, TIMING } from '../../../shared/stealth.js';
+import { getStealthContextOptions, applyStealthToPage, humanDelay, TIMING } from '../../../shared/stealth.js';
 import { verifyProfilePage, verifyHomePage, checkForChallenge } from '../../../shared/pageVerification.js';
+import { getBrowserDataDir, cleanupBrowserLocks } from '../../../shared/paths.js';
+import { gotoWithRetry } from '../../collector/src/utils.js';
 
 dotenv.config();
 
@@ -102,26 +104,24 @@ export async function initBrowser(options = {}) {
     throw new Error('Profile name is required. Use --profile <name> or set IG_PROFILE env var.');
   }
 
-  const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
+  const userDataDir = getBrowserDataDir(profile);
   console.log('\n=== Initializing Browser ===');
   console.log(`   Profile: ${profile}`);
   console.log(`   User data: ${userDataDir}`);
   console.log(`   Headless: ${headless}`);
   
-  const timeout = CONFIG.PAGE_TIMEOUT;
-  const viewport = getRandomViewport();
+  // 🧹 Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
+  cleanupBrowserLocks(profile);
   
-  browserContext = await chromium.launchPersistentContext(userDataDir, {
+  const timeout = CONFIG.PAGE_TIMEOUT;
+  
+  const stealthOptions = getStealthContextOptions(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
-    viewport,
-    userAgent: USER_AGENT,
-    locale: 'en-US',
-    timezoneId: 'Europe/Paris',
-    args: STEALTH_ARGS,
-    ignoreDefaultArgs: ['--enable-automation'],
     timeout
   });
+  
+  browserContext = await chromium.launchPersistentContext(userDataDir, stealthOptions);
   
   messageTabs = [];
   
@@ -134,17 +134,12 @@ export async function initBrowser(options = {}) {
   // Navigate to Instagram
   console.log(`   Loading Instagram...`);
   try {
-    await workingPage.goto('https://www.instagram.com/', { 
+    await gotoWithRetry(workingPage, 'https://www.instagram.com/', { 
       waitUntil: 'domcontentloaded',
       timeout
     });
   } catch (error) {
-    console.log('   Slow connection, retrying...');
-    await delay(3000, 5000);
-    await workingPage.goto('https://www.instagram.com/', { 
-      waitUntil: 'domcontentloaded',
-      timeout: timeout * 2
-    });
+    console.log(`   ⚠️ Initial navigation error (non-fatal): ${error.message}`);
   }
   await delay(2000, 3000);
   

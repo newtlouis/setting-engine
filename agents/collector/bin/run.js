@@ -34,6 +34,7 @@ program
   .option('--target-prospects <number>', 'Target number of new prospects to find', '50')
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('--headless', 'Run in headless mode (NOT RECOMMENDED - may trigger detection)', false)
+  .option('--diag', 'Diagnostic mode (minimal browser stealth)', false)
   .option('--skip-qualify', 'Skip post pre-qualification (scrape all discovered posts)', false)
   .action(async (options) => {
     try {
@@ -91,6 +92,7 @@ program
         maxCommentsPerPost: parseInt(options.maxComments, 10),
         outputDir: options.output,
         headless: options.headless,
+        diagnostic: options.diag,
         skipQualification: options.skipQualify
       };
 

@@ -11,9 +11,10 @@ import { CONFIG } from './config.js';
  * Qualify a lead based on their Instagram bio
  * 
  * @param {string} bio - The Instagram bio text
+ * @param {string} [customPrompt] - Optional custom prompt override
  * @returns {Promise<{qualified: boolean, reason?: string, raw?: string}>}
  */
-export async function qualifyLead(bio) {
+export async function qualifyLead(bio, customPrompt = null) {
   // Skip if qualification is disabled or no API key
   if (!CONFIG.QUALIFICATION_ENABLED) {
     return { qualified: true, reason: 'qualification_disabled' };
@@ -31,7 +32,8 @@ export async function qualifyLead(bio) {
   }
   
   try {
-    const prompt = CONFIG.QUALIFICATION_PROMPT.replace('{bio}', bio.trim());
+    const basePrompt = customPrompt || CONFIG.QUALIFICATION_PROMPT;
+    const prompt = basePrompt.replace('{bio}', bio.trim());
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

@@ -12,6 +12,7 @@ import path from 'path';
 import { mkdir } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { CONFIG, OUTREACH_CRITERIA } from './config.js';
+import { getBrowserDataDir } from '../../../shared/paths.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
 import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
 // ExcelCRM removed
@@ -227,7 +228,6 @@ export async function runOutreach(options = {}) {
     niche = 'fitness',
     topic = 'their goals',
     dryRun = true,
-    userDataDir: baseUserDataDir = './browser-data',
     isSimple = false,
     profile = process.env.IG_PROFILE
   } = options;
@@ -235,14 +235,12 @@ export async function runOutreach(options = {}) {
   if (!profile) {
     throw new Error('Profile name is required. Use --profile <name> or set IG_PROFILE env var.');
   }
+
+  const userDataDir = getBrowserDataDir(profile);
   
   await loadDatabase();
   const account = dbFunctions.getOrCreateAccount(profile);
   const accountId = account.id;
-  
-  const userDataDir = (!profile || profile === 'default')
-    ? baseUserDataDir
-    : path.join(path.dirname(baseUserDataDir), `browser-data-${profile}`);
   
   /* DEFENSIVE CODING: Cast params */
   const cleanLimit = Number(limit) || 10;
@@ -361,6 +359,7 @@ export async function runOutreach(options = {}) {
         const results = await batchSendDMs(browserObj.page, targets, {
             dryRun: true,
             maxPerSession: remaining, // Only try to fill the gap
+            profileConfig, // Pass profile config for custom qualification prompt
             onConversationReady: async ({ username, dmUrl, message, typedAt }) => {
                 // Same metadata recording logic...
                  try {

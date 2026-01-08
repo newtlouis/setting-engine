@@ -19,7 +19,8 @@ import {
   getLeadWithContext,
   addMessage,
   parseThreadMetadata,
-  setDmThreadStatus
+  setDmThreadStatus,
+  getOrCreateAccount
 } from './db_integration.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 
@@ -64,7 +65,7 @@ export async function runCronWatcher(options = {}) {
   }
 
   // Resolve accountId
-  const account = dbFunctions.getOrCreateAccount(profile);
+  const account = await getOrCreateAccount(profile);
   const accountId = account.id;
   console.log(`👤 Profile: ${profile} (Account ID: ${accountId})`);
 

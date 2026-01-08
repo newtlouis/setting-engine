@@ -8,7 +8,7 @@
  * - <time datetime="..."> for timestamp
  */
 
-import { delay, saveContextJSON } from './utils.js';
+import { delay, saveContextJSON, gotoWithRetry } from './utils.js';
 import { verifyPostPage } from '../../../shared/pageVerification.js';
 import { CONFIG } from './config.js';
 
@@ -156,7 +156,7 @@ async function sortCommentsByRecent(page) {
  * @param {string[]} excludeUsernames - Additional usernames to exclude (optional)
  */
 export async function scrapePostComments(page, postUrl, maxComments, excludeUsernames = []) {
-  await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await gotoWithRetry(page, postUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await delay(3000 + Math.random() * 3000);
 
   const verifyResult = await verifyPostPage(page, postUrl);
