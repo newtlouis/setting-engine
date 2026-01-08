@@ -375,6 +375,14 @@ export async function runOutreach(options = {}) {
                       typed_at: typedAt || new Date().toISOString()
                     });
                   }
+
+                  // RECORD MESSAGE IN CONVERSATION HISTORY
+                  if (dbFunctions?.addConversationMessage) {
+                    const lead = dbFunctions.getLeadByUsername(username, accountId);
+                    if (lead) {
+                      dbFunctions.addConversationMessage(lead.id, 'assistant', message, 'outreach');
+                    }
+                  }
                   // Excel tracking removed
 
                 } catch (error) {

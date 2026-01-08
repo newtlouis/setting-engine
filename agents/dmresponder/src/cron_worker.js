@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
 // DM Responder processes active conversations AND checks for new replies from outreach
-const DEFAULT_STATUSES = ['conversation', 'outreach', 'contacted'];
+const DEFAULT_STATUSES = ['conversation', 'outreach', 'contacted', 'replied'];
 
 /**
  * Find messages in scraped list that are not in DB history
@@ -197,8 +197,10 @@ async function processThread(thread, options) {
     let skipReason = "";
     
     if (!lastMsg) {
-      // Empty history - rare for 'conversation' status but possible
-      shouldGenerate = true;
+      // Empty history - this can happen if outreach wasn't tracked properly
+      // or if messages failed to scrape from the page. Skip for now.
+      shouldGenerate = false;
+      skipReason = "No conversation history found (DB empty, scrape 0)";
     } else if (lastMsg.role === 'user') {
       // Last message is from user - Always reply
       shouldGenerate = true;

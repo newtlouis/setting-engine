@@ -17,7 +17,7 @@ program
   .name('dmresponder-cron')
   .description('Check Instagram DM threads and generate suggestions when new replies arrive')
   .option('--limit <number>', 'Maximum number of DM threads to scan', '5')
-  .option('--statuses <list>', 'Comma-separated lead statuses to process', 'conversation,outreach,contacted')
+  .option('--statuses <list>', 'Comma-separated lead statuses to process', 'conversation,outreach,contacted,replied')
   .option('--output-dir <dir>', 'Directory to store suggestion files')
   .option('--show-browser', 'Run Playwright in headed mode (default headless)', false)
   .option('--profile <name>', 'Browser profile name')
