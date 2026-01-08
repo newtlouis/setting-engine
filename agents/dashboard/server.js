@@ -77,10 +77,10 @@ app.get('/api/stats', (req, res) => {
         
         const stats = {
             total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0' + accountFilter).get(...accountParam).c,
-            new: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'new' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
-            contacted: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
-            conversation: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'conversation' AND booking_status IS NULL AND is_ignored = 0" + accountFilter).get(...accountParam).c,
-            confirm_bookings: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            new: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status='new' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
+            contacted: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('outreach') AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
+            conversation: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status = '') AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
+            confirm_bookings: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
             booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
             failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c
         };
@@ -118,7 +118,7 @@ app.get('/api/leads', (req, res) => {
             if (status === 'contacted') {
                 sql += " AND status = 'outreach'";
             } else if (status === 'conversation') {
-                sql += " AND status = 'conversation' AND booking_status IS NULL";
+                sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status = '')";
             } else if (status === 'confirm_bookings') {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
