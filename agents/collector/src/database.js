@@ -783,6 +783,13 @@ export function getLeadsForResponder(filters = {}) {
     WHERE is_ignored = 0
   `;
   const params = [];
+
+  // Account filter (REQUIRED for multi-account)
+  const accountId = filters.account_id || filters.accountId;
+  if (accountId) {
+    query += ' AND account_id = ?';
+    params.push(accountId);
+  }
   
   if (filters.statuses && filters.statuses.length > 0) {
     const placeholders = filters.statuses.map(() => '?').join(',');

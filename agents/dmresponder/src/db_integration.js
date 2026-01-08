@@ -178,7 +178,7 @@ export async function addMessage(username, role, message, messageType = null, ac
     dbFunctions.addConversationMessage(lead.id, role, message, messageType);
     
     // Update lead status if this is a user reply
-    if (role === 'user' && lead.status === 'contacted') {
+    if (role === 'user' && (lead.status === 'contacted' || lead.status === 'outreach')) {
       dbFunctions.updateLeadStatus(username, 'replied');
     }
     
@@ -265,8 +265,8 @@ export async function getConversationSummary(username, accountId = null) {
 
 export async function getTrackedDmThreads(filters = {}) {
   await initDB();
-  if (!dbFunctions?.getDmThreads) return [];
-  return dbFunctions.getDmThreads(filters);
+  if (!dbFunctions?.getLeadsForResponder) return [];
+  return dbFunctions.getLeadsForResponder(filters);
 }
 
 export async function setDmThreadStatus(username, status, updates = {}) {

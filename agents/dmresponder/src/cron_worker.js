@@ -27,8 +27,8 @@ import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
-// DM Responder only processes leads with active conversations
-const DEFAULT_STATUSES = ['conversation'];
+// DM Responder processes active conversations AND checks for new replies from outreach
+const DEFAULT_STATUSES = ['conversation', 'outreach', 'contacted'];
 
 /**
  * Find messages in scraped list that are not in DB history
