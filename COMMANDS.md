@@ -10,8 +10,9 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 |--------|----------|-------------|
 | **Dashboard** | `npm run ui` | Lance l'interface visuelle (Stats, Logs, Config). |
 | **Collector** | `npm run scrape -- [options]` | Lance la collecte de leads. |
-| **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages. |
-| **DM Responder** | `npm run reply` | Lance l'assistant de réponse. |
+| **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
+| **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
+| **Reply:Replied** | `npm run reply:replied` | **Nouveau**. Cible uniquement les leads qui ont répondu. |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
 
 ---
@@ -94,8 +95,8 @@ npm run send -- --status failed_outreach --limit 5
 **Options Principales :**
 - `--profile <nom>` : **Nouveau**. Utilise le profil spécifié pour l'envoi.
 - `--limit <n>` : Nombre max de messages à envoyer.
-- `--simple` : **Nouveau**. Envoie un message court ("Hey Prénom !") au lieu des templates complexes.
-- `--status <s_status>` : Filtrer les leads par statut (`new`, `failed`, `qualified`, etc.). Défaut: `new`.
+- `--simple` : **Nouveau**. Envoie un message court ("[Prénom] ?") au lieu des templates complexes.
+- `--status <s_status>` : Filtrer les leads par statut (`new`, `failed_outreach`, etc.). Défaut: `new`.
 - `--preview` : Mode simulation (ne lance pas le navigateur).
 - `--live` : Confirme l'envoi réel.
 
@@ -115,6 +116,10 @@ Aide à rédiger des réponses contextuelles grâce à l'IA.
 **Mode Interactif (recommandé)**
 Lance l'interface pour générer des réponses aux messages reçus.
 ```bash
+# Uniquement les nouveaux messages reçus (Statut: conversation)
+npm run reply:replied -- --profile mon_compte
+
+# Toutes les discussions en cours (Statut: conversation, outreach, contacted)
 npm run reply -- --interactive --profile mon_compte
 ```
 *Le script vous demandera de coller le message du prospect et vous proposera une réponse.*
@@ -128,6 +133,7 @@ npm run reply:auto -- --profile mon_compte
 
 **Options :**
 - `--profile <nom>` : **Nouveau**. Isole la session et les données par compte.
+- `--replied-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation`.
 - `--list` : Affiche les conversations actives du compte spécifié.
 - `--username <user>` : Charge l'historique d'un utilisateur depuis la base.
 

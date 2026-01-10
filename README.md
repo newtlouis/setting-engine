@@ -65,9 +65,12 @@ Always use the `--profile` flag to specify which account you are using:
 npm run scrape -- --profile fitness_coach -t gym
 
 # Run outreach for 'fitness_coach'
-npm run outreach -- --profile fitness_coach
+npm run outreach -- --profile fitness_coach --simple
 
-# Respond to messages for 'fitness_coach'
+# Respond to NEW replies only for 'fitness_coach'
+npm run reply:replied -- --profile fitness_coach
+
+# Respond to all active conversations for 'fitness_coach'
 npm run reply -- --profile fitness_coach
 ```
 
@@ -156,9 +159,9 @@ graph TD
     F[Dashboard] -->|Account Selector| B
 ```
 
-1.  **Collector**: Ingests raw data -> `leads` table.
-2.  **Outreach**: Reads `new` leads -> updates to `contacted` -> `conversations` table.
-3.  **DM Responder**: Reads conversation history -> suggests next move.
+1.  **Collector**: Ingests raw data -> `leads` table (status: `new`).
+2.  **Outreach**: Reads `new` leads -> updates to `outreach`.
+3.  **DM Responder**: Detects prospect reply -> updates to `conversation` -> suggests next move.
 
 ---
 
