@@ -158,7 +158,12 @@ async function processThread(thread, options) {
     
     // Step 2: Open DM and scrape messages FIRST
     console.log(`   🌐 Opening DM conversation...`);
-    const scrapeResult = await openDMAndScrape({ username, profile_url: profileUrl });
+    // OPTIMIZATION: Pass dm_url so scraper can go there directly
+    const scrapeResult = await openDMAndScrape({ 
+      username, 
+      profile_url: profileUrl,
+      dm_url: thread.dm_url 
+    });
     
     if (!scrapeResult.success) {
       console.log(`   ❌ Failed to open DM: ${scrapeResult.error}`);

@@ -504,8 +504,17 @@ export async function openDMAndScrape(lead) {
     // Step 1: Create new tab
     result.tab = await createNewTab();
     
-    // Step 2: Go to profile and click Contacter
-    const dmResult = await goToProfileAndOpenDM(result.tab, profileUrl);
+    // Step 2: Navigate to DM
+    // OPTIMIZATION: If we have a DM URL, go there directly!
+    let dmResult;
+    
+    if (lead.dm_url && lead.dm_url.includes('/t/')) {
+      console.log(`      🚀 Using Direct DM URL: ${lead.dm_url}`);
+      dmResult = await goToDirectDM(result.tab, lead.dm_url);
+    } else {
+       // Fallback: Go to profile and click Contacter
+       dmResult = await goToProfileAndOpenDM(result.tab, profileUrl);
+    }
     
     if (!dmResult.success) {
       result.error = dmResult.error;
@@ -708,4 +717,36 @@ export async function scrapeConversation(url, options = {}) {
  */
 export async function fillMessageAndLeaveOpen(page, message) {
   console.log('⚠️  fillMessageAndLeaveOpen is deprecated. Use processLeadInNewTab instead.');
+}
+
+/**
+ * Go directly to a DM URL
+ */
+export async function goToDirectDM(page, dmUrl) {
+  try {
+    await page.goto(dmUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await delay(1500, 2500);
+
+    // Verify we are in the inbox
+    // Often DM threads are /direct/t/THREAD_ID
+    if (!page.url().includes('/direct/t/')) {
+        return { success: false, error: 'not_dm_url' };
+    }
+
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+        // Check for message bubbles or input area
+        const hasMessages = await page.$('div[role="button"][aria-label*="Double tap"]');
+        const hasInput = await page.$('div[contenteditable="true"]');
+        
+        if (hasMessages || hasInput) {
+            return { success: true };
+        }
+        await delay(500);
+    }
+    
+    return { success: true }; // Assume success if URL is correct
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }
