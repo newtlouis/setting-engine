@@ -205,25 +205,11 @@ async function processThread(thread, options) {
       // Last message is from user - Always reply
       shouldGenerate = true;
     } else if (lastMsg.role === 'assistant') {
-      // Last message from me - Check for follow-up timing (Relances)
-      if (!lastMsg.timestamp) {
-        // If no timestamp (likely newly scraped), assume it's recent -> Wait
-        shouldGenerate = false;
-        skipReason = "Last message is recent (no timestamp)";
-      } else {
-        const lastTime = new Date(lastMsg.timestamp);
-        const now = new Date();
-        const hoursSince = (now - lastTime) / (1000 * 60 * 60);
-        
-        // Follow-up after 48 hours (2 days)
-        if (hoursSince > 48) {
-          shouldGenerate = true;
-          console.log(`   ⏰ Follow-up triggered: ${hoursSince.toFixed(1)}h since last message`);
-        } else {
-          shouldGenerate = false;
-          skipReason = `Waiting for reply (${hoursSince.toFixed(1)}h < 48h)`;
-        }
-      }
+      // Last message from me - Wait for them to reply
+      // The user requested to NOT auto-follow-up here.
+      // Follow-ups should be handled by a specific 'relance' script if needed.
+      shouldGenerate = false;
+      skipReason = "Waiting for user reply (Last msg was assistant)";
     }
     
     if (!shouldGenerate) {
