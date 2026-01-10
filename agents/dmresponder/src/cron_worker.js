@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'output', 'suggestions');
 // DM Responder processes active conversations AND checks for new replies from outreach
-const DEFAULT_STATUSES = ['conversation', 'outreach', 'contacted', 'replied'];
+const DEFAULT_STATUSES = ['conversation', 'outreach', 'contacted'];
 
 /**
  * Find messages in scraped list that are not in DB history
@@ -69,9 +69,14 @@ export async function runCronWatcher(options = {}) {
   const accountId = account.id;
   console.log(`👤 Profile: ${profile} (Account ID: ${accountId})`);
 
-  const statuses = Array.isArray(options.statuses) && options.statuses.length > 0
+  let statuses = Array.isArray(options.statuses) && options.statuses.length > 0
     ? options.statuses
     : DEFAULT_STATUSES;
+
+  if (options.repliedOnly) {
+    console.log('   🎯 Filtering for CONVERSATION leads only (prospects who replied)');
+    statuses = ['conversation'];
+  }
   const limit = options.limit || 5;
   
   const threads = await getTrackedDmThreads({

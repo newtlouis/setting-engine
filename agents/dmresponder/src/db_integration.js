@@ -179,9 +179,6 @@ export async function addMessage(username, role, message, messageType = null, ac
     
     // Update lead status based on message flow
     if (role === 'user' && (lead.status === 'contacted' || lead.status === 'outreach')) {
-      dbFunctions.updateLeadStatus(username, 'replied');
-    } else if (lead.status === 'replied') {
-      // Any further message after the first reply makes it a full conversation
       dbFunctions.updateLeadStatus(username, 'conversation');
     }
     

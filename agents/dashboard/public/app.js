@@ -221,7 +221,7 @@ async function loadLeads(filter) {
             } else if (lead.booking_status === 'pending') {
                  badgeClass = 'badge-success';
                  statusText = 'Confirm Booking';
-            } else if (['conversation', 'replied'].includes(lead.status)) {
+            } else if (lead.status === 'conversation') {
                  badgeClass = 'badge-neutral';
                  statusText = 'Conversation';
             } else if (lead.warmth === 'hot') {
