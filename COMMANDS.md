@@ -134,8 +134,7 @@ npm run reply:auto -- --profile mon_compte
 **Options :**
 - `--profile <nom>` : **Nouveau**. Isole la session et les données par compte.
 - `--replied-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation`.
-- `--list` : Affiche les conversations actives du compte spécifié.
-- `--username <user>` : Charge l'historique d'un utilisateur depuis la base.
+- `--limit <nombre>` : Augmente le nombre maximum de leads à parcourir (défaut: 1000).
 
 ---
 

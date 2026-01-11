@@ -1,6 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { unlinkSync, lstatSync } from 'fs';
+import { rmSync, lstatSync, existsSync, unlinkSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,24 +22,39 @@ export function getBrowserDataDir(profile) {
 }
 
 /**
- * Clean up stale Chromium lock files that cause crashes on macOS
+ * Clean up stale Chromium lock files and problematic caches that cause crashes on macOS (SIGTRAP)
  * @param {string} profile - Profile name
  */
 export function cleanupBrowserLocks(profile) {
   const userDataDir = getBrowserDataDir(profile);
-  const locks = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
   
-  locks.forEach(lock => {
-    const lockPath = path.join(userDataDir, lock);
+  if (!existsSync(userDataDir)) return;
+
+  const itemsToClean = [
+    // Root locks
+    'SingletonLock', 
+    'SingletonCookie', 
+    'SingletonSocket',
+    // Sub-locks
+    path.join('Default', 'LOCK'),
+    path.join('Default', 'GPUCache'),
+    path.join('Default', 'Cache'),
+    path.join('Default', 'Code Cache'),
+    // Global caches
+    'GrShaderCache',
+    'ShaderCache',
+    'GraphiteDawnCache',
+    'BrowserMetrics'
+  ];
+  
+  itemsToClean.forEach(item => {
+    const itemPath = path.join(userDataDir, item);
     try {
-      // Check if it exists (lstat to handle symlinks which Chromium uses for locks)
-      const stats = lstatSync(lockPath);
-      if (stats) {
-        console.log(`🧹 Removing stale browser lock: ${lock}`);
-        unlinkSync(lockPath);
-      }
+      // Use rmSync with force: true which handles non-existent files AND broken symlinks
+      // console.log(`🧹 Checking/Removing browser data: ${item}`);
+      rmSync(itemPath, { recursive: true, force: true });
     } catch (err) {
-      // Ignore if not found or other errors
+      // Ignore errors
     }
   });
 }

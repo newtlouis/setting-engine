@@ -77,7 +77,7 @@ export async function runCronWatcher(options = {}) {
     console.log('   🎯 Filtering for CONVERSATION leads only (prospects who replied)');
     statuses = ['conversation'];
   }
-  const limit = options.limit || 5;
+  const limit = options.limit || 1000;
   
   const threads = await getTrackedDmThreads({
     statuses,
