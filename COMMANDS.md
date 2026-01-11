@@ -117,7 +117,7 @@ Aide à rédiger des réponses contextuelles grâce à l'IA.
 Lance l'interface pour générer des réponses aux messages reçus.
 ```bash
 # Uniquement les nouveaux messages reçus (Statut: conversation)
-npm run reply:replied -- --profile mon_compte
+npm run reply:conversation -- --profile mon_compte
 
 # Toutes les discussions en cours (Statut: conversation, outreach, contacted)
 npm run reply -- --interactive --profile mon_compte
@@ -133,7 +133,7 @@ npm run reply:auto -- --profile mon_compte
 
 **Options :**
 - `--profile <nom>` : **Nouveau**. Isole la session et les données par compte.
-- `--replied-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation`.
+- `--conversation-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation` (ceux qui ont répondu).
 - `--limit <nombre>` : Augmente le nombre maximum de leads à parcourir (défaut: 1000).
 
 ---

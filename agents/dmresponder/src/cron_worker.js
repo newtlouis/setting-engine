@@ -73,7 +73,7 @@ export async function runCronWatcher(options = {}) {
     ? options.statuses
     : DEFAULT_STATUSES;
 
-  if (options.repliedOnly) {
+  if (options.conversationOnly) {
     console.log('   🎯 Filtering for CONVERSATION leads only (prospects who replied)');
     statuses = ['conversation'];
   }
