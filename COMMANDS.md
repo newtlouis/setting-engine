@@ -119,6 +119,10 @@ Lance l'interface pour générer des réponses aux messages reçus.
 # Uniquement les nouveaux messages reçus (Statut: conversation)
 npm run reply:conversation -- --profile mon_compte
 
+# Uniquement les prospects qui n'ont pas encore répondu (Statut: outreach)
+# Note: Les leads sans réponse après 7 jours seront auto-désactivés.
+npm run reply:outreach -- --profile mon_compte
+
 # Toutes les discussions en cours (Statut: conversation, outreach, contacted)
 npm run reply -- --interactive --profile mon_compte
 ```
@@ -134,6 +138,7 @@ npm run reply:auto -- --profile mon_compte
 **Options :**
 - `--profile <nom>` : **Nouveau**. Isole la session et les données par compte.
 - `--conversation-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation` (ceux qui ont répondu).
+- `--outreach-only` : **Nouveau**. Filtre uniquement les leads en statut `outreach` (ceux qui n'ont pas encore répondu).
 - `--limit <nombre>` : Augmente le nombre maximum de leads à parcourir (défaut: 1000).
 
 ---

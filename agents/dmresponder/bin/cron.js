@@ -22,6 +22,8 @@ program
   .option('--show-browser', 'Run Playwright in headed mode (default headless)', false)
   .option('--profile <name>', 'Browser profile name')
   .option('--conversation-only', 'Only process leads who have replied (status: conversation)', false)
+  .option('--outreach-only', 'Only process leads waiting for first reply (status: outreach)', false)
+  .option('--replied-only', 'Deprecated: use --conversation-only instead', false)
   .action(async (options) => {
     const limit = parseInt(options.limit, 10) || 5;
     const statuses = options.statuses
@@ -35,7 +37,8 @@ program
         outputDir: options.outputDir,
         headless: !options.showBrowser,
         profile: options.profile,
-        conversationOnly: options.conversationOnly
+        conversationOnly: options.conversationOnly,
+        outreachOnly: options.outreachOnly
       });
     } catch (error) {
       console.error('Cron watcher failed:', error.message);

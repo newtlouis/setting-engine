@@ -161,6 +161,11 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       db.exec(`ALTER TABLE accounts ADD COLUMN is_default INTEGER DEFAULT 0`);
     }
 
+    if (!leadsColumns.some(col => col.name === 'last_contact_at')) {
+      console.log('🔄 Migrating: Adding last_contact_at to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN last_contact_at TEXT`);
+    }
+
     // Ensure composite unique index exists (Crucial for UPSERT)
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_username_account_unique ON leads(username, account_id)`);
   } catch (err) {
@@ -750,8 +755,7 @@ export function getConversation(leadId) {
 // ============================================
 
 /**
- * Update lead status with optional dm_url
- * New simplified statuses: new, outreach, responding, replied, failed, closed
+ * Update lead status with optional dm_url for Outreach
  */
 export function updateLeadDmStatus(username, status, dmUrl = null) {
   if (!username) {
@@ -769,6 +773,29 @@ export function updateLeadDmStatus(username, status, dmUrl = null) {
     username,
     status: status || null,
     dm_url: dmUrl
+  });
+}
+
+/**
+ * Higher-level update for DM Responder
+ * Supports status, notes, and metadata
+ */
+export function updateDmThreadStatus(username, status, updates = {}) {
+  const notes = updates.last_error || updates.notes || null;
+  const lastChecked = updates.last_checked_at || null;
+  
+  const stmt = db.prepare(`
+    UPDATE leads SET
+      status = @status,
+      notes = COALESCE(@notes, notes),
+      updated_at = datetime('now')
+    WHERE username = @username
+  `);
+  
+  return stmt.run({
+    username,
+    status,
+    notes
   });
 }
 

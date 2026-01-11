@@ -19,6 +19,7 @@
         "postsend": "npm run backup:remote",
         "reply": "cd agents/dmresponder && npm run reply --",
         "reply:conversation": "cd agents/dmresponder && npm run cron -- --show-browser --conversation-only",
+        "reply:outreach": "cd agents/dmresponder && npm run cron -- --show-browser --outreach-only",
         "postreply": "npm run backup:remote",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
         "postreply:auto": "npm run backup:remote",

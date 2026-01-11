@@ -76,6 +76,9 @@ export async function runCronWatcher(options = {}) {
   if (options.conversationOnly) {
     console.log('   🎯 Filtering for CONVERSATION leads only (prospects who replied)');
     statuses = ['conversation'];
+  } else if (options.outreachOnly) {
+    console.log('   🎯 Filtering for OUTREACH leads only (waiting for first reply)');
+    statuses = ['outreach'];
   }
   const limit = options.limit || 1000;
   
@@ -91,10 +94,38 @@ export async function runCronWatcher(options = {}) {
     return;
   }
 
+  // Pre-process threads for auto-expiration (Outreach only)
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const validThreads = [];
+
+  for (const thread of threads) {
+      if (thread.status === 'outreach' && thread.last_contact_at) {
+          const lastContact = new Date(thread.last_contact_at);
+          const diff = now - lastContact;
+          
+
+          if (diff > SEVEN_DAYS_MS) {
+              console.log(`   ⏳ @${thread.username}: No response for 7+ days. Deactivating...`);
+              await markThread(thread.username, 'failed', thread.metadata, {
+                  last_error: 'Auto-expired: No response after 7 days',
+                  last_checked_at: now.toISOString()
+              });
+              continue; // Skip this one
+          }
+      }
+      validThreads.push(thread);
+  }
+
+  if (validThreads.length === 0) {
+      console.log(`\n✅ Done! No valid threads left to process after expiration check.`);
+      return;
+  }
+
   console.log(`\n========================================`);
   console.log(`   DM RESPONDER (Multi-Tab Mode)`);
   console.log(`========================================`);
-  console.log(`   Found ${threads.length} conversation(s) to process`);
+  console.log(`   Found ${validThreads.length} conversation(s) to process`);
   console.log(`   Messages will be typed but NOT sent automatically.\n`);
   
   let browser = null;
@@ -118,7 +149,7 @@ export async function runCronWatcher(options = {}) {
     }
 
     // Step 2: Process each thread
-    for (const thread of threads) {
+    for (const thread of validThreads) {
       const result = await processThread(thread, { ...options, accountId, profile, profileConfig });
       if (result.success) {
         successCount++;
