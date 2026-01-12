@@ -64,8 +64,8 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
       const seenUrls = new Set(); // To track duplicates within this session run
       
       let scrollAttempts = 0;
-      // Increased max scrolls to allow skipping many duplicates
-      const maxScrolls = Math.max(50, maxPosts * 5); 
+      // Increased max scrolls to allow skipping many duplicates - tripled the multiplier
+      const maxScrolls = Math.max(100, maxPosts * 15); 
       let consecutiveNoNewPosts = 0;
       let totalProcessedCandidates = 0;
 
@@ -139,8 +139,9 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
         }
 
         // Break if stuck for too long (scrolling but seeing only old stuff or nothing)
-        if (consecutiveNoNewPosts > 5 && scrollAttempts > 5) {
-          console.log(`      ⚠️  Stopping: No new posts found in last 5 scrolls (likely end of feed or excessive duplicates).`);
+        // Increased threshold to 20 to be much more persistent
+        if (consecutiveNoNewPosts > 20 && scrollAttempts > 10) {
+          console.log(`      ⚠️  Stopping: No new posts found in last 20 scrolls (likely end of feed or excessive duplicates).`);
           break;
         }
 
@@ -232,8 +233,8 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
       const seenUrls = new Set();
       
       let scrollAttempts = 0;
-      // Increased max scrolls
-      const maxScrolls = Math.max(50, maxPosts * 5);
+      // Increased max scrolls - tripled the multiplier
+      const maxScrolls = Math.max(100, maxPosts * 15);
       let consecutiveNoNewPosts = 0;
       let totalProcessedCandidates = 0;
 
@@ -314,8 +315,9 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
         }
 
          // Stop if stuck
-        if (consecutiveNoNewPosts > 5 && scrollAttempts > 5) {
-          console.log(`      ⚠️  Stopping: No new posts found in last 5 scrolls.`);
+        // Increased threshold to 20 to be much more persistent
+        if (consecutiveNoNewPosts > 20 && scrollAttempts > 10) {
+          console.log(`      ⚠️  Stopping: No new posts found in last 20 scrolls.`);
           break;
         }
 
