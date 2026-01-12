@@ -44,17 +44,24 @@ export function cleanupBrowserLocks(profile) {
     'GrShaderCache',
     'ShaderCache',
     'GraphiteDawnCache',
-    'BrowserMetrics'
+    'BrowserMetrics',
+    'OriginTrials',
+    'Local State'
   ];
   
+  // console.log(`🧹 Aggressive cleanup for profile: ${profile}`);
   itemsToClean.forEach(item => {
     const itemPath = path.join(userDataDir, item);
     try {
-      // Use rmSync with force: true which handles non-existent files AND broken symlinks
-      // console.log(`🧹 Checking/Removing browser data: ${item}`);
-      rmSync(itemPath, { recursive: true, force: true });
+      // Use lstatSync to detect symlinks (rmSync sometimes fails on broken macOS symlinks)
+      const stats = lstatSync(itemPath);
+      if (stats.isSymbolicLink()) {
+        unlinkSync(itemPath);
+      } else {
+        rmSync(itemPath, { recursive: true, force: true });
+      }
     } catch (err) {
-      // Ignore errors
+      // Ignore if file doesn't exist or other errors
     }
   });
 }

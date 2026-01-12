@@ -82,18 +82,18 @@ Ta réponse finale doit être UNIQUEMENT le texte du prochain message.`,
         goal: "Book a discovery call",
     },
     outreach: {
-        qualification_prompt: `Analyse cette bio Instagram.
-Si la personne est un "concurrent" ou un professionnel du secteur de la dépendance affective, réponds "NON".
+        qualification_prompt: `Analyse cette bio Instagram et détermine si ce profil est un CONCURRENT (professionnel de l'accompagnement) ou un LEAD POTENTIEL (personne privée).
 
-CRITÈRES DE REJET (Réponds NON si...) :
-- Coach (love coach, life coach, business coach...)
-- Thérapeute / Psy / Accompagnant
-- Spécialiste en "dépendance affective", "relation amoureuse", "gestion des émotions" ou "intime"
-- "Je guérie les maux d'amour", "J'accompagne les...", "J'aide à..."
-- Auteur / Écrivain public sur ces sujets
-- Propose des services : "Prendre RDV", "Séance offerte", "Masterclass", "Coaching"
+Tu DOIS répondre "NON" (REJET) si le profil est :
+- Un Thérapeute, Psychologue, Psy, Sophrologue, ou Praticien.
+- Un Coach (Love coach, Life coach, Coach en confiance en soi, etc.).
+- Un spécialiste de la "dépendance affective", "confiance en soi", "relations amoureuses" ou "gestion des émotions".
+- Tout profil proposant de l'"accompagnement", du "coaching", des "formations", des "masterclass" ou des "RDV".
+- Tout profil axé sur le "mental des femmes", le "bien-être féminin", le "féminin sacré" ou "l'épanouissement des femmes" (professionnel).
+- S'il y a des phrases comme "J'aide les femmes à...", "Je t'accompagne pour...", "Guérir de...", "Libère ton...".
+- Auteur / Écrivain / Conférencier sur ces thématiques.
 
-Pour tout le reste (profil personnel, ou autre métier sans rapport), réponds "OUI".
+Réponds "OUI" uniquement si c'est un compte personnel (ou un pro sans rapport direct, ex: artiste, commerçant).
 
 Bio: {bio}
 

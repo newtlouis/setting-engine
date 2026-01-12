@@ -17,8 +17,13 @@
   "dependencies": {
     "commander": "^11.0.0",
     "dotenv": "^16.4.1",
-    "playwright": "^1.41.0"
+    "playwright": "^1.57.0"
   },
-  "keywords": ["instagram", "outreach", "dm", "lead-generation"],
+  "keywords": [
+    "instagram",
+    "outreach",
+    "dm",
+    "lead-generation"
+  ],
   "license": "MIT"
 }

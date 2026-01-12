@@ -34,7 +34,12 @@ export const STEALTH_ARGS = [
   
   // Disable sync and extensions
   '--disable-sync',
-  '--disable-extensions'
+  '--disable-extensions',
+  
+  // macOS SIGTRAP crash mitigation
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--disable-dev-shm-usage'
 ];
 
 /**
