@@ -14,7 +14,7 @@ import { CONFIG } from './config.js';
  * @param {string} [customPrompt] - Optional custom prompt override
  * @returns {Promise<{qualified: boolean, reason?: string, raw?: string}>}
  */
-export async function qualifyLead(bio, customPrompt = null) {
+export async function qualifyLead(bio, customPrompt = null, username = 'unknown') {
   // Skip if qualification is disabled or no API key
   if (!CONFIG.QUALIFICATION_ENABLED) {
     return { qualified: true, reason: 'qualification_disabled' };
@@ -33,7 +33,8 @@ export async function qualifyLead(bio, customPrompt = null) {
   
   try {
     const basePrompt = customPrompt || CONFIG.QUALIFICATION_PROMPT;
-    const prompt = basePrompt.replace('{bio}', bio.trim());
+    let prompt = basePrompt.replace('{bio}', bio.trim());
+    prompt = prompt.replace('{username}', username);
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

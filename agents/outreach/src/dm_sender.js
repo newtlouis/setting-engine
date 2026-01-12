@@ -806,7 +806,7 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       const customPrompt = profileConfig?.qualification_prompt || null;
       if (customPrompt) console.log(`      🧠 Using custom qualification prompt from profile`);
 
-      const qualification = await qualifyLead(profileData.bio, customPrompt);
+      const qualification = await qualifyLead(profileData.bio, customPrompt, username);
       result.steps.push({ step: 'qualify', ...qualification });
       
       if (!qualification.qualified) {

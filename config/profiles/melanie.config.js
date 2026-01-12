@@ -82,19 +82,22 @@ Ta réponse finale doit être UNIQUEMENT le texte du prochain message.`,
         goal: "Book a discovery call",
     },
     outreach: {
-        qualification_prompt: `Analyse cette bio Instagram et détermine si ce profil est un CONCURRENT (professionnel de l'accompagnement) ou un LEAD POTENTIEL (personne privée).
+        qualification_prompt: `Analyse ce profil Instagram (Username et Bio) et détermine s'il s'agit d'un CONCURRENT (professionnel, coach, accompagnateur) ou d'un LEAD POTENTIEL (personne privée).
 
 Tu DOIS répondre "NON" (REJET) si le profil est :
 - Un Thérapeute, Psychologue, Psy, Sophrologue, ou Praticien.
-- Un Coach (Love coach, Life coach, Coach en confiance en soi, etc.).
-- Un spécialiste de la "dépendance affective", "confiance en soi", "relations amoureuses" ou "gestion des émotions".
+- Un Coach (Love coach, Life coach, Coach en confiance en soi, Business coach, etc.).
+- Tout profil axé sur le "coaching pour femmes ambitieuses", les "projets", l'"entrepreneuriat" ou la "réussite".
+- Un spécialiste de la "dépendance affective", "confiance en soi", "ménopause", "gestion des émotions" ou "deuil".
 - Tout profil proposant de l'"accompagnement", du "coaching", des "formations", des "masterclass" ou des "RDV".
-- Tout profil axé sur le "mental des femmes", le "bien-être féminin", le "féminin sacré" ou "l'épanouissement des femmes" (professionnel).
-- S'il y a des phrases comme "J'aide les femmes à...", "Je t'accompagne pour...", "Guérir de...", "Libère ton...".
+- Tout profil pro sur le "mental des femmes", le "bien-être féminin", ou "l'épanouissement des femmes".
+- S'il y a des phrases comme "J'aide les femmes à...", "Je t'accompagne pour...", "On en parle ?", "+X femmes accompagnées".
+- Si le USERNAME contient des mots comme : "coach", "psy", "sophro", "therapeute", "accompagnement".
 - Auteur / Écrivain / Conférencier sur ces thématiques.
 
 Réponds "OUI" uniquement si c'est un compte personnel (ou un pro sans rapport direct, ex: artiste, commerçant).
 
+Username: @{username}
 Bio: {bio}
 
 Réponse (OUI ou NON):`,
