@@ -26,7 +26,10 @@ const SPAM_PATTERNS = {
   justTag: /^@[a-zA-Z0-9._]+\s*$/,
   
   // Random letters/keyboard spam
-  keyboardSpam: /^[asdfghjkl]+$|^[qwerty]+$|^[zxcvbnm]+$/i
+  keyboardSpam: /^[asdfghjkl]+$|^[qwerty]+$|^[zxcvbnm]+$/i,
+  
+  // Competitor keywords in username (Psychologists, Therapists, Coaches)
+  competitorUsername: /(psychologue|thérapeute|therapeute|psy|coach|lifestyle|thérapie|therapie|hypno|sophro|psycho|mentale|bien-etre|bienetre)/i
 };
 
 // Quality indicators (if present, likely NOT spam)
@@ -62,6 +65,10 @@ export function analyzeComment(comment) {
     if (patternName === 'botUsername') {
       if (pattern.test(username)) {
         return { isSpam: true, reason: 'bot_username', qualityScore: 0 };
+      }
+    } else if (patternName === 'competitorUsername') {
+      if (pattern.test(username)) {
+        return { isSpam: true, reason: 'competitor_username', qualityScore: 0 };
       }
     } else if (pattern instanceof RegExp) {
       if (pattern.test(text)) {

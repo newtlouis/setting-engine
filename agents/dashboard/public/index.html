@@ -26,6 +26,10 @@
             --gradient: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
         }
 
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', -apple-system, system-ui, sans-serif;
             background-color: var(--bg-dark);
@@ -157,8 +161,8 @@
         /* Search Bar */
         .search-container {
             position: relative;
-            flex-grow: 1;
             max-width: 300px;
+            width: 100%;
         }
 
         .search-input {
@@ -445,25 +449,25 @@
             </div>
         </div>
 
-        <!-- Filters -->
-        <h2 style="font-size: 18px; margin-bottom: 16px;">Leads Management</h2>
-        <div class="controls">
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; width: 100%; align-items: center;">
-                <div style="display: flex; gap: 12px; flex-grow: 1;">
-                    <button class="btn-filter" onclick="loadLeads('all')">All</button>
-                    <button class="btn-filter active" onclick="loadLeads('new')">New</button>
-                    <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
-                    <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
-                    <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
-                    <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
-                    <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
-                </div>
-                <div class="search-container">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" class="search-input" placeholder="Rechercher un username..."
-                        oninput="onSearchInput()">
-                </div>
+        <!-- Section Header with Search -->
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 20px;">
+            <h2 style="font-size: 20px; font-weight: 700; margin: 0;">Leads Management</h2>
+            <div class="search-container">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" class="search-input" placeholder="Rechercher par username..."
+                    oninput="onSearchInput()">
             </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-filter" onclick="loadLeads('all')">All</button>
+            <button class="btn-filter active" onclick="loadLeads('new')">New</button>
+            <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
+            <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
+            <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
+            <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
+            <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
         </div>
 
         <!-- Data Table -->
