@@ -2,6 +2,7 @@ let selectedLeads = new Set();
 let currentLeads = []; // Track currently visible leads for "Select All"
 let currentAccountId = null; // Selected account filter
 let currentFilter = 'new';
+let searchTimeout = null;
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
@@ -188,9 +189,13 @@ async function loadLeads(filter) {
     clearSelection();
 
     try {
+        const search = document.getElementById('searchInput').value;
         let url = `/api/leads?status=${filter}&limit=100`;
         if (currentAccountId) {
             url += `&account_id=${currentAccountId}`;
+        }
+        if (search) {
+            url += `&search=${encodeURIComponent(search)}`;
         }
         const res = await fetch(url);
         const leads = await res.json();
@@ -295,6 +300,14 @@ async function loadLeads(filter) {
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="5" class="loading" style="color: var(--error)">Error loading data: ${e.message}</td></tr>`;
     }
+}
+
+// Search Logic with Debounce
+function onSearchInput() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        loadLeads(currentFilter);
+    }, 300); // 300ms debounce
 }
 
 async function updateLead(username, updates) {

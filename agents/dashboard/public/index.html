@@ -154,6 +154,41 @@
             border-color: var(--accent);
         }
 
+        /* Search Bar */
+        .search-container {
+            position: relative;
+            flex-grow: 1;
+            max-width: 300px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 12px 8px 32px;
+            border-radius: 6px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+            background: #12161b;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 12px;
+            pointer-events: none;
+        }
+
         /* Table */
         .table-container {
             background: var(--bg-card);
@@ -354,7 +389,8 @@
                         <option value="">Tous les comptes</option>
                         <!-- Options populated by JS -->
                     </select>
-                    <button onclick="setDefaultAccount()" class="btn-action-icon" title="Définir comme compte par défaut" style="opacity: 0.8; font-size: 16px;">📌</button>
+                    <button onclick="setDefaultAccount()" class="btn-action-icon"
+                        title="Définir comme compte par défaut" style="opacity: 0.8; font-size: 16px;">📌</button>
                 </div>
             </div>
         </header>
@@ -412,13 +448,22 @@
         <!-- Filters -->
         <h2 style="font-size: 18px; margin-bottom: 16px;">Leads Management</h2>
         <div class="controls">
-            <button class="btn-filter" onclick="loadLeads('all')">All</button>
-            <button class="btn-filter active" onclick="loadLeads('new')">New</button>
-            <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
-            <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
-            <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
-            <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
-            <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; width: 100%; align-items: center;">
+                <div style="display: flex; gap: 12px; flex-grow: 1;">
+                    <button class="btn-filter" onclick="loadLeads('all')">All</button>
+                    <button class="btn-filter active" onclick="loadLeads('new')">New</button>
+                    <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
+                    <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
+                    <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
+                    <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
+                    <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
+                </div>
+                <div class="search-container">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Rechercher un username..."
+                        oninput="onSearchInput()">
+                </div>
+            </div>
         </div>
 
         <!-- Data Table -->
