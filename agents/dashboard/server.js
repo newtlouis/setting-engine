@@ -211,6 +211,40 @@ app.patch('/api/leads/:username', (req, res) => {
     }
 });
 
+// GET /api/leads/:username/details
+app.get('/api/leads/:username/details', (req, res) => {
+    try {
+        const { username } = req.params;
+        
+        // 1. Get Lead Basic Info
+        const lead = db.prepare(`
+            SELECT * FROM leads WHERE username = ?
+        `).get(username);
+        
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+        
+        // 2. Get Comments (context)
+        const comments = db.prepare(`
+            SELECT * FROM comments WHERE lead_id = ? ORDER BY comment_date ASC
+        `).all(lead.id);
+
+        // 3. Get Conversation History
+        const messages = db.prepare(`
+            SELECT * FROM conversations WHERE lead_id = ? ORDER BY sent_at ASC
+        `).all(lead.id);
+        
+        res.json({
+            lead: lead,
+            comments: comments,
+            messages: messages
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/bookings
 app.get('/api/bookings', (req, res) => {
     try {

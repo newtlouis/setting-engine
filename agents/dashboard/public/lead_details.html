@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Lead Engine | Lead Details</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Additional styles for details page */
+        .details-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-input[readonly] {
+            opacity: 0.7;
+            cursor: default;
+        }
+
+        /* Message History Styles */
+        .message-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            height: 500px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .msg-user {
+            align-self: flex-start;
+            background: #21262d;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-assistant {
+            align-self: flex-end;
+            background: #1f6feb;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-meta {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        /* Search Dropdown */
+        .search-wrapper {
+            position: relative;
+            max-width: 400px;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .search-result-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+
+        .search-result-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .breadcrumb {
+            margin-bottom: 24px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .breadcrumb a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>Lead Details</h1>
+            </div>
+            <div class="breadcrumb">
+                <a href="/">Dashboard</a> / Details
+            </div>
+        </header>
+
+        <!-- Search Selection -->
+        <div class="search-wrapper" style="margin-bottom: 32px;">
+            <label class="form-label">Rechercher un lead</label>
+            <input type="text" id="leadSearch" class="form-input" placeholder="Tapez un username..." autocomplete="off">
+            <div id="searchResults" class="search-results"></div>
+        </div>
+
+        <div id="detailsContent" style="display: none;">
+            <div class="details-container">
+                <!-- Left Column: Lead Info -->
+                <div class="card">
+                    <h2 style="margin-top: 0; margin-bottom: 20px; font-size: 18px;">Informations</h2>
+
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" id="fieldUsername" class="form-input" readonly>
+                    </div>
+
+                    <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div>
+                            <label class="form-label">Prénom (Déduit)</label>
+                            <input type="text" id="fieldFirstName" class="form-input">
+                        </div>
+                        <div>
+                            <label class="form-label">Nom (Déduit)</label>
+                            <input type="text" id="fieldLastName" class="form-input">
+                        </div>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: -10px; margin-bottom: 16px;">
+                        * Le système stocke le "Full Name". Ces champs modifient le nom complet.
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Statut</label>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="fieldStatus" class="form-input">
+                                <option value="new">New</option>
+                                <option value="outreach">Contacted (Outreach)</option>
+                                <option value="conversation">Conversation</option>
+                                <option value="scheduling">Confirm Booking (Scheduling)</option>
+                                <option value="closed_won">Booked (Won)</option>
+                                <option value="failed">Failed / Ignored</option>
+                            </select>
+                            <button id="btnSaveStatus" class="btn-filter active"
+                                style="background: var(--success); color: white; border: none;">Save</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Profil URL</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="fieldProfileUrl" class="form-input" readonly>
+                            <a id="linkProfile" href="#" target="_blank" class="btn-filter">Open</a>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">DM URL (Direct Message)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="fieldDmUrl" class="form-input" readonly>
+                            <a id="linkDm" href="#" target="_blank" class="btn-filter">Open</a>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Source / Hashtag</label>
+                        <input type="text" id="fieldSource" class="form-input" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Premier Commentaire (Contexte)</label>
+                        <textarea id="fieldComment" class="form-input" style="height: 80px; resize: none;"
+                            readonly></textarea>
+                    </div>
+                </div>
+
+                <!-- Right Column: Conversation -->
+                <div class="card">
+                    <h2 style="margin-top: 0; margin-bottom: 20px; font-size: 18px;">Historique de Conversation</h2>
+                    <div id="messageList" class="message-list">
+                        <!-- Messages populated by JS -->
+                        <div style="text-align: center; color: var(--text-secondary); margin-top: 50px;">
+                            Sélectionnez un lead pour voir l'historique.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="details.js"></script>
+</body>
+
+</html>
