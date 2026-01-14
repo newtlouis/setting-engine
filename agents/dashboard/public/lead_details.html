@@ -128,15 +128,17 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        .breadcrumb {
-            margin-bottom: 24px;
-            font-size: 14px;
+        /* Updated navigation styles for active state */
+        .nav-link {
             color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
         }
 
-        .breadcrumb a {
-            color: var(--accent);
-            text-decoration: none;
+        .nav-link.active {
+            color: var(--text-primary);
+            font-weight: 600;
         }
     </style>
 </head>
@@ -151,10 +153,8 @@
 
             <!-- Navigation -->
             <nav style="margin-left: 32px; display: flex; gap: 20px;">
-                <a href="/" style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Dashboard</a>
-                <a href="/lead_details.html"
-                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
-                    Details</a>
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/lead_details.html" class="nav-link active">Lead Details</a>
             </nav>
 
             <div class="account-selector" style="margin-left: auto;">
@@ -171,10 +171,17 @@
         </header>
 
         <!-- Search Selection -->
-        <div class="search-wrapper" style="margin-bottom: 32px;">
-            <label class="form-label">Rechercher un lead</label>
-            <input type="text" id="leadSearch" class="form-input" placeholder="Tapez un username..." autocomplete="off">
-            <div id="searchResults" class="search-results"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px;">
+            <div class="search-wrapper" style="flex: 1;">
+                <label class="form-label">Rechercher un lead</label>
+                <input type="text" id="leadSearch" class="form-input" placeholder="Tapez un username..."
+                    autocomplete="off">
+                <div id="searchResults" class="search-results"></div>
+            </div>
+
+            <button class="btn-filter" onclick="showAddLeadModal()"
+                style="margin-left: 20px; background: var(--accent); color: white; border: none;">+ Nouveau
+                Lead</button>
         </div>
 
         <div id="detailsContent" style="display: none;">
@@ -240,6 +247,16 @@
                     </div>
 
                     <div class="form-group">
+                        <label class="form-label">Post URL (Source)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="fieldPostUrl" class="form-input" readonly
+                                placeholder="Non disponible">
+                            <a id="linkPost" href="#" target="_blank" class="btn-filter"
+                                style="opacity: 0.5; pointer-events: none;">Open</a>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label class="form-label">Premier Commentaire (Contexte)</label>
                         <textarea id="fieldComment" class="form-input" style="height: 80px; resize: none;"
                             readonly></textarea>
@@ -256,6 +273,38 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Lead Modal -->
+    <div class="modal-overlay" id="addLeadModal">
+        <div class="modal-content">
+            <div class="modal-title">Ajouter un nouveau lead</div>
+
+            <div class="form-group" style="text-align: left;">
+                <label class="form-label">Username *</label>
+                <input type="text" id="newUsername" class="form-input" placeholder="ex: jean.dupont">
+            </div>
+
+            <div class="form-group" style="text-align: left;">
+                <label class="form-label">Profil URL *</label>
+                <input type="text" id="newProfileUrl" class="form-input" placeholder="https://instagram.com/...">
+            </div>
+
+            <div class="form-group" style="text-align: left;">
+                <label class="form-label">Statut</label>
+                <select id="newStatus" class="form-input">
+                    <option value="new">New</option>
+                    <option value="outreach">Contacted</option>
+                    <option value="conversation">Conversation</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="closeAddLeadModal()">Annuler</button>
+                <button class="btn-modal" onclick="createLead()"
+                    style="background: var(--accent); color: white;">Créer</button>
             </div>
         </div>
     </div>

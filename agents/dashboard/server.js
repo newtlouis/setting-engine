@@ -183,6 +183,34 @@ app.post('/api/leads/bulk-update', (req, res) => {
     }
 });
 
+// POST /api/leads - Create new manual lead
+app.post('/api/leads', (req, res) => {
+    try {
+        const { username, profile_url, status, account_id } = req.body;
+        
+        if (!username || !profile_url) {
+            return res.status(400).json({ error: 'Username and Profile URL are required' });
+        }
+
+        // Check if exists
+        const existing = db.prepare('SELECT id FROM leads WHERE username = ?').get(username);
+        if (existing) {
+            return res.status(409).json({ error: 'Lead already exists' });
+        }
+
+        const stmt = db.prepare(`
+            INSERT INTO leads (username, profile_url, status, account_id, lead_source, lead_type, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'manual', 'cold', datetime('now'), datetime('now'))
+        `);
+        
+        const info = stmt.run(username, profile_url, status || 'new', account_id || null);
+        
+        res.json({ success: true, id: info.lastInsertRowid, username });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // PATCH /api/leads/:username
 app.patch('/api/leads/:username', (req, res) => {
     try {
@@ -190,7 +218,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored', 'full_name'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {

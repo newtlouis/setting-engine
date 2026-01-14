@@ -77,8 +77,6 @@ async function setDefaultAccount() {
 
 function onAccountChange(accountId) {
     currentAccountId = accountId || null;
-    // On details page, maybe filtering search results by account?
-    // For now, details logic doesn't strictly depend on account unless we filter search
 }
 
 // ==========================================
@@ -120,7 +118,8 @@ async function searchLeads(query) {
             });
             searchResults.style.display = 'block';
         } else {
-            searchResults.style.display = 'none';
+            searchResults.innerHTML = '<div style="padding:10px; color:#8b949e; font-size:13px;">Aucun résultat</div>';
+            searchResults.style.display = 'block';
         }
     } catch (err) {
         console.error('Search error:', err);
@@ -176,11 +175,10 @@ async function selectLead(username) {
         } else if (lead.booking_status === 'pending') {
              statusSelect.value = 'scheduling';
         } else {
-             // Fallback for standard statuses
              if (['new','outreach','conversation','failed'].includes(lead.status)) {
                  statusSelect.value = lead.status;
              } else {
-                 statusSelect.value = 'conversation'; // Default fallback
+                 statusSelect.value = 'conversation'; 
              }
         }
         
@@ -200,11 +198,29 @@ async function selectLead(username) {
         
         document.getElementById('fieldSource').value = lead.lead_source || 'Unknown';
         
-        // Comment Logic
+        // Comment Logic + Post URL
         if (comments && comments.length > 0) {
-            document.getElementById('fieldComment').value = comments[0].comment_text; // First comment is usually source
+            const firstComment = comments[0];
+            document.getElementById('fieldComment').value = firstComment.comment_text; 
+            
+            // Post URL Logic
+            const postUrl = firstComment.post_url;
+            if (postUrl) {
+                document.getElementById('fieldPostUrl').value = postUrl;
+                document.getElementById('linkPost').href = postUrl;
+                document.getElementById('linkPost').style.opacity = '1';
+                document.getElementById('linkPost').style.pointerEvents = 'auto';
+            } else {
+                document.getElementById('fieldPostUrl').value = 'No Post URL';
+                document.getElementById('linkPost').style.opacity = '0.5';
+                document.getElementById('linkPost').style.pointerEvents = 'none';
+            }
+
         } else {
             document.getElementById('fieldComment').value = 'No comment data available.';
+            document.getElementById('fieldPostUrl').value = '';
+            document.getElementById('linkPost').style.opacity = '0.5';
+            document.getElementById('linkPost').style.pointerEvents = 'none';
         }
         
         // 2. Render Conversation
@@ -225,6 +241,11 @@ function resetFields() {
     document.getElementById('fieldDmUrl').value = '';
     document.getElementById('fieldSource').value = '';
     document.getElementById('fieldComment').value = '';
+    document.getElementById('fieldPostUrl').value = '';
+    
+    document.getElementById('linkPost').style.opacity = '0.5';
+    document.getElementById('linkPost').style.pointerEvents = 'none';
+
     messageList.innerHTML = '<div style="text-align:center; padding: 20px;">Loading history...</div>';
 }
 
@@ -252,7 +273,6 @@ function renderMessages(messages) {
         messageList.appendChild(div);
     });
     
-    // Scroll to bottom
     messageList.scrollTop = messageList.scrollHeight;
 }
 
@@ -276,11 +296,11 @@ btnSaveStatus.addEventListener('click', async () => {
         updates.status = 'scheduling';
         updates.booking_status = 'pending';
     } else if (newStatus === 'closed_won') {
-        updates.status = 'scheduling'; // Keep as scheduling or conversation
+        updates.status = 'scheduling'; 
         updates.booking_status = 'completed';
     } else {
         updates.status = newStatus;
-        updates.booking_status = ''; // Clear booking status if moved back
+        updates.booking_status = ''; 
     }
     
     // API Call
@@ -295,13 +315,13 @@ btnSaveStatus.addEventListener('click', async () => {
             const btn = document.getElementById('btnSaveStatus');
             const originalText = btn.textContent;
             btn.textContent = 'Saved!';
-            btn.style.background = '#238636'; // darker green
+            btn.style.background = '#238636'; 
             setTimeout(() => {
                 btn.textContent = originalText;
                 btn.style.background = 'var(--success)';
             }, 2000);
             
-            // Refresh details to confirm (optional, mostly for consistency)
+            // Refresh details
             selectLead(currentLead.username);
         } else {
             alert('Failed to save changes.');
@@ -311,3 +331,65 @@ btnSaveStatus.addEventListener('click', async () => {
         alert('Network error while saving.');
     }
 });
+
+// ==========================================
+// MANUAL LEAD CREATION
+// ==========================================
+
+function showAddLeadModal() {
+    document.getElementById('addLeadModal').style.display = 'flex';
+    document.getElementById('newUsername').focus();
+}
+
+function closeAddLeadModal() {
+    document.getElementById('addLeadModal').style.display = 'none';
+    // Clear inputs
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newProfileUrl').value = '';
+    document.getElementById('newStatus').value = 'new';
+}
+
+async function createLead() {
+    const username = document.getElementById('newUsername').value.trim();
+    const profileUrl = document.getElementById('newProfileUrl').value.trim();
+    const status = document.getElementById('newStatus').value;
+    
+    if (!username || !profileUrl) {
+        alert('Username et Profile URL sont requis.');
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/leads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username,
+                profile_url: profileUrl,
+                status,
+                account_id: currentAccountId // Optional: link to currently viewed account if selected
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+            closeAddLeadModal();
+            // Load the newly created lead immediately
+            selectLead(username);
+        } else {
+            alert(data.error || 'Erreur lors de la création');
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Erreur réseau');
+    }
+}
+
+// Close modal on outside click
+window.onclick = (event) => {
+    const modal = document.getElementById('addLeadModal');
+    if (event.target == modal) {
+        closeAddLeadModal();
+    }
+};
