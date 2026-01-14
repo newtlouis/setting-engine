@@ -4,9 +4,9 @@
  * Scans the Instagram inbox directly to find and process unread conversations.
  * Uses a "Process-as-you-Scroll" approach:
  * 1. Scan visible unread conversations
- * 2. Process them immediately (Click -> Respond) before they scroll out of view
- * 3. Scroll down
- * 4. Repeat
+ * 2. Process them immediately (Click -> Respond)
+ * 3. Store results in memory
+ * 4. At the end, open ALL processed conversations in tabs for manual review/sending
  */
 
 import { 
@@ -33,7 +33,7 @@ import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 // ============================================
 const CONFIG = {
   INBOX_URL: 'https://www.instagram.com/direct/inbox/',
-  MAX_SCROLLS: 15,
+  MAX_SCROLLS: 15, // Increase scrolls to cover deep inbox
   DELAYS: {
     AFTER_NAVIGATION: 3500,
     AFTER_CLICK: 2500,
@@ -203,6 +203,7 @@ async function extractUsernameFromConversation(page) {
       }
     }
     
+    // Fallback: aria-labels
     const profileLink = document.querySelector('a[aria-label*="profil" i], a[aria-label*="profile page" i]');
     if (profileLink) {
       const href = profileLink.getAttribute('href');
@@ -212,6 +213,7 @@ async function extractUsernameFromConversation(page) {
       }
     }
     
+    // Fallback: Header H1
     const headerTitle = document.querySelector('div[role="main"] header h1, div[role="main"] h1');
     if (headerTitle) {
       return headerTitle.textContent?.trim();
@@ -254,14 +256,15 @@ export async function runInboxScanner(options = {}) {
   console.log(`   DM RESPONDER - INBOX SCANNER MODE`);
   console.log(`========================================`);
   console.log(`   Profile: ${profile}`);
-  console.log(`   Strategy: Process-as-you-Scroll`);
+  console.log(`   Strategy: Process-as-you-Scroll + Manual Review Tabs`);
   
   let browser = null;
+  let browserContext = null; // Need context to open new pages
   let workingPage = null;
-  let processedCount = 0;
   let skippedCount = 0;
   
-  // Keep track of processed conversation names to avoid infinite duplicates
+  // Store processed results for final report and review
+  const processedResults = [];
   const processedNames = new Set();
   
   try {
@@ -269,9 +272,22 @@ export async function runInboxScanner(options = {}) {
       profile,
       headless: false
     });
-    browser = browserResult.browser;
+    const contextObj = browserResult.browser;
+    
+    // Check if it's a Browser (has contexts function) or Context (persistent)
+    if (contextObj.contexts && typeof contextObj.contexts === 'function') {
+      browser = contextObj;
+      browserContext = browserResult.context || browser.contexts()[0];
+    } else {
+      browserContext = contextObj;
+    }
     workingPage = browserResult.page;
     
+    // Ensure we have a context
+    if (!browserContext && workingPage) {
+        browserContext = workingPage.context(); 
+    }
+
     const profileConfig = await loadProfileConfig(profile);
     if (profileConfig?.niche) {
       console.log(`   🧠 Using niche strategy: ${profileConfig.niche}`);
@@ -279,22 +295,21 @@ export async function runInboxScanner(options = {}) {
     
     await navigateToInbox(workingPage);
     
-    // --- MAIN LOOP: SCAN -> PROCESS -> SCROLL ---
+    // --- MAIN LOOP: SCAN -> PROCESS (Single Tab) ---
     
     for (let scrollIdx = 0; scrollIdx <= CONFIG.MAX_SCROLLS; scrollIdx++) {
       console.log(`\n   📜 Round ${scrollIdx + 1}: Scanning visible conversations...`);
       
       const visible = await getVisibleConversations(workingPage);
-      console.log(`      Found ${visible.length} visible items.`);
       
       // Filter for actionable items: Unread AND Not Processed
       const actionable = visible.filter(c => c.isUnread && !processedNames.has(c.name));
       
       if (actionable.length > 0) {
-        console.log(`      Found ${actionable.length} NEW unread conversation(s). Processing immediately...`);
+        console.log(`      Found ${actionable.length} NEW unread conversation(s). Processing...`);
         
         for (const conv of actionable) {
-          console.log(`\n   --- Processing: ${conv.name} ---`);
+          console.log(`\n   --- Analyzing: ${conv.name} ---`);
           processedNames.add(conv.name); // Mark as processed
           
           // 1. Click (it is visible now)
@@ -305,6 +320,9 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
+          // Get current URL to re-open it later
+          const conversationUrl = workingPage.url();
+
           // 2. Extract Username
           const username = await extractUsernameFromConversation(workingPage);
           if (!username) {
@@ -376,26 +394,26 @@ export async function runInboxScanner(options = {}) {
             await setDmThreadStatus(username, 'scheduling', { booking_status: 'pending' });
           }
           
-          // 8. Type Message
-          const typeResult = await typeInOpenTab(workingPage, finalMessage);
-          if (typeResult.success) {
-             await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
-            await setDmThreadStatus(username, 'conversation', { last_checked_at: new Date().toISOString() });
-            console.log(`   ✅ Message typed!`);
-            processedCount++;
-            
-            // Register tab for final manual review
-            registerOpenTab(username, workingPage, finalMessage);
-          } else {
-            console.log(`   ❌ Failed to type.`);
-          }
+          // 8. STORE RESULT (Don't just type and leave, save for Final Tab Opening)
+          // We save it to DB too
+          await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
+          await setDmThreadStatus(username, 'conversation', { last_checked_at: new Date().toISOString() });
+          
+          processedResults.push({
+             username,
+             name: conv.name,
+             message: finalMessage,
+             url: conversationUrl
+          });
+
+          console.log(`   ✅ Response prepared for review.`);
           
           // Small delay before next item
           await delay(CONFIG.DELAYS.BETWEEN_CONVERSATIONS);
         }
         
       } else {
-        console.log(`      No new unread items in this view.`);
+        // No actionable items found
       }
       
       // Scroll for next round
@@ -405,11 +423,57 @@ export async function runInboxScanner(options = {}) {
       }
     }
     
-    // --- FINISH ---
+    // --- FINAL REPORT & REVIEW TABS ---
     
-    if (getOpenMessageTabs().length > 0) {
-      await waitForUserToFinish();
+    console.log(`\n========================================`);
+    console.log(`   🎉 SCAN COMPLETE - SUMMARY`);
+    console.log(`========================================`);
+    console.log(`Total Scanned: ${processedNames.size}`);
+    console.log(`Processed: ${processedResults.length}`);
+    console.log(`Skipped: ${skippedCount}\n`);
+    
+    if (processedResults.length > 0) {
+      console.table(processedResults.map(r => ({
+        User: r.username,
+        Name: r.name,
+        Response: r.message.substring(0, 40) + '...'
+      })));
+      
+      console.log(`\nRequested Action: OPENING TABS FOR MANUAL REVIEW...`);
+      console.log(`Each message will be re-typed in a new tab for you to send.\n`);
+      
+      // Open a tab for each processed result
+      for (const result of processedResults) {
+          try {
+              console.log(`   Opening tab for @${result.username}...`);
+              const newPage = await browserContext.newPage();
+              await newPage.goto(result.url, { waitUntil: 'domcontentloaded' });
+              
+              // Re-type the message
+              await delay(1000);
+              const typeRes = await typeInOpenTab(newPage, result.message);
+              
+              if (typeRes.success) {
+                  console.log(`     ✅ Typed response for ${result.username}`);
+                  // Register for the final wait loop
+                  registerOpenTab(result.username, newPage, result.message);
+              } else {
+                  console.log(`     ❌ Failed to type for ${result.username}`);
+              }
+          } catch (err) {
+              console.error(`     ❌ Error opening tab for ${result.username}: ${err.message}`);
+          }
+      }
+      
+      // Wait for user to act
+      if (getOpenMessageTabs().length > 0) {
+        await waitForUserToFinish();
+      }
+      
+    } else {
+        console.log(`No messages processed to review.`);
     }
+
     
   } catch (error) {
     console.error(`\n❌ Fatal error: ${error.message}`);
@@ -419,10 +483,4 @@ export async function runInboxScanner(options = {}) {
   } finally {
     await closeBrowser();
   }
-  
-  console.log(`\n========================================`);
-  console.log(`   INBOX SCAN COMPLETE`);
-  console.log(`   Unique names processed: ${processedNames.size}`);
-  console.log(`   Actionable processed: ${processedCount}`);
-  console.log(`========================================\n`);
 }
