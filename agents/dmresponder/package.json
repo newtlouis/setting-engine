@@ -12,6 +12,7 @@
     "start": "node bin/run.js",
     "reply": "node bin/run.js",
     "reply:auto": "node bin/cron.js --show-browser",
+    "inbox": "node bin/cron.js --inbox --show-browser",
     "test": "node --test tests/*.test.js",
     "dev": "node --watch bin/run.js",
     "cron": "node bin/cron.js"

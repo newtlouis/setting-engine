@@ -23,6 +23,7 @@ import {
   getOrCreateAccount
 } from './db_integration.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { runInboxScanner } from './inbox_scanner.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +63,12 @@ export async function runCronWatcher(options = {}) {
   const profile = options.profile || process.env.IG_PROFILE;
   if (!profile) {
     throw new Error('Profile name is required for DM Responder Cron. Use --profile <name>.');
+  }
+
+  // INBOX SCANNER MODE: Scan inbox directly instead of opening each URL
+  if (options.inboxMode) {
+    console.log('   📬 INBOX SCANNER MODE ACTIVATED');
+    return await runInboxScanner({ profile, ...options });
   }
 
   // Resolve accountId

@@ -21,6 +21,7 @@ program
   .option('--output-dir <dir>', 'Directory to store suggestion files')
   .option('--show-browser', 'Run Playwright in headed mode (default headless)', false)
   .option('--profile <name>', 'Browser profile name')
+  .option('--inbox', 'Use INBOX SCANNER mode: scan inbox for unread messages instead of opening each URL', false)
   .option('--conversation-only', 'Only process leads who have replied (status: conversation)', false)
   .option('--outreach-only', 'Only process leads waiting for first reply (status: outreach)', false)
   .option('--replied-only', 'Deprecated: use --conversation-only instead', false)
@@ -37,6 +38,7 @@ program
         outputDir: options.outputDir,
         headless: !options.showBrowser,
         profile: options.profile,
+        inboxMode: options.inbox,
         conversationOnly: options.conversationOnly,
         outreachOnly: options.outreachOnly
       });

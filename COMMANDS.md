@@ -11,8 +11,9 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | **Dashboard** | `npm run ui` | Lance l'interface visuelle (Stats, Logs, Config). |
 | **Collector** | `npm run scrape -- [options]` | Lance la collecte de leads. |
 | **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
+| **Inbox Responder** | `npm run respond:inbox` | **Nouveau**. Scanne la boîte de réception pour les nouveaux messages. |
+| **Open Session** | `npm run open:session <profile>` | **Nouveau**. Ouvre Instagram manuellement pour un profil spécifique. |
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
-| **Reply:Replied** | `npm run reply:replied` | **Nouveau**. Cible uniquement les leads qui ont répondu. |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
 
 ---
@@ -26,9 +27,9 @@ Chaque profil possède son propre dossier de données (`browser-data-<nom>`) et 
 **Exemple :**
 ```bash
 # Pour le compte "lifestyle"
+npm run open:session lifestyle        # Ouvrir pour se connecter
 npm run scrape -- --profile lifestyle -t yoga
-npm run send -- --profile lifestyle
-npm run reply -- --profile lifestyle
+npm run respond:inbox -- --profile lifestyle
 
 # Pour le compte "business"
 npm run scrape -- --profile business -t marketing
@@ -37,7 +38,12 @@ npm run reply -- --profile business
 ```
 **Note** : Dans le Dashboard, utilisez le sélecteur de compte en haut à droite pour basculer la vue.
 
-Chaque profil possède son propre dossier de données (`browser-data-<nom>`). La première fois, vous devrez vous connecter manuellement pour chaque profil.
+#### 🛠️ Commande Utile : Open Session
+Si vous avez besoin de vous connecter manuellement ou de vérifier quelque chose sur un compte sans lancer d'agent :
+```bash
+npm run open:session <nom_du_profil>
+```
+Cela ouvrira une fenêtre Chrome avec les cookies et la session isolée du profil demandé.
 
 ---
 
@@ -128,8 +134,14 @@ npm run reply -- --interactive --profile mon_compte
 ```
 *Le script vous demandera de coller le message du prospect et vous proposera une réponse.*
 
-**Mode Automatique (Cron)**
-Vérifie les nouveaux messages des leads suivis et génère des suggestions.
+**Mode Inbox Scanner (RECOMMANDÉ pour la rapidité)**
+Scanne directement votre boîte de réception Instagram pour trouver les conversations non lues et suggérer des réponses. Ne traite que les messages en gras (nouvelles réponses).
+```bash
+npm run respond:inbox -- --profile mon_compte
+```
+
+**Mode Automatique (Cron/URL)**
+Vérifie les nouveaux messages des leads suivis en visitant chaque URL DM stockée en base.
 ```bash
 npm run reply:auto -- --profile mon_compte
 ```

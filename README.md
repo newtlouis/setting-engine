@@ -67,11 +67,14 @@ npm run scrape -- --profile fitness_coach -t gym
 # Run outreach for 'fitness_coach'
 npm run outreach -- --profile fitness_coach --simple
 
-# Respond to NEW replies only for 'fitness_coach'
-npm run reply:replied -- --profile fitness_coach
+# Répondre aux NOUVELLES réponses (Mode rapide)
+npm run respond:inbox -- --profile fitness_coach
 
-# Respond to all active conversations for 'fitness_coach'
+# Répondre à toutes les conversations actives (Mode URL)
 npm run reply -- --profile fitness_coach
+
+# Ouvrir une session manuelle pour se connecter
+npm run open:session fitness_coach
 ```
 
 ### 4. Run Your First Scrape (Collector)
