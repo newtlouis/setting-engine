@@ -1,9 +1,12 @@
 /**
  * @file Inbox Scanner for DM Responder
  * 
- * Scans the Instagram inbox directly to find unread conversations.
- * Uses an incremental scan-and-scroll approach to capture all conversations,
- * including those that might be scrolled out of view.
+ * Scans the Instagram inbox directly to find and process unread conversations.
+ * Uses a "Process-as-you-Scroll" approach:
+ * 1. Scan visible unread conversations
+ * 2. Process them immediately (Click -> Respond) before they scroll out of view
+ * 3. Scroll down
+ * 4. Repeat
  */
 
 import { 
@@ -30,11 +33,11 @@ import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 // ============================================
 const CONFIG = {
   INBOX_URL: 'https://www.instagram.com/direct/inbox/',
-  SCROLL_COUNT: 10,
+  MAX_SCROLLS: 15,
   DELAYS: {
     AFTER_NAVIGATION: 3500,
     AFTER_CLICK: 2500,
-    AFTER_SCROLL: 1200,
+    AFTER_SCROLL: 1500,
     BETWEEN_CONVERSATIONS: 1500
   }
 };
@@ -120,6 +123,8 @@ async function getVisibleConversations(page) {
       seenNames.add(name);
       
       let isUnread = false;
+      
+      // Check for "Unread" text
       const allSpans = button.querySelectorAll('span');
       for (const span of allSpans) {
         const text = span.textContent || '';
@@ -129,6 +134,7 @@ async function getVisibleConversations(page) {
         }
       }
       
+      // Check for blue dot
       const dotIndicator = button.querySelector('span[data-visualcompletion="ignore"] + div, .x6s0dn4.x1iwo8zk');
       if (dotIndicator) {
         isUnread = true;
@@ -164,7 +170,7 @@ async function clickConversationByName(page, targetName) {
         const buttonName = nameSpan.getAttribute('title') || nameSpan.textContent || '';
         if (buttonName === name) {
           button.click();
-          button.scrollIntoView({ block: 'center', behavior: 'instant' }); // Ensure it's in view
+          button.scrollIntoView({ block: 'center', behavior: 'instant' }); 
           return true;
         }
       }
@@ -248,12 +254,15 @@ export async function runInboxScanner(options = {}) {
   console.log(`   DM RESPONDER - INBOX SCANNER MODE`);
   console.log(`========================================`);
   console.log(`   Profile: ${profile}`);
-  console.log(`   Strategy: Incremental Scan & Scroll`);
+  console.log(`   Strategy: Process-as-you-Scroll`);
   
   let browser = null;
   let workingPage = null;
   let processedCount = 0;
   let skippedCount = 0;
+  
+  // Keep track of processed conversation names to avoid infinite duplicates
+  const processedNames = new Set();
   
   try {
     const browserResult = await initBrowser({ 
@@ -270,144 +279,133 @@ export async function runInboxScanner(options = {}) {
     
     await navigateToInbox(workingPage);
     
-    // --- INCREMENTAL COLLECTION PHASE ---
-    console.log(`\n   🔍 PHASE 1: Collecting unread conversations...`);
+    // --- MAIN LOOP: SCAN -> PROCESS -> SCROLL ---
     
-    const allConversations = new Map(); // Use Map to deduplicate by name
-    
-    // Scan initially then loop scroll
-    for (let i = 0; i <= CONFIG.SCROLL_COUNT; i++) {
+    for (let scrollIdx = 0; scrollIdx <= CONFIG.MAX_SCROLLS; scrollIdx++) {
+      console.log(`\n   📜 Round ${scrollIdx + 1}: Scanning visible conversations...`);
+      
       const visible = await getVisibleConversations(workingPage);
+      console.log(`      Found ${visible.length} visible items.`);
       
-      let newFound = 0;
-      visible.forEach(c => {
-        if (!allConversations.has(c.name)) {
-          allConversations.set(c.name, c);
-          newFound++;
+      // Filter for actionable items: Unread AND Not Processed
+      const actionable = visible.filter(c => c.isUnread && !processedNames.has(c.name));
+      
+      if (actionable.length > 0) {
+        console.log(`      Found ${actionable.length} NEW unread conversation(s). Processing immediately...`);
+        
+        for (const conv of actionable) {
+          console.log(`\n   --- Processing: ${conv.name} ---`);
+          processedNames.add(conv.name); // Mark as processed
+          
+          // 1. Click (it is visible now)
+          const clicked = await clickConversationByName(workingPage, conv.name);
+          if (!clicked) {
+            console.log(`   ⚠️ Could not click conversation. Skipping.`);
+            skippedCount++;
+            continue;
+          }
+          
+          // 2. Extract Username
+          const username = await extractUsernameFromConversation(workingPage);
+          if (!username) {
+            console.log(`   ⚠️ Could not extract username.`);
+            skippedCount++;
+            continue;
+          }
+          console.log(`   👤 Username: @${username}`);
+          
+          // 3. Database Check
+          const leadContext = await getLeadWithContext(username);
+          if (!leadContext) {
+            console.log(`   ⏭️ Not in DB, skipping.`);
+            skippedCount++;
+            continue;
+          }
+          
+          const validStatuses = ['conversation', 'outreach', 'contacted'];
+          if (!validStatuses.includes(leadContext.status)) {
+            console.log(`   ⏭️ Status '${leadContext.status}' invalid, skipping.`);
+            skippedCount++;
+            continue;
+          }
+          
+          // 4. Scrape & Process
+          console.log(`   📖 Scraping...`);
+          const scrapedMessages = await scrapeConversationMessages(workingPage);
+          
+          const existingHistory = await getConversationHistory(username);
+          const newMessages = findNewMessages(scrapedMessages, existingHistory);
+          
+          let updatedHistory = [...existingHistory];
+          if (newMessages.length > 0) {
+            console.log(`   💾 Saving ${newMessages.length} new message(s)`);
+            for (const msg of newMessages) {
+              await addMessage(username, msg.role, msg.text);
+              updatedHistory.push(msg);
+            }
+          }
+          
+          // 5. Check if response needed
+          const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
+          if (!lastMsg || lastMsg.role !== 'user') {
+            console.log(`   ⏳ Last message was not from user.`);
+            continue;
+          }
+          
+          // 6. Generate Response
+          console.log(`   🤖 Generating response...`);
+          const response = await generateResponse({
+            conversationHistory: updatedHistory,
+            leadContext,
+            profileConfig
+          });
+          
+          const message = response.next_message || response.message;
+          if (!message) {
+            console.log(`   ⚠️ No message generated.`);
+            continue;
+          }
+          
+          console.log(`   💬 Suggested: "${message.substring(0, 50)}..."`);
+          
+          // 7. Booking Alert
+          let finalMessage = message;
+          if (finalMessage.includes('[ALERT_BOOKING]')) {
+            console.log(`   🚨 BOOKING ALERT!`);
+            finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
+            await setDmThreadStatus(username, 'scheduling', { booking_status: 'pending' });
+          }
+          
+          // 8. Type Message
+          const typeResult = await typeInOpenTab(workingPage, finalMessage);
+          if (typeResult.success) {
+             await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
+            await setDmThreadStatus(username, 'conversation', { last_checked_at: new Date().toISOString() });
+            console.log(`   ✅ Message typed!`);
+            processedCount++;
+            
+            // Register tab for final manual review
+            registerOpenTab(username, workingPage, finalMessage);
+          } else {
+            console.log(`   ❌ Failed to type.`);
+          }
+          
+          // Small delay before next item
+          await delay(CONFIG.DELAYS.BETWEEN_CONVERSATIONS);
         }
-      });
+        
+      } else {
+        console.log(`      No new unread items in this view.`);
+      }
       
-      console.log(`      Scan ${i}: Found ${visible.length} visible, ${newFound} new.`);
-      
-      if (i < CONFIG.SCROLL_COUNT) {
+      // Scroll for next round
+      if (scrollIdx < CONFIG.MAX_SCROLLS) {
         await scrollSidebarOnce(workingPage);
         await delay(CONFIG.DELAYS.AFTER_SCROLL);
       }
     }
     
-    const unreadConversations = Array.from(allConversations.values()).filter(c => c.isUnread);
-    
-    console.log(`\n   ✅ Collection Complete.`);
-    console.log(`   Total Found: ${allConversations.size}`);
-    console.log(`   📬 Unread: ${unreadConversations.length}`);
-    
-    if (unreadConversations.length === 0) {
-      console.log(`   No unread conversations found. Exiting.`);
-      await closeBrowser();
-      return;
-    }
-
-    console.log(`\n   --- Unread List ---`);
-    unreadConversations.forEach((c, i) => {
-      console.log(`   ${i + 1}. ${c.name} - "${c.preview.substring(0, 30)}..."`);
-    });
-    
-    // --- PROCESSING PHASE ---
-    console.log(`\n   🛠️ PHASE 2: Processing unread conversations...`);
-    
-    for (const conv of unreadConversations) {
-      console.log(`\n   Processing: ${conv.name}`);
-      
-      // Click by NAME
-      const clicked = await clickConversationByName(workingPage, conv.name);
-      if (!clicked) {
-        console.log(`   ⚠️ Could not open conversation (maybe scrolled too far). Trying to find it...`);
-        // Retry logic: try to scroll up/down to find it? 
-        // For now, simpler to just skip or log error.
-        skippedCount++;
-        continue;
-      }
-      
-      const username = await extractUsernameFromConversation(workingPage);
-      if (!username) {
-        console.log(`   ⚠️ Could not extract username, skipping`);
-        skippedCount++;
-        continue;
-      }
-      console.log(`   👤 Username: @${username}`);
-      
-      const leadContext = await getLeadWithContext(username);
-      if (!leadContext) {
-        console.log(`   ⏭️ Not in our lead database, skipping`);
-        skippedCount++;
-        continue;
-      }
-      
-      const validStatuses = ['conversation', 'outreach', 'contacted'];
-      if (!validStatuses.includes(leadContext.status)) {
-        console.log(`   ⏭️ Status '${leadContext.status}' not in target list, skipping`);
-        skippedCount++;
-        continue;
-      }
-      
-      console.log(`   📖 Scraping conversation...`);
-      const scrapedMessages = await scrapeConversationMessages(workingPage);
-      
-      const existingHistory = await getConversationHistory(username);
-      const newMessages = findNewMessages(scrapedMessages, existingHistory);
-      
-      let updatedHistory = [...existingHistory];
-      if (newMessages.length > 0) {
-        console.log(`   💾 Saving ${newMessages.length} new message(s) to DB`);
-        for (const msg of newMessages) {
-          await addMessage(username, msg.role, msg.text);
-          updatedHistory.push(msg);
-        }
-      }
-      
-      const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
-      if (!lastMsg || lastMsg.role !== 'user') {
-        console.log(`   ⏳ Waiting for user reply (last msg was ${lastMsg?.role || 'none'})`);
-        continue;
-      }
-      
-      console.log(`   🤖 Generating response...`);
-      const response = await generateResponse({
-        conversationHistory: updatedHistory,
-        leadContext,
-        profileConfig
-      });
-      
-      const message = response.next_message || response.message;
-      if (!message) {
-        console.log(`   ⚠️ No message generated`);
-        continue;
-      }
-      
-      console.log(`   💬 Suggested: "${message.substring(0, 50)}..."`);
-      
-      let finalMessage = message;
-      if (finalMessage.includes('[ALERT_BOOKING]')) {
-        console.log(`   🚨 BOOKING ALERT DETECTED!`);
-        finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
-        await setDmThreadStatus(username, 'scheduling', { booking_status: 'pending' });
-      }
-      
-      const typeResult = await typeInOpenTab(workingPage, finalMessage);
-      if (!typeResult.success) {
-        console.log(`   ❌ Failed to type: ${typeResult.error}`);
-        continue;
-      }
-      
-      await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
-      await setDmThreadStatus(username, 'conversation', { last_checked_at: new Date().toISOString() });
-      
-      console.log(`   ✅ Message typed!`);
-      processedCount++;
-      registerOpenTab(username, workingPage, finalMessage);
-      
-      await delay(CONFIG.DELAYS.BETWEEN_CONVERSATIONS);
-    }
+    // --- FINISH ---
     
     if (getOpenMessageTabs().length > 0) {
       await waitForUserToFinish();
@@ -424,6 +422,7 @@ export async function runInboxScanner(options = {}) {
   
   console.log(`\n========================================`);
   console.log(`   INBOX SCAN COMPLETE`);
-  console.log(`   Processed: ${processedCount} | Skipped: ${skippedCount}`);
+  console.log(`   Unique names processed: ${processedNames.size}`);
+  console.log(`   Actionable processed: ${processedCount}`);
   console.log(`========================================\n`);
 }
