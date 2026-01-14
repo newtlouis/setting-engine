@@ -146,10 +146,27 @@
         <!-- Header -->
         <header class="header">
             <div class="logo">
-                <h1>Lead Details</h1>
+                <h1>Instagram Lead Engine</h1>
             </div>
-            <div class="breadcrumb">
-                <a href="/">Dashboard</a> / Details
+
+            <!-- Navigation -->
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/" style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Dashboard</a>
+                <a href="/lead_details.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
+                    Details</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Compte:</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <select id="accountSelect" onchange="onAccountChange(this.value)">
+                        <option value="">Tous les comptes</option>
+                        <!-- Options populated by JS -->
+                    </select>
+                    <button onclick="setDefaultAccount()" class="btn-action-icon"
+                        title="Définir comme compte par défaut" style="opacity: 0.8; font-size: 16px;">📌</button>
+                </div>
             </div>
         </header>
 

@@ -8,6 +8,78 @@ const btnSaveStatus = document.getElementById('btnSaveStatus');
 // State
 let searchTimeout = null;
 let currentLead = null;
+let currentAccountId = null;
+
+// Init
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadAccounts();
+    await loadDefaultAccount();
+});
+
+// ==========================================
+// ACCOUNT LOGIC
+// ==========================================
+
+async function loadAccounts() {
+    const select = document.getElementById('accountSelect');
+    try {
+        const res = await fetch('/api/accounts');
+        const accounts = await res.json();
+        
+        // Clear and repopulate
+        select.innerHTML = '<option value="">Tous les comptes</option>';
+        accounts.forEach(acc => {
+            if (acc.id) {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = acc.name;
+                select.appendChild(opt);
+            }
+        });
+    } catch (e) {
+        console.error('Accounts load error', e);
+    }
+}
+
+async function loadDefaultAccount() {
+    try {
+        const res = await fetch('/api/accounts/default');
+        const defaultAcc = await res.json();
+        
+        if (defaultAcc && defaultAcc.id) {
+            currentAccountId = defaultAcc.id;
+            document.getElementById('accountSelect').value = defaultAcc.id;
+            console.log(`📌 Default account set to: ${defaultAcc.name}`);
+        }
+    } catch (e) {
+        console.error('Default account load error', e);
+    }
+}
+
+async function setDefaultAccount() {
+    try {
+        const res = await fetch('/api/accounts/set-default', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: currentAccountId })
+        });
+        
+        if (res.ok) {
+            alert('📌 Ce compte sera maintenant affiché par défaut au démarrage.');
+        } else {
+            alert('Erreur lors de la définition du compte par défaut');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Erreur réseau');
+    }
+}
+
+function onAccountChange(accountId) {
+    currentAccountId = accountId || null;
+    // On details page, maybe filtering search results by account?
+    // For now, details logic doesn't strictly depend on account unless we filter search
+}
 
 // ==========================================
 // SEARCH LOGIC
