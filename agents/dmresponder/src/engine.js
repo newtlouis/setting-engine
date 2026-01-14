@@ -94,7 +94,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     model: 'gpt-4o', // Or 'gpt-3.5-turbo' for faster, cheaper responses
     messages: messages,
     temperature: 0.7, // A bit of creativity
-    max_tokens: 150,
+    max_tokens: 500,
     top_p: 1,
     frequency_penalty: 0,
     presence_penalty: 0,
