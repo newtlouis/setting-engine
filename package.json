@@ -22,6 +22,7 @@
         "reply:outreach": "cd agents/dmresponder && npm run cron -- --show-browser --outreach-only",
         "postreply": "npm run backup:remote",
         "reply:auto": "cd agents/dmresponder && npm run cron -- --show-browser",
+        "reply:followup": "cd agents/dmresponder && npm run followup --",
         "postreply:auto": "npm run backup:remote",
         "respond:inbox": "cd agents/dmresponder && npm run inbox --",
         "postrespond:inbox": "npm run backup:remote",
