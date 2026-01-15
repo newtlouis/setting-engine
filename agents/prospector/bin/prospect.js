@@ -10,7 +10,7 @@ import { Command } from 'commander';
 import dotenv from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { runProspector } from '../src/prospect_worker.js';
+// import { runProspector } from '../src/prospect_worker.js'; // REMOVED STATIC IMPORT
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +41,7 @@ program
     console.log('');
 
     try {
+      const { runProspector } = await import('../src/prospect_worker.js');
       await runProspector({
         profile: options.profile,
         source: options.source,

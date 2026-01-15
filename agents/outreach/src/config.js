@@ -2,12 +2,21 @@
  * Outreach Agent Configuration
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Ensure .env is loaded from root in monorepo environment
+const rootEnvPath = path.resolve(__dirname, '../../../.env');
+if (fs.existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath });
+} else {
+  dotenv.config(); // Fallback to current working directory
+}
 
 export const CONFIG = {
   // Database path (shared with collector)

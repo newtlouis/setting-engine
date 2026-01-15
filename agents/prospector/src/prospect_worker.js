@@ -140,6 +140,7 @@ export async function runProspector(options = {}) {
   try {
     // STEP 1: Main Loop - Continue until goal reached
     console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
+    console.log(`🔑 OpenAI API: ${process.env.OPENAI_API_KEY ? 'Présente' : 'MANQUANTE'}`);
     
     // Track scraped post URLs across batches to avoid duplicates
     const alreadyScraped = new Set(); 

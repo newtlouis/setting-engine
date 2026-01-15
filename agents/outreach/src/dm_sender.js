@@ -413,62 +413,49 @@ export async function scrapeProfileData(page) {
       let foundBio = null;
       let foundFullName = null;
       
-      // Helper to validate if a string looks like a real name
+      // Helper to validate if a string looks like a real name/bio part (not stats like "499 publications")
       function isValidName(text) {
-        if (!text || text.length < 2 || text.length > 40) return false; // Allowed slightly longer names
-        // Should not have numbers (unless it's like "3rd") but Instagram names usually don't have digits if they are real names
-        // Relaxed rule: allow some digits if complex, but generally avoid stats
-        if (/^\d+$/.test(text) || text.includes('followers')) return false;
-        // Should not contain @
-        if (text.includes('@')) return false;
-        // Should not be a common UI button text
-        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner)$/i.test(text)) return false;
+        if (!text || text.length < 2 || text.length > 500) return false; 
+        const lower = text.toLowerCase();
+        
+        // Block known Instagram stats keywords
+        if (/publications|abonnés|suivi|posts|followers|following|views|likes/i.test(lower)) return false;
+        
+        // Block purely numeric or count-like strings (e.g., "1 234", "10k")
+        if (/^[\d.,\s]+[kKmM]?$/.test(text.trim())) return false;
+        
+        // Block UI buttons
+        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner|abonné)$/i.test(text.trim())) return false;
+        
         return true;
       }
 
-      // STRATEGY 1: Targeted Name Element (User Request)
-      // The user indicated the name is often in a specific span with dir="auto"
-      // We look for spans that are likely the "Name" field:
-      // - Inside header
-      // - Separate from the bio
-      // - Often bold or distinct
-      
       const header = document.querySelector('main header') || document.querySelector('header');
       
       if (header) {
-          // 1. Look for the span that is explicitly the name (often h1's child or sibling)
-          // Try H1 first - technically Instagram puts username in H2 and Real Name in span usually, but varies.
-          
-          // Capture all standard text spans in header
+          // Capture all candidate spans in the header
           const allSpans = Array.from(header.querySelectorAll('span[dir="auto"]'));
           
-          // Filter candidate spans
+          // Filter out spans that are clearly statistics or UI buttons
           const candidates = allSpans
               .map(s => s.textContent.trim())
-              .filter(text => isValidName(text));
+              .filter(text => isValidName(text))
+              .filter(text => !text.includes('@')); // Ignore handles
               
-          // HEURISTIC: The "Real Name" is usually the FIRST valid text span in the header content
-          // (Username is often in an H2 or distinct element)
           if (candidates.length > 0) {
-              // The bio is usually longer. The name is usually short (2-3 words).
-              // We pick the first candidate that isn't clearly a bio (long paragraph)
-              
+              // The "Name" is usually the first short valid candidate
               for (const c of candidates) {
-                  // If it's short and looks like a name
                   if (c.length < 50 && !c.includes('\n')) {
                       foundFullName = c;
-                      break; // Found it
+                      break; 
                   }
               }
-          }
-          
-          // If we found a name, try to distinguish Bio (appearing after name)
-          if (foundFullName) {
-               const bioCandidates = candidates.filter(c => c !== foundFullName && c.length > 5);
-               // Pick the longest remaining one as Bio
-               if (bioCandidates.length > 0) {
-                   foundBio = bioCandidates.reduce((a, b) => a.length > b.length ? a : b);
-               }
+              
+              // The "Bio" is usually the longest remaining valid candidate
+              const bioCandidates = candidates.filter(c => c !== foundFullName && c.length > 5);
+              if (bioCandidates.length > 0) {
+                  foundBio = bioCandidates.reduce((a, b) => a.length > b.length ? a : b);
+              }
           }
       }
       
