@@ -66,7 +66,11 @@ async function detectChallenge(page) {
     'action blocked',
     'we limit how often',
     'verify it\'s you',
-    'help us confirm'
+    'help us confirm',
+    'confirmez que vous êtes un humain',
+    'vérifiez que vous êtes humain',
+    'confirm that you are a human',
+    'verify that you are human'
   ];
   
   // We exclude common words like "challenge", "verify", "robot" from general text search
