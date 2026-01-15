@@ -1153,7 +1153,7 @@ export async function waitForUserToFinish() {
   return new Promise((resolve) => {
     let resolved = false;
 
-    const cleanup = () => {
+    const cleanup = (code = 0) => {
       if (resolved) return;
       resolved = true;
       process.stdin.removeListener('data', onData);
@@ -1161,31 +1161,56 @@ export async function waitForUserToFinish() {
       if (browserContext) {
         browserContext.removeListener('close', onBrowserClose);
       }
+      
+      // If code is not null, we force exit (prevents npm noisy error 130)
+      if (code !== null) {
+        process.exit(code);
+      }
       resolve();
     };
 
-    const onData = () => cleanup();
+    const onData = () => cleanup(null); // Just resolve, let caller finish
     const onSigInt = () => {
       console.log('\n   Received Ctrl+C. Exiting...');
-      cleanup();
+      cleanup(0); // Exit with 0 to hide npm error
     };
     const onBrowserClose = () => {
       console.log('\n   Browser window closed. Exiting...');
-      cleanup();
+      cleanup(0);
     };
 
-    // Listen for Enter key
+    // 1. Listen for Enter key
     process.stdin.once('data', onData);
     
-    // Handle Ctrl+C
+    // 2. Handle Ctrl+C
     process.on('SIGINT', onSigInt);
 
-    // Watch browser context closure
+    // 3. Watch browser context closure
     if (browserContext) {
       browserContext.on('close', onBrowserClose);
+      
+      // Fallback: poll for context closure every 2 seconds
+      // Using unref() so the interval itself doesn't keep the process alive
+      const interval = setInterval(async () => {
+        try {
+          if (resolved) {
+            clearInterval(interval);
+            return;
+          }
+          const pages = await browserContext.pages().catch(() => []);
+          if (pages.length === 0) {
+            clearInterval(interval);
+            onBrowserClose();
+          }
+        } catch (e) {
+          clearInterval(interval);
+          onBrowserClose();
+        }
+      }, 2000);
+      interval.unref();
+      
     } else {
-      // Fallback: if no context, resolve immediately
-      cleanup();
+      cleanup(null);
     }
   });
 }

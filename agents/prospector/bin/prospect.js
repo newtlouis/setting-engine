@@ -62,8 +62,9 @@ program
         dryRun: options.dryRun,
         skipQualification: options.skipQualification
       });
+      process.exit(0);
     } catch (error) {
-      console.error('\n❌ Prospecting failed:', error.message);
+      console.error(`\n❌ Error: ${error.message}`);
       if (process.env.DEBUG === 'true') {
         console.error(error.stack);
       }

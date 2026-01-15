@@ -390,9 +390,11 @@ export async function runProspector(options = {}) {
     
     await waitForUserToFinish();
     await closeBrowser();
+    dbFunctions.closeDatabase();
   } else {
     console.log('\n📭 No messages to review.');
     await closeBrowser();
+    dbFunctions.closeDatabase();
   }
 
   return stats;
