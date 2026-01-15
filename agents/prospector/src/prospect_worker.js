@@ -28,6 +28,7 @@ import {
   getWorkingPage
 } from '../../outreach/src/dm_sender.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
+import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { generateFirstMessage, validateMessage } from '../../outreach/src/templates.js';
 
 // Shared utilities
@@ -271,6 +272,18 @@ export async function runProspector(options = {}) {
              stats.leadsQualified++;
 
              // STEP 3e: Generate message
+             
+             // 🤖 Smart Name Extraction (AI)
+             let aiFirstName = null;
+             try {
+                  aiFirstName = await extractNameWithAI(username, profileData.fullName);
+             } catch (e) {
+                  console.error(`   ⚠️ Name extraction failed: ${e.message}`);
+             }
+             
+             // If AI fails (returns null), we force "there" which triggers "Hello"
+             const nameToUse = aiFirstName || 'there';
+
              const leadForTemplate = {
                username,
                full_name: profileData.fullName,
@@ -282,7 +295,8 @@ export async function runProspector(options = {}) {
              const messageResult = generateFirstMessage(leadForTemplate, [comment], {
                niche: profileConfig?.niche || 'personal development',
                isSimple: true,
-               profileConfig
+               profileConfig,
+               forceFirstName: nameToUse
              });
 
              const validation = validateMessage(messageResult.message);

@@ -218,12 +218,12 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
     profileConfig = null
   } = options;
   
-  // Extract first name using improved logic
-  const firstName = extractFirstName(lead.full_name, lead.username);
+  // Extract first name using improved logic or use forced/AI name
+  const firstName = options.forceFirstName || extractFirstName(lead.full_name, lead.username);
 
   // Handle Simple Message Mode
   if (isSimple) {
-    const message = firstName !== 'there' ? `${firstName} ?` : `Hey !`;
+    const message = firstName !== 'there' ? `${firstName} ?` : `Hello`;
     return {
       message,
       template_id: 'simple_greeting',
@@ -295,8 +295,8 @@ export function validateMessage(message) {
     issues.push(`Message too long: ${message.length} chars (max 1000)`);
   }
   
-  if (message.length < 10) {
-    issues.push('Message too short (min 10 chars)');
+  if (message.length < 2) {
+    issues.push('Message too short (min 2 chars)');
   }
   
   // Check for unfilled placeholders
