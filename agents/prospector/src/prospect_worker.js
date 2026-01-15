@@ -312,7 +312,6 @@ export async function runProspector(options = {}) {
              });
 
              // Keep focusing the working page (scraper) so the user can see progress
-             const workingPage = getWorkingPage();
              if (workingPage) {
                await workingPage.bringToFront().catch(() => {});
              }
