@@ -66,7 +66,7 @@ npm run ui
 npm run scrape -- -t hypersensible dependanceaffective --max-posts 20
 
 # Scraper les followers d'un concurrent
-npm run scrape -- -p https://instagram.com/competitor_profile/ --max-posts 50
+npm run scrape -- -p https://www.instagram.com/melanieportmann_coach/ --max-posts 10 --profile melanie
 ```
 
 **Options Principales :**
