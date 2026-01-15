@@ -10,9 +10,11 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 |--------|----------|-------------|
 | **Dashboard** | `npm run ui` | Lance l'interface visuelle (Stats, Logs, Config). |
 | **Collector** | `npm run scrape -- [options]` | Lance la collecte de leads. |
+| **Prospector** | `npm run prospect -- [options]` | ⭐ **Nouveau**. Pipeline unifié (Scrape + Qualification + Outreach). |
 | **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
-| **Inbox Responder** | `npm run respond:inbox` | **Nouveau**. Scanne la boîte de réception pour les nouveaux messages. |
-| **Open Session** | `npm run open:session <profile>` | **Nouveau**. Ouvre Instagram manuellement pour un profil spécifique. |
+| **Inbox Responder** | `npm run respond:inbox` | Scanne la boîte de réception pour les nouveaux messages. |
+| **Follow-up** | `npm run reply:followup -- [options]` | ⭐ **Nouveau**. Relance les leads silencieux (> 2 jours). |
+| **Open Session** | `npm run open:session <profile>` | Ouvre Instagram manuellement pour un profil spécifique. |
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
 
@@ -111,6 +113,49 @@ npm run send -- --status failed_outreach --limit 5
 - **Comptes Privés** : Ne tente plus d'ouvrir les DMs des comptes privés non suivis (évite les erreurs).
 - **Extraction Prénom** : Cherche d'abord le "Vrai Nom" dans la bio avant d'utiliser le username.
 - **Pause Challenge** : Comme le collector, se met en pause si Instagram demande une vérification.
+
+---
+
+### 3b. Prospector Agent (Pipeline Unifié) ⭐ NOUVEAU
+*Alias racine : `npm run prospect --`*
+
+**Le mode le plus efficace pour la prospection.** Combine Scraping + Qualification + Outreach en une seule session navigateur.
+
+**Exemples :**
+```bash
+# Mode test (affiche ce qui serait fait sans ouvrir le navigateur)
+npm run prospect -- --profile melanie --source "#dependanceaffective" --dry-run
+
+# Prospecter depuis un hashtag (3 posts, 10 leads max par post)
+npm run prospect -- --profile melanie --source "#dependanceaffective" --posts 3 --leads 10
+
+# Prospecter depuis un profil concurrent
+npm run prospect -- --profile melanie --source "@concurrent_username" --posts 2 --leads 5
+
+# Limiter le total de contacts pour cette session
+npm run prospect -- --profile melanie --source "#hypersensibilite" --total 15
+```
+
+**Options Principales :**
+- `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
+- `--source <valeur>` : **(Obligatoire)** Hashtag (`#tag`) ou profil concurrent (`@username`).
+- `--posts <n>` : Nombre max de posts à scraper (défaut: 3).
+- `--leads <n>` : Nombre max de leads à traiter par post (défaut: 10).
+- `--total <n>` : Limite totale de contacts pour cette session (défaut: 20).
+- `--dry-run` : Mode simulation (pas de navigateur).
+- `--skip-qualification` : Ignorer la vérification OpenAI de la bio.
+
+**Workflow Automatique :**
+1. Ouvre le hashtag/profil et découvre les posts récents
+2. Pour chaque post, scrape les commentateurs
+3. Pour chaque commentateur :
+   - Ouvre son profil dans un nouvel onglet
+   - Vérifie la bio (pas un concurrent ? ✅)
+   - Vérifie le bouton "Contacter" (profil public ? ✅)
+   - Si OK : tape le message, garde l'onglet ouvert
+   - Si KO : ferme l'onglet, marque comme ignoré en base
+4. Attend que tu valides manuellement chaque message
+5. Sauvegarde en base de données
 
 ---
 

@@ -277,7 +277,7 @@ async function createNewTab() {
  * Get the working page (reusable tab for checking profiles)
  * @returns {Page}
  */
-function getWorkingPage() {
+export function getWorkingPage() {
   return workingPage;
 }
 

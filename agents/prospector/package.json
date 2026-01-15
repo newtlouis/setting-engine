@@ -1,0 +1,28 @@
+{
+    "name": "instagram-prospector-agent",
+    "version": "1.0.0",
+    "description": "Unified Prospecting Agent - Scrape, Qualify, and Outreach in one flow",
+    "type": "module",
+    "main": "src/prospect_worker.js",
+    "bin": {
+        "prospect": "./bin/prospect.js"
+    },
+    "scripts": {
+        "prospect": "node bin/prospect.js"
+    },
+    "keywords": [
+        "instagram",
+        "prospecting",
+        "lead-generation",
+        "outreach"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "commander": "^11.1.0",
+        "dotenv": "^16.6.1"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

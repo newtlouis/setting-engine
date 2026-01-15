@@ -7,7 +7,8 @@
     "workspaces": [
         "agents/collector",
         "agents/outreach",
-        "agents/dmresponder"
+        "agents/dmresponder",
+        "agents/prospector"
     ],
     "scripts": {
         "ui": "cd agents/collector && npm run ui --",
@@ -17,6 +18,8 @@
         "postcollect": "npm run backup:remote",
         "send": "cd agents/outreach && npm run send --",
         "postsend": "npm run backup:remote",
+        "prospect": "cd agents/prospector && npm run prospect --",
+        "postprospect": "npm run backup:remote",
         "reply": "cd agents/dmresponder && npm run reply --",
         "reply:conversation": "cd agents/dmresponder && npm run cron -- --show-browser --conversation-only",
         "reply:outreach": "cd agents/dmresponder && npm run cron -- --show-browser --outreach-only",
