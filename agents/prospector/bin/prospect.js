@@ -10,12 +10,23 @@ import { Command } from 'commander';
 import dotenv from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-// import { runProspector } from '../src/prospect_worker.js'; // REMOVED STATIC IMPORT
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: join(__dirname, '../../..', '.env') });
+// Load environment variables from various possible locations in a monorepo
+const envPaths = [
+  join(__dirname, '../../..', '.env'),      // Root
+  join(__dirname, '../../outreach', '.env')   // Outreach agent (where the key likely is)
+];
+
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 const program = new Command();
 

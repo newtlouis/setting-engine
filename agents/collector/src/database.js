@@ -702,6 +702,16 @@ export function isPostScraped(postUrl) {
   return result && result.comments_scraped === 1;
 }
 
+/**
+ * Get posts scraped within the last X hours
+ */
+export function getRecentlyScrapedPosts(hours = 24) {
+  return db.prepare(`
+    SELECT post_url FROM posts 
+    WHERE scraped_at >= datetime('now', ?)
+  `).all(`-${hours} hours`).map(p => p.post_url);
+}
+
 // ============================================
 // CONVERSATION OPERATIONS
 // ============================================

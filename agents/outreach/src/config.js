@@ -10,10 +10,14 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure .env is loaded from root in monorepo environment
+// Ensure .env is loaded from root or agent folder in monorepo environment
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
+const agentEnvPath = path.resolve(__dirname, '../../.env');
+
 if (fs.existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath });
+} else if (fs.existsSync(agentEnvPath)) {
+  dotenv.config({ path: agentEnvPath });
 } else {
   dotenv.config(); // Fallback to current working directory
 }

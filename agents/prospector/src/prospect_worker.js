@@ -140,10 +140,18 @@ export async function runProspector(options = {}) {
   try {
     // STEP 1: Main Loop - Continue until goal reached
     console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
-    console.log(`🔑 OpenAI API: ${process.env.OPENAI_API_KEY ? 'Présente' : 'MANQUANTE'}`);
+    const apiKey = process.env.OPENAI_API_KEY;
+    console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
     
     // Track scraped post URLs across batches to avoid duplicates
-    const alreadyScraped = new Set(); 
+    // Initialize with posts scraped in the last 24h from DB
+    const recentScrapedUrls = dbFunctions.getRecentlyScrapedPosts ? dbFunctions.getRecentlyScrapedPosts(24) : [];
+    const alreadyScraped = new Set(recentScrapedUrls); 
+    
+    if (recentScrapedUrls.length > 0) {
+      console.log(`   📚 Loaded ${recentScrapedUrls.length} recently scraped posts from database history.`);
+    }
+    
     const DISCOVERY_BATCH_SIZE = maxPosts; // Use the provided post limit as batch size
 
     while (stats.leadsContacted < totalLimit) {
@@ -153,7 +161,6 @@ export async function runProspector(options = {}) {
       
       // Discover a batch of posts
       if (sourceInfo.type === 'hashtag') {
-        // discoverFromHashtags automatically skips URLs in alreadyScraped and keeps scrolling
         posts = await discoverFromHashtags(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
       } else {
         posts = await discoverFromProfiles(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
@@ -167,18 +174,15 @@ export async function runProspector(options = {}) {
       console.log(`✅ Batch found: ${posts.length} new posts to process`);
       stats.postsScraped += posts.length;
 
-      // Add to alreadyScraped set immediately
-      for (const p of posts) {
-        alreadyScraped.add(p.url || p.post_url);
-      }
-
       // STEP 2: Process each post in the batch
+      // Note: We process the ENTIRE batch even if the contact limit is reached during processing
       for (let postIdx = 0; postIdx < posts.length; postIdx++) {
-        // Check goal at start of each post
-        if (stats.leadsContacted >= totalLimit) break;
-
         const post = posts[postIdx];
         const postUrl = post.url || post.post_url;
+        
+        // Skip if already in memory (could happen if discovery returned a duplicate)
+        if (alreadyScraped.has(postUrl)) continue;
+        alreadyScraped.add(postUrl);
         console.log(`\n📝 Processing Post ${postIdx + 1}/${posts.length} in batch: ${postUrl}`);
 
         // Navigate to post and scrape comments
@@ -188,6 +192,7 @@ export async function runProspector(options = {}) {
            
            if (!comments || comments.length === 0) {
              console.log('   No comments found on this post.');
+             dbFunctions.markPostScraped(postUrl);
              continue;
            }
 
@@ -198,11 +203,8 @@ export async function runProspector(options = {}) {
            const uniqueUsernames = new Set();
            
            for (const comment of comments) {
-             // Check goal inside comment loop (Granular check)
-             if (stats.leadsContacted >= totalLimit) {
-                console.log(`\n🎉 Goal Reached! ${stats.leadsContacted}/${totalLimit} contacts.`);
-                break;
-             }
+             // Process commenter regardless of total goal to finish batch
+             // (Goal check will happen between batches)
              
              if (uniqueUsernames.size >= maxLeadsPerPost) {
                 console.log(`   Detailed limit reached for this post (${maxLeadsPerPost}). Moving to next post.`);
@@ -337,7 +339,10 @@ export async function runProspector(options = {}) {
              // Small delay between leads
              await delay(2000, 4000);
            } // End comment loop
-
+           
+           // Mark post as fully scraped in database to avoid re-processing in future runs
+           dbFunctions.markPostScraped(postUrl);
+           
         } catch (err) {
             console.error(`   ⚠️ Error processing post ${postUrl}: ${err.message}`);
         }
