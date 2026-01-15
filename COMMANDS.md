@@ -139,23 +139,16 @@ npm run prospect -- --profile melanie --source "#hypersensibilite" --total 15
 **Options Principales :**
 - `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
 - `--source <valeur>` : **(Obligatoire)** Hashtag (`#tag`) ou profil concurrent (`@username`).
-- `--posts <n>` : Nombre max de posts à scraper (défaut: 3).
+- `--total <n>` : **(Objectif)** Nombre total de messages à envoyer avant de s'arrêter (défaut: 20).
+- `--posts <n>` : Taille du "batch" (nombre de posts à scraper à la fois) (défaut: 3).
 - `--leads <n>` : Nombre max de leads à traiter par post (défaut: 10).
-- `--total <n>` : Limite totale de contacts pour cette session (défaut: 20).
 - `--dry-run` : Mode simulation (pas de navigateur).
-- `--skip-qualification` : Ignorer la vérification OpenAI de la bio.
 
 **Workflow Automatique :**
-1. Ouvre le hashtag/profil et découvre les posts récents
-2. Pour chaque post, scrape les commentateurs
-3. Pour chaque commentateur :
-   - Ouvre son profil dans un nouvel onglet
-   - Vérifie la bio (pas un concurrent ? ✅)
-   - Vérifie le bouton "Contacter" (profil public ? ✅)
-   - Si OK : tape le message, garde l'onglet ouvert
-   - Si KO : ferme l'onglet, marque comme ignoré en base
-4. Attend que tu valides manuellement chaque message
-5. Sauvegarde en base de données
+1. Cherche un lot de posts (défini par `--posts`)
+2. Traite les leads de ces posts
+3. **Tant que l'objectif `--total` n'est pas atteint** : cherche le lot suivant de posts récents
+4. S'arrête une fois l'objectif atteint ou plus de posts disponibles
 
 ---
 

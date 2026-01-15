@@ -24,7 +24,7 @@ program
   .description('Unified prospecting: scrape posts, qualify leads, send outreach in one browser session')
   .requiredOption('--profile <name>', 'Instagram profile/account name (REQUIRED)')
   .requiredOption('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
-  .option('--posts <number>', 'Maximum posts to scrape from source', '3')
+  .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
   .option('--leads <number>', 'Maximum leads to process per post', '10')
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
   .option('--dry-run', 'List what would be done without opening browser', false)
@@ -34,7 +34,7 @@ program
     console.log('================================');
     console.log(`   Profile: ${options.profile}`);
     console.log(`   Source: ${options.source}`);
-    console.log(`   Max posts: ${options.posts}`);
+    console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Max leads/post: ${options.leads}`);
     console.log(`   Total limit: ${options.total}`);
     if (options.dryRun) console.log('   MODE: DRY RUN (no browser)');

@@ -122,9 +122,11 @@ export async function runProspector(options = {}) {
     console.log('This will simulate the discovery phase only.\n');
     
     // We can't actually scrape without a browser, so just show what would happen
-    console.log(`Would scrape up to ${maxPosts} posts from ${sourceInfo.type} "${sourceInfo.value}"`);
-    console.log(`Would process up to ${maxLeadsPerPost} leads per post`);
-    console.log(`Would contact up to ${totalLimit} leads total`);
+    console.log(`Would loop until ${totalLimit} successful contacts are made:`);
+    console.log(`   1. Find batch of ${maxPosts} posts from ${sourceInfo.type} "${sourceInfo.value}"`);
+    console.log(`   2. Process comment leads (max ${maxLeadsPerPost} per post)`);
+    console.log(`   3. If limit not reached, find NEXT batch of ${maxPosts} posts`);
+    console.log(`   4. Repeat...`);
     return stats;
   }
 
@@ -135,184 +137,204 @@ export async function runProspector(options = {}) {
   const workingPage = getWorkingPage();
 
   try {
-    // STEP 1: Discover posts
-    console.log('\n📡 STEP 1: Discovering posts...');
-    let posts = [];
+    // STEP 1: Main Loop - Continue until goal reached
+    console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
     
-    const alreadyScraped = new Set(); // Track scraped post URLs in this session
-    
-    if (sourceInfo.type === 'hashtag') {
-      posts = await discoverFromHashtags(workingPage, [sourceInfo.value], maxPosts, alreadyScraped);
-    } else {
-      posts = await discoverFromProfiles(workingPage, [sourceInfo.value], maxPosts, alreadyScraped);
-    }
+    // Track scraped post URLs across batches to avoid duplicates
+    const alreadyScraped = new Set(); 
+    const DISCOVERY_BATCH_SIZE = maxPosts; // Use the provided post limit as batch size
 
-    if (posts.length === 0) {
-      console.log('❌ No posts found from source.');
-      await closeBrowser();
-      return stats;
-    }
-
-    console.log(`✅ Found ${posts.length} posts to process`);
-    stats.postsScraped = posts.length;
-
-    // STEP 2: Process each post
-    for (let postIdx = 0; postIdx < posts.length; postIdx++) {
-      const post = posts[postIdx];
-      console.log(`\n📝 POST ${postIdx + 1}/${posts.length}: ${post.url || post.post_url}`);
-
-      // Check if we've hit total limit
-      if (stats.leadsContacted >= totalLimit) {
-        console.log(`✋ Hit total limit of ${totalLimit} contacts. Stopping.`);
-        break;
+    while (stats.leadsContacted < totalLimit) {
+      console.log(`\n🔄 Finding next batch of posts... (Current Progress: ${stats.leadsContacted}/${totalLimit})`);
+      
+      let posts = [];
+      
+      // Discover a batch of posts
+      if (sourceInfo.type === 'hashtag') {
+        // discoverFromHashtags automatically skips URLs in alreadyScraped and keeps scrolling
+        posts = await discoverFromHashtags(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
+      } else {
+        posts = await discoverFromProfiles(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
       }
 
-      // Navigate to post and scrape comments
-      console.log('   Scraping comments...');
-      const postUrl = post.url || post.post_url;
-      const comments = await scrapePostComments(workingPage, postUrl, maxLeadsPerPost * 2); // Fetch extra for filtering
-      
-      if (!comments || comments.length === 0) {
-        console.log('   No comments found on this post.');
-        continue;
+      if (posts.length === 0) {
+        console.log('❌ No new posts found from source. Likely exhausted available content.');
+        break; // Stop loop if no more posts found
       }
 
-      console.log(`   Found ${comments.length} comments`);
-      stats.commentsFound += comments.length;
+      console.log(`✅ Batch found: ${posts.length} new posts to process`);
+      stats.postsScraped += posts.length;
 
-      // STEP 3: Process each commenter
-      const uniqueUsernames = new Set();
-      
-      for (const comment of comments) {
-        // Check limits
+      // Add to alreadyScraped set immediately
+      for (const p of posts) {
+        alreadyScraped.add(p.url || p.post_url);
+      }
+
+      // STEP 2: Process each post in the batch
+      for (let postIdx = 0; postIdx < posts.length; postIdx++) {
+        // Check goal at start of each post
         if (stats.leadsContacted >= totalLimit) break;
-        if (uniqueUsernames.size >= maxLeadsPerPost) break;
 
-        const username = comment.username;
-        if (!username) continue;
-        
-        // Skip duplicates in this session
-        if (uniqueUsernames.has(username)) continue;
-        uniqueUsernames.add(username);
+        const post = posts[postIdx];
+        const postUrl = post.url || post.post_url;
+        console.log(`\n📝 Processing Post ${postIdx + 1}/${posts.length} in batch: ${postUrl}`);
 
-        // Skip if already in database as contacted
-        const existingLead = dbFunctions.getLeadByUsername(username, accountId);
-        if (existingLead && existingLead.status !== 'new') {
-          console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
-          stats.leadsSkipped++;
-          continue;
+        // Navigate to post and scrape comments
+        console.log('   Scraping comments...');
+        try {
+           const comments = await scrapePostComments(workingPage, postUrl, maxLeadsPerPost * 2); // Fetch extra for filtering
+           
+           if (!comments || comments.length === 0) {
+             console.log('   No comments found on this post.');
+             continue;
+           }
+
+           console.log(`   Found ${comments.length} comments`);
+           stats.commentsFound += comments.length;
+
+           // STEP 3: Process each commenter
+           const uniqueUsernames = new Set();
+           
+           for (const comment of comments) {
+             // Check goal inside comment loop (Granular check)
+             if (stats.leadsContacted >= totalLimit) {
+                console.log(`\n🎉 Goal Reached! ${stats.leadsContacted}/${totalLimit} contacts.`);
+                break;
+             }
+             
+             if (uniqueUsernames.size >= maxLeadsPerPost) {
+                console.log(`   Detailed limit reached for this post (${maxLeadsPerPost}). Moving to next post.`);
+                break;
+             }
+
+             const username = comment.username;
+             if (!username) continue;
+             
+             // Skip duplicates in this session
+             if (uniqueUsernames.has(username)) continue;
+             uniqueUsernames.add(username);
+
+             // Skip if already in database as contacted
+             const existingLead = dbFunctions.getLeadByUsername(username, accountId);
+             if (existingLead && existingLead.status !== 'new') {
+               console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
+               stats.leadsSkipped++;
+               continue;
+             }
+
+             console.log(`\n   --- Processing @${username} (${stats.leadsContacted + 1}/${totalLimit}) ---`);
+             stats.leadsProcessed++;
+
+             // STEP 3a: Open profile and check contactability
+             const profileResult = await goToProfile(workingPage, username);
+             
+             if (!profileResult.success) {
+               console.log(`   ❌ Could not open profile: ${profileResult.error}`);
+               stats.leadsFailed++;
+               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', profileResult.error);
+               continue;
+             }
+
+             // Check for challenge/CAPTCHA
+             if (await checkForChallenge(workingPage)) {
+               console.log('   ⚠️  Challenge detected during prospecting');
+             }
+
+             // STEP 3b: Check "Contact" button
+             const contactCheck = await checkCanContact(workingPage);
+             
+             if (!contactCheck.canContact) {
+               console.log(`   🔒 @${username}: No Contact button`);
+               stats.leadsSkipped++;
+               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', 'private_account_no_contact');
+               continue;
+             }
+
+             // STEP 3c: Scrape profile data
+             const profileData = await scrapeProfileData(workingPage);
+             console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+
+             // STEP 3d: Qualify lead (if not skipped)
+             if (!skipQualification) {
+               const qualificationPrompt = profileConfig?.outreach?.qualification_prompt || null;
+               const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username);
+               
+               if (!qualResult.qualified) {
+                 console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
+                 stats.leadsSkipped++;
+                 saveLeadToDb(username, comment, accountId, 'failed', 'competitor');
+                 await delay(1000, 2000);
+                 continue;
+               }
+             }
+
+             stats.leadsQualified++;
+
+             // STEP 3e: Generate message
+             const leadForTemplate = {
+               username,
+               full_name: profileData.fullName,
+               bio: profileData.bio,
+               warmth: 'cold',
+               comments: [comment]
+             };
+             
+             const messageResult = generateFirstMessage(leadForTemplate, [comment], {
+               niche: profileConfig?.niche || 'personal development',
+               isSimple: true,
+               profileConfig
+             });
+
+             const validation = validateMessage(messageResult.message);
+             if (!validation.valid) {
+               console.log(`   ⚠️  Invalid message: ${validation.issues.join(', ')}`);
+               stats.leadsFailed++;
+               continue;
+             }
+
+             console.log(`   💬 Message: "${messageResult.message.substring(0, 60)}..."`);
+
+             // STEP 3f: Send message (opens new tab, types, keeps open)
+             const sendResult = await sendDMToUserInNewTab(username, messageResult.message, {
+               targetUrl: `https://www.instagram.com/${username}/`,
+               profileData
+             });
+
+             if (sendResult.success && sendResult.tabKeptOpen) {
+               console.log(`   ✅ Message typed! Tab kept open for review.`);
+               stats.leadsContacted++;
+
+               // Save to database
+               saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl);
+               
+               // Record conversation
+               const lead = dbFunctions.getLeadByUsername(username, accountId);
+               if (lead) {
+                 dbFunctions.addConversationMessage(lead.id, 'assistant', messageResult.message, 'outreach');
+               }
+
+             } else {
+               console.log(`   ❌ Failed to send: ${sendResult.error}`);
+               stats.leadsFailed++;
+               saveLeadToDb(username, comment, accountId, 'failed', sendResult.error);
+             }
+
+             // Small delay between leads
+             await delay(2000, 4000);
+           } // End comment loop
+
+        } catch (err) {
+            console.error(`   ⚠️ Error processing post ${postUrl}: ${err.message}`);
         }
-
-        console.log(`\n   --- Processing @${username} ---`);
-        stats.leadsProcessed++;
-
-        // STEP 3a: Open profile and check contactability
-        const profileResult = await goToProfile(workingPage, username);
-        
-        if (!profileResult.success) {
-          console.log(`   ❌ Could not open profile: ${profileResult.error}`);
-          stats.leadsFailed++;
-          
-          // Save to DB as failed
-          if (!existingLead) {
-            saveLeadToDb(username, comment, accountId, 'failed', profileResult.error);
-          }
-          continue;
-        }
-
-        // Check for challenge/CAPTCHA
-        if (await checkForChallenge(workingPage)) {
-          console.log('   ⚠️  Challenge detected during prospecting');
-        }
-
-        // STEP 3b: Check "Contact" button
-        const contactCheck = await checkCanContact(workingPage);
-        
-        if (!contactCheck.canContact) {
-          console.log(`   🔒 @${username}: No Contact button (private account?)`);
-          stats.leadsSkipped++;
-          
-          if (!existingLead) {
-            saveLeadToDb(username, comment, accountId, 'failed', 'private_account_no_contact');
-          }
-          continue;
-        }
-
-        // STEP 3c: Scrape profile data
-        const profileData = await scrapeProfileData(workingPage);
-        console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
-
-        // STEP 3d: Qualify lead (if not skipped)
-        if (!skipQualification) {
-          const qualificationPrompt = profileConfig?.outreach?.qualification_prompt || null;
-          const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username);
-          
-          if (!qualResult.qualified) {
-            console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
-            stats.leadsSkipped++;
-            
-            saveLeadToDb(username, comment, accountId, 'failed', 'competitor');
-            await delay(1000, 2000);
-            continue;
-          }
-        }
-
-        stats.leadsQualified++;
-
-        // STEP 3e: Generate message
-        const leadForTemplate = {
-          username,
-          full_name: profileData.fullName,
-          bio: profileData.bio,
-          warmth: 'cold',
-          comments: [comment]
-        };
-        
-        const messageResult = generateFirstMessage(leadForTemplate, [comment], {
-          niche: profileConfig?.niche || 'personal development',
-          isSimple: true,
-          profileConfig
-        });
-
-        const validation = validateMessage(messageResult.message);
-        if (!validation.valid) {
-          console.log(`   ⚠️  Invalid message: ${validation.issues.join(', ')}`);
-          stats.leadsFailed++;
-          continue;
-        }
-
-        console.log(`   💬 Message: "${messageResult.message.substring(0, 60)}..."`);
-
-        // STEP 3f: Send message (opens new tab, types, keeps open)
-        const sendResult = await sendDMToUserInNewTab(username, messageResult.message, {
-          targetUrl: `https://www.instagram.com/${username}/`,
-          profileData
-        });
-
-        if (sendResult.success && sendResult.tabKeptOpen) {
-          console.log(`   ✅ Message typed! Tab kept open for review.`);
-          stats.leadsContacted++;
-
-          // Save to database
-          saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl);
-          
-          // Record conversation
-          const lead = dbFunctions.getLeadByUsername(username, accountId);
-          if (lead) {
-            dbFunctions.addConversationMessage(lead.id, 'assistant', messageResult.message, 'outreach');
-          }
-
-        } else {
-          console.log(`   ❌ Failed to send: ${sendResult.error}`);
-          stats.leadsFailed++;
-          
-          saveLeadToDb(username, comment, accountId, 'failed', sendResult.error);
-        }
-
-        // Small delay between leads
-        await delay(2000, 4000);
+      } // End post loop
+      
+      // Delay between batches
+      if (stats.leadsContacted < totalLimit) {
+          console.log('   ⏳ Waiting before finding next batch...');
+          await delay(5000, 10000);
       }
-    }
+
+    } // End main while loop
 
   } catch (error) {
     console.error('\n❌ Fatal error:', error.message);
