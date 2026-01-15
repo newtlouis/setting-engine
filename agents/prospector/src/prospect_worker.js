@@ -317,24 +317,37 @@ export async function runProspector(options = {}) {
                profileData
              });
 
-             if (sendResult.success && sendResult.tabKeptOpen) {
-               console.log(`   ✅ Message typed! Tab kept open for review.`);
-               stats.leadsContacted++;
+              if (sendResult.success && sendResult.tabKeptOpen) {
+                console.log(`   ✅ Message typed! Tab kept open for review.`);
+                stats.leadsContacted++;
 
-               // Save to database
-               saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl);
-               
-               // Record conversation
-               const lead = dbFunctions.getLeadByUsername(username, accountId);
-               if (lead) {
-                 dbFunctions.addConversationMessage(lead.id, 'assistant', messageResult.message, 'outreach');
-               }
+                // Save to database
+                saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl);
+                
+                // Record conversation
+                const lead = dbFunctions.getLeadByUsername(username, accountId);
+                if (lead) {
+                  dbFunctions.addConversationMessage(lead.id, 'assistant', messageResult.message, 'outreach');
+                }
 
-             } else {
-               console.log(`   ❌ Failed to send: ${sendResult.error}`);
-               stats.leadsFailed++;
-               saveLeadToDb(username, comment, accountId, 'failed', sendResult.error);
-             }
+              } else if (sendResult.skipped) {
+                if (sendResult.existingConversation) {
+                  console.log(`   ⏭️  @${username}: Conversation existante détectée - lead ignoré.`);
+                  saveLeadToDb(username, comment, accountId, 'conversation', 'existing_messages', profileData, sendResult.dmUrl);
+                } else if (sendResult.isCompetitor) {
+                   // This should have been caught by qualifyLead, but safety check
+                  console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
+                  saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData);
+                } else {
+                  console.log(`   ⏭️  @${username}: Lead ignoré (${sendResult.error || 'raison inconnue'})`);
+                  saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData);
+                }
+                stats.leadsSkipped++;
+              } else {
+                console.log(`   ❌ Failed to send: ${sendResult.error}`);
+                stats.leadsFailed++;
+                saveLeadToDb(username, comment, accountId, 'failed', sendResult.error);
+              }
 
              // Small delay between leads
              await delay(2000, 4000);
