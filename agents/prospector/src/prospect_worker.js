@@ -317,6 +317,12 @@ export async function runProspector(options = {}) {
                profileData
              });
 
+             // Keep focusing the working page (scraper) so the user can see progress
+             const workingPage = getWorkingPage();
+             if (workingPage) {
+               await workingPage.bringToFront().catch(() => {});
+             }
+
               if (sendResult.success && sendResult.tabKeptOpen) {
                 console.log(`   ✅ Message typed! Tab kept open for review.`);
                 stats.leadsContacted++;
