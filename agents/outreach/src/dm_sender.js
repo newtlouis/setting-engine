@@ -1146,32 +1146,47 @@ export async function waitForUserToFinish() {
   console.log('   1. Review the message');
   console.log('   2. Press Enter to send (or edit first)');
   console.log('   3. Move to next tab');
-  console.log('\n   When done, press Ctrl+C or close the browser manually.');
-  console.log('   Waiting...\n');
+  console.log('\n   When done, press Ctrl+C or close the browser window manually.');
+  console.log('   (You can also press Enter here to exit)');
   
-  // Keep process alive until browser is closed or Ctrl+C
+  // Keep process alive until browser is closed, Ctrl+C, or Enter
   return new Promise((resolve) => {
-    // Check if browser is still open every second
-    const checkInterval = setInterval(async () => {
-      try {
-        // Try to get pages - will fail if browser closed
-        const pages = browserContext?.pages();
-        if (!pages || pages.length === 0) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      } catch (e) {
-        clearInterval(checkInterval);
-        resolve();
+    let resolved = false;
+
+    const cleanup = () => {
+      if (resolved) return;
+      resolved = true;
+      process.stdin.removeListener('data', onData);
+      process.removeListener('SIGINT', onSigInt);
+      if (browserContext) {
+        browserContext.removeListener('close', onBrowserClose);
       }
-    }, 1000);
-    
-    // Also handle Ctrl+C
-    process.on('SIGINT', () => {
-      clearInterval(checkInterval);
-      console.log('\n   Received Ctrl+C. Exiting...');
       resolve();
-    });
+    };
+
+    const onData = () => cleanup();
+    const onSigInt = () => {
+      console.log('\n   Received Ctrl+C. Exiting...');
+      cleanup();
+    };
+    const onBrowserClose = () => {
+      console.log('\n   Browser window closed. Exiting...');
+      cleanup();
+    };
+
+    // Listen for Enter key
+    process.stdin.once('data', onData);
+    
+    // Handle Ctrl+C
+    process.on('SIGINT', onSigInt);
+
+    // Watch browser context closure
+    if (browserContext) {
+      browserContext.on('close', onBrowserClose);
+    } else {
+      // Fallback: if no context, resolve immediately
+      cleanup();
+    }
   });
 }
 

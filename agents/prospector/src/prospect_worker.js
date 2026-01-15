@@ -376,6 +376,7 @@ export async function runProspector(options = {}) {
     console.log('');
     
     await waitForUserToFinish();
+    await closeBrowser();
   } else {
     console.log('\n📭 No messages to review.');
     await closeBrowser();
