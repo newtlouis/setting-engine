@@ -188,31 +188,25 @@ export async function runProspector(options = {}) {
         // Navigate to post and scrape comments
         console.log('   Scraping comments...');
         try {
-           const comments = await scrapePostComments(workingPage, postUrl, maxLeadsPerPost * 2); // Fetch extra for filtering
-           
-           if (!comments || comments.length === 0) {
-             console.log('   No comments found on this post.');
-             dbFunctions.markPostScraped(postUrl);
-             continue;
-           }
+            // Scraping more comments to be exhaustive (up to 500)
+            const comments = await scrapePostComments(workingPage, postUrl, 500); 
+            
+            if (!comments || comments.length === 0) {
+              console.log('   No comments found on this post.');
+              dbFunctions.upsertPost(post);
+              dbFunctions.markPostScraped(postUrl);
+              continue;
+            }
 
-           console.log(`   Found ${comments.length} comments`);
-           stats.commentsFound += comments.length;
+            console.log(`   Found ${comments.length} comments`);
+            stats.commentsFound += comments.length;
 
-           // STEP 3: Process each commenter
-           const uniqueUsernames = new Set();
-           
-           for (const comment of comments) {
-             // Process commenter regardless of total goal to finish batch
-             // (Goal check will happen between batches)
-             
-             if (uniqueUsernames.size >= maxLeadsPerPost) {
-                console.log(`   Detailed limit reached for this post (${maxLeadsPerPost}). Moving to next post.`);
-                break;
-             }
-
-             const username = comment.username;
-             if (!username) continue;
+            // STEP 3: Process each commenter
+            const uniqueUsernames = new Set();
+            
+            for (const comment of comments) {
+              const username = comment.username;
+              if (!username) continue;
              
              // Skip duplicates in this session
              if (uniqueUsernames.has(username)) continue;
@@ -359,7 +353,8 @@ export async function runProspector(options = {}) {
              await delay(2000, 4000);
            } // End comment loop
            
-           // Mark post as fully scraped in database to avoid re-processing in future runs
+           // Ensure post is in DB and mark as fully scraped to avoid re-processing
+           dbFunctions.upsertPost(post);
            dbFunctions.markPostScraped(postUrl);
            
         } catch (err) {
