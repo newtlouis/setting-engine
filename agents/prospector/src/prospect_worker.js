@@ -389,11 +389,11 @@ export async function runProspector(options = {}) {
     console.log('');
     
     await waitForUserToFinish();
-    await closeBrowser();
+    await closeBrowser().catch(() => {});
     dbFunctions.closeDatabase();
   } else {
     console.log('\n📭 No messages to review.');
-    await closeBrowser();
+    await closeBrowser().catch(() => {});
     dbFunctions.closeDatabase();
   }
 

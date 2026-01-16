@@ -1133,7 +1133,7 @@ export function getOpenMessageTabs() {
 export async function waitForUserToFinish() {
   if (messageTabs.length === 0) {
     console.log('\n   No message tabs open. Closing browser...');
-    await closeBrowser();
+    await closeBrowser().catch(() => {});
     return;
   }
   
@@ -1146,37 +1146,40 @@ export async function waitForUserToFinish() {
   console.log('   1. Review the message');
   console.log('   2. Press Enter to send (or edit first)');
   console.log('   3. Move to next tab');
-  console.log('\n   When done, press Ctrl+C or close the browser window manually.');
-  console.log('   (You can also press Enter here to exit)');
+  console.log('\n   When done, close the browser window manually or press Ctrl+C.');
+  console.log('   (You can also press Enter here in the terminal to exit)');
   
-  // Keep process alive until browser is closed, Ctrl+C, or Enter
+  // Keep process alive handled by promise resolution
   return new Promise((resolve) => {
     let resolved = false;
 
-    const cleanup = (code = 0) => {
+    const cleanup = () => {
       if (resolved) return;
       resolved = true;
+      
+      // Clean up listeners
       process.stdin.removeListener('data', onData);
       process.removeListener('SIGINT', onSigInt);
       if (browserContext) {
         browserContext.removeListener('close', onBrowserClose);
       }
       
-      // If code is not null, we force exit (prevents npm noisy error 130)
-      if (code !== null) {
-        process.exit(code);
-      }
       resolve();
     };
 
-    const onData = () => cleanup(null); // Just resolve, let caller finish
-    const onSigInt = () => {
-      console.log('\n   Received Ctrl+C. Exiting...');
-      cleanup(0); // Exit with 0 to hide npm error
+    const onData = (data) => {
+      // Only resolve on Enter/New line
+      cleanup();
     };
+
+    const onSigInt = () => {
+      console.log('\n   Received Ctrl+C. Finishing up...');
+      cleanup();
+    };
+
     const onBrowserClose = () => {
-      console.log('\n   Browser window closed. Exiting...');
-      cleanup(0);
+      console.log('\n   Browser window closed. Finishing up...');
+      cleanup();
     };
 
     // 1. Listen for Enter key
@@ -1188,29 +1191,8 @@ export async function waitForUserToFinish() {
     // 3. Watch browser context closure
     if (browserContext) {
       browserContext.on('close', onBrowserClose);
-      
-      // Fallback: poll for context closure every 2 seconds
-      // Using unref() so the interval itself doesn't keep the process alive
-      const interval = setInterval(async () => {
-        try {
-          if (resolved) {
-            clearInterval(interval);
-            return;
-          }
-          const pages = await browserContext.pages().catch(() => []);
-          if (pages.length === 0) {
-            clearInterval(interval);
-            onBrowserClose();
-          }
-        } catch (e) {
-          clearInterval(interval);
-          onBrowserClose();
-        }
-      }, 2000);
-      interval.unref();
-      
     } else {
-      cleanup(null);
+      cleanup();
     }
   });
 }
