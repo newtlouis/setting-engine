@@ -302,11 +302,11 @@ export function parseThreadMetadata(rawMetadata) {
    updateConversationStage,
    getActiveConversations,
    getConversationSummary,
-   getTrackedDmThreads,
-   setDmThreadStatus,
-   getOrCreateAccount,
-   parseThreadMetadata,
-   getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),
+    getTrackedDmThreads,
+    setDmThreadStatus,
+    getOrCreateAccount,
+    parseThreadMetadata,
+    fullUpsertLead: (username, accountId, data) => dbFunctions.fullUpsertLead(username, accountId, data),
+    getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),
    updateLeadLastFollowup: (username, tplId) => dbFunctions.updateLeadLastFollowup(username, tplId)
  };
-

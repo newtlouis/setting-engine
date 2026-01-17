@@ -21,9 +21,11 @@ import {
   getLeadWithContext,
   addMessage,
   setDmThreadStatus,
-  getOrCreateAccount
+  getOrCreateAccount,
+  fullUpsertLead
 } from './db_integration.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
+import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 import path from 'path';
 
@@ -201,14 +203,29 @@ export async function runFollowerWatcher(options = {}) {
             }
             
             // 8. Open DM and prepare message
-            const firstName = metadata.fullName ? metadata.fullName.split(' ')[0] : username;
-            
+            let aiFirstName = null;
+            try {
+                aiFirstName = await extractNameWithAI(username, metadata.fullName);
+            } catch (e) {
+                console.error(`   ⚠️ Name extraction failed for @${username}: ${e.message}`);
+            }
+
             let welcomeMessage = "";
             if (profileConfig.outreach?.follower_template) {
-                welcomeMessage = profileConfig.outreach.follower_template.replace('{{firstName}}', firstName);
+                welcomeMessage = profileConfig.outreach.follower_template;
+                
+                if (aiFirstName) {
+                    // Replace {{firstName}} with name
+                    welcomeMessage = welcomeMessage.replace('{{firstName}}', aiFirstName);
+                } else {
+                    // Remove {{firstName}} and clean up potential double spaces or "Hello  "
+                    welcomeMessage = welcomeMessage.replace('{{firstName}}', '').replace(/\s+/g, ' ').replace('Hello 🌷', 'Hello 🌷').trim();
+                    // Specifically handle "Hello  " -> "Hello "
+                    welcomeMessage = welcomeMessage.replace(/Hello\s+/, 'Hello ');
+                }
             } else {
                 // Fallback
-                welcomeMessage = `Hello ${firstName} ! �`;
+                welcomeMessage = aiFirstName ? `Hello ${aiFirstName} ! 👋` : `Hello ! 👋`;
             }
             
             if (options.dryRun) {
@@ -240,13 +257,15 @@ export async function runFollowerWatcher(options = {}) {
             registerOpenTab(username, dmTab, welcomeMessage);
             
             // 10. Sync DB
-            await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach');
-            await setDmThreadStatus(username, 'outreach', { 
-                last_contact_at: new Date().toISOString(),
+            await fullUpsertLead(username, account.id, {
+                status: 'outreach',
                 full_name: metadata.fullName,
-                biography: metadata.bio,
-                account_id: account.id
+                bio: metadata.bio,
+                lead_source: 'follower_outreach',
+                dm_url: dmResult.dmUrl
             });
+
+            await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach', account.id);
             
             processedCount++;
             

@@ -850,6 +850,42 @@ export function updateDmThreadStatus(username, status, updates = {}) {
 }
 
 /**
+ * Full UPSERT for a lead with metadata
+ */
+export function fullUpsertLead(username, account_id, data = {}) {
+  const stmt = db.prepare(`
+    INSERT INTO leads (
+      username, account_id, profile_url, status, 
+      full_name, bio, dm_url, lead_source, notes, updated_at
+    ) VALUES (
+      @username, @account_id, @profile_url, @status,
+      @full_name, @bio, @dm_url, @lead_source, @notes, datetime('now')
+    )
+    ON CONFLICT(username, account_id) DO UPDATE SET
+      status = COALESCE(@status, status),
+      full_name = COALESCE(@full_name, full_name),
+      bio = COALESCE(@bio, bio),
+      dm_url = COALESCE(@dm_url, dm_url),
+      lead_source = COALESCE(lead_source, @lead_source),
+      notes = COALESCE(@notes, notes),
+      updated_at = datetime('now')
+    RETURNING *
+  `);
+
+  return stmt.get({
+    username,
+    account_id,
+    profile_url: data.profile_url || `https://www.instagram.com/${username}/`,
+    status: data.status || 'new',
+    full_name: data.full_name || null,
+    bio: data.bio || null,
+    dm_url: data.dm_url || null,
+    lead_source: data.lead_source || null,
+    notes: data.notes || null
+  });
+}
+
+/**
  * Get leads for DM Responder (replaces getDmThreads)
  * Filters by status and requires dm_url
  */
