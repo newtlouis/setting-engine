@@ -50,12 +50,6 @@ export function sanitizeMessage(message) {
   // Remove excessive newlines (max 2)
   sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
 
-  // Limit message length (Instagram DM best practice: ~500 chars)
-  const MAX_LENGTH = 500;
-  if (sanitized.length > MAX_LENGTH) {
-    sanitized = sanitized.substring(0, MAX_LENGTH - 3) + '...';
-  }
-
   return sanitized;
 }
 
