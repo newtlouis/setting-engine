@@ -768,35 +768,68 @@ export async function scrapeProfileMetadata(page, username) {
     try {
         console.log(`   Scraping metadata for @${username}...`);
         
-        const metadata = await page.evaluate(() => {
+        const metadata = await page.evaluate((targetUsername) => {
             const getAltText = (el) => el?.getAttribute('alt') || '';
             const getText = (sel) => document.querySelector(sel)?.innerText?.trim() || '';
             
-            // Full Name (usually an h2 or a span with specific classes)
+            // 1. Full Name Search
             let fullName = '';
-            const header = document.querySelector('header section');
-            if (header) {
-                const spans = Array.from(header.querySelectorAll('span'));
-                // The full name is often a span that isn't the username
-                const nameCandidate = spans.find(s => s.innerText && s.innerText.length > 0 && !s.innerText.includes('@'));
-                if (nameCandidate) fullName = nameCandidate.innerText;
+            
+            // Candidate 1: Real name usually in a header section span that is NOT the username
+            const spans = Array.from(document.querySelectorAll('header section span'));
+            const nameCandidate = spans.find(s => {
+                const txt = s.innerText?.trim();
+                return txt && txt.length > 0 && 
+                       txt.toLowerCase() !== targetUsername.toLowerCase() && 
+                       !txt.includes('@') &&
+                       !txt.includes('publications') &&
+                       !txt.includes('followers') &&
+                       !txt.includes('suivi');
+            });
+            if (nameCandidate) fullName = nameCandidate.innerText.trim();
+
+            // Candidate 2: Specifically look for the div structure usually holding the name
+            if (!fullName) {
+                const h2 = document.querySelector('h2');
+                if (h2) {
+                    // Search for a span that is a sibling or in a parallel div to the username h2
+                    // In many layouts, name is in a span near the h2
+                    const allSpans = Array.from(document.querySelectorAll('span[dir="auto"]'));
+                    for (const s of allSpans) {
+                        const txt = s.innerText?.trim();
+                        if (txt && txt.length > 0 && txt.toLowerCase() !== targetUsername.toLowerCase() && txt.length < 50) {
+                            // Basic heuristic: it's a name if it's not a stat
+                            if (!/\d+/.test(txt)) {
+                                fullName = txt;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
-            // Bio
-            const bioElement = document.querySelector('header section div:last-child span');
+            // 2. Bio Search
             let bio = '';
-            // bio often in a div with 특정 class after the name section
-            const sections = document.querySelectorAll('header section > div');
-            if (sections.length >= 3) {
-                bio = sections[sections.length - 1].innerText || '';
+            // Bio is often the last span in the header section before stats or in a specific block
+            const headerSection = document.querySelector('header section');
+            if (headerSection) {
+                const bioCandidate = headerSection.querySelector('div:last-child span');
+                if (bioCandidate) bio = bioCandidate.innerText || '';
+            }
+            
+            // Fallback for bio: look for description meta tag (if available in DOM)
+            if (!bio) {
+                const metaDesc = document.querySelector('meta[name="description"]');
+                if (metaDesc) bio = metaDesc.getAttribute('content') || '';
             }
 
-            // Check if we already follow them
+            // 3. Following Check
             const buttons = Array.from(document.querySelectorAll('button'));
             const following = buttons.some(b => 
                 b.innerText.includes('Following') || 
-                b.innerText.includes('Suivi(e)') || 
-                b.innerText.includes('S’abonner déjà')
+                b.innerText.includes('Suivi') || 
+                b.innerText.includes('S’abonner déjà') ||
+                b.innerText.includes('Message')
             );
 
             return {
@@ -804,7 +837,7 @@ export async function scrapeProfileMetadata(page, username) {
                 bio,
                 isFollowing: following
             };
-        });
+        }, username);
 
         return { success: true, ...metadata };
     } catch (error) {
