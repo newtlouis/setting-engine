@@ -295,11 +295,20 @@ async function processThread(thread, options) {
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     
     // Step 5: Type message in the already-open tab
-    // Check for [ALERT_BOOKING] tag
+    // Check for special tags
     let finalMessage = message;
+    let newStatus = 'conversation';
+
+    if (finalMessage.includes('[NOT_INTERESTED]')) {
+      console.log(`   ⛔ NOT INTERESTED tag detected!`);
+      finalMessage = finalMessage.replace('[NOT_INTERESTED]', '').trim();
+      newStatus = 'not_interested';
+    }
+
     if (finalMessage.includes('[ALERT_BOOKING]')) {
       console.log(`   🚨 BOOKING ALERT DETECTED! Sending system notification...`);
       finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
+      newStatus = 'scheduling';
       
       // Trigger macOS system notification
       try {
@@ -309,12 +318,7 @@ async function processThread(thread, options) {
         console.error('Failed to send notification:', err.message);
       }
       
-      // Update lead status to stop automation and mark as booking pending
-      await markThread(username, 'scheduling', thread.metadata, {
-        booking_status: 'pending',
-        last_checked_at: new Date().toISOString()
-      });
-      console.log(`   📅 Status updated to 'scheduling' (Automation Stopped)`);
+      console.log(`   📅 Status update to 'scheduling' (Automation Stopped)`);
     }
 
     const typeResult = await typeInOpenTab(openTab, finalMessage);
@@ -338,11 +342,12 @@ async function processThread(thread, options) {
     
     await markThread(
       username,
-      'conversation',
+      newStatus,
       thread.metadata,
       {
         last_checked_at: new Date().toISOString(),
-        last_message_preview: message.substring(0, 100)
+        last_message_preview: finalMessage.substring(0, 100),
+        booking_status: newStatus === 'scheduling' ? 'pending' : (thread.booking_status || null)
       }
     );
     

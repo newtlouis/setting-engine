@@ -386,18 +386,30 @@ export async function runInboxScanner(options = {}) {
           
           console.log(`   💬 Suggested: "${message.substring(0, 50)}..."`);
           
-          // 7. Booking Alert
+          // 7. Special Tags Detection
           let finalMessage = message;
+          let newStatus = 'conversation';
+          let bookingStatus = null;
+
+          if (finalMessage.includes('[NOT_INTERESTED]')) {
+            console.log(`   ⛔ NOT INTERESTED tag detected!`);
+            finalMessage = finalMessage.replace('[NOT_INTERESTED]', '').trim();
+            newStatus = 'not_interested';
+          }
+          
           if (finalMessage.includes('[ALERT_BOOKING]')) {
             console.log(`   🚨 BOOKING ALERT!`);
             finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
-            await setDmThreadStatus(username, 'scheduling', { booking_status: 'pending' });
+            newStatus = 'scheduling';
+            bookingStatus = 'pending';
           }
           
-          // 8. STORE RESULT (Don't just type and leave, save for Final Tab Opening)
-          // We save it to DB too
+          // 8. STORE RESULT
           await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
-          await setDmThreadStatus(username, 'conversation', { last_checked_at: new Date().toISOString() });
+          await setDmThreadStatus(username, newStatus, { 
+            last_checked_at: new Date().toISOString(),
+            booking_status: bookingStatus
+          });
           
           processedResults.push({
              username,

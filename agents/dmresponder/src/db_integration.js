@@ -178,8 +178,11 @@ export async function addMessage(username, role, message, messageType = null, ac
     dbFunctions.addConversationMessage(lead.id, role, message, messageType);
     
     // Update lead status based on message flow
-    if (role === 'user' && (lead.status === 'contacted' || lead.status === 'outreach')) {
-      dbFunctions.updateLeadStatus(username, 'conversation');
+    if (role === 'user') {
+      if (lead.status === 'contacted' || lead.status === 'outreach' || lead.status === 'not_interested') {
+        console.log(`   🔄 Lead @${username} status change: ${lead.status} -> conversation`);
+        dbFunctions.updateLeadStatus(username, 'conversation');
+      }
     }
     
     return true;
