@@ -17,12 +17,14 @@ program
   .description('Monitor new Instagram followers and initiate outreach')
   .option('-p, --profile <name>', 'Profile name to use (required)')
   .option('-d, --dry-run', 'Scan only, do not prepare messages', false)
+  .option('-w, --track-week', 'Also scan "This Week" section (requires scrolling)', false)
   .option('--show-browser', 'Show browser window during operation', true)
   .action(async (options) => {
     try {
       await runFollowerWatcher({
         profile: options.profile,
         dryRun: options.dryRun,
+        trackWeek: options.trackWeek,
         headless: !options.showBrowser
       });
     } catch (error) {

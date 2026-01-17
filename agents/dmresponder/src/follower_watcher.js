@@ -45,17 +45,20 @@ const CONFIG = {
 /**
  * Scan notifications for new followers in specific sections
  */
-async function scanForNewFollowers(page) {
-    console.log('   Scanning notifications in sections: Nouveau, Aujourd\'hui, Hier...');
+async function scanForNewFollowers(page, options = {}) {
+    console.log('   Scanning notifications...');
     
-    return await page.evaluate((selectors) => {
+    return await page.evaluate((args) => {
+        const { selectors, trackWeek } = args;
         const results = [];
+        
         // Handle both straight and curly apostrophes
         const sectionsToTrack = ['nouveau', 'aujourd\'hui', 'aujourd’hui', 'hier', 'today', 'yesterday', 'new'];
+        if (trackWeek) {
+            sectionsToTrack.push('cette semaine', 'this week');
+        }
         
         // Find all notification containers
-        // Instagram structure: Headings and Items are often grouped in a way where the heading 
-        // is a sibling or an ancestor's sibling of the item.
         const allItems = Array.from(document.querySelectorAll('div[data-pressable-container="true"]'));
         console.log(`Debug Context: Found ${allItems.length} total notification items.`);
         
@@ -68,40 +71,30 @@ async function scanForNewFollowers(page) {
                 let sectionName = "";
                 let current = item;
                 
-                // IG Hierarchy often: Item -> Parent -> ... -> Section Container
-                // We'll search backwards in the DOM for any heading role
-                
                 // Helper to check for heading text
                 const findHeadingBefore = (element) => {
                     let prev = element;
                     while (prev) {
-                        // Check siblings backwards
                         let sib = prev.previousElementSibling;
                         while (sib) {
-                            // Check if sibling is a heading or contains one
                             const heading = sib.matches('[role="heading"]') ? sib : sib.querySelector('[role="heading"]');
                             if (heading) return heading.innerText?.trim().toLowerCase();
                             sib = sib.previousElementSibling;
                         }
-                        // Move up to parent and continue
                         prev = prev.parentElement;
-                        // Avoid going too far up
                         if (prev?.matches('main') || prev?.id === 'mount_0_0') break;
                     }
                     return "";
                 };
 
                 sectionName = findHeadingBefore(item);
-                console.log(`Found Follow: "${text.substring(0, 30)}..." | Section: "${sectionName}"`);
-
                 const isTargetSection = sectionName && sectionsToTrack.some(t => sectionName.includes(t));
                 
                 if (isTargetSection) {
-                    // Extract username
                     const link = item.querySelector('a[href^="/"]');
                     if (link) {
                         const href = link.getAttribute('href');
-                        const username = href.replace(/\//g, '').split('?')[0]; // Clean up possible query params
+                        const username = href.replace(/\//g, '').split('?')[0];
                         if (username && !['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) {
                             results.push({
                                 username,
@@ -114,7 +107,7 @@ async function scanForNewFollowers(page) {
         }
         
         return results;
-    }, CONFIG.NOTIFICATION_SELECTORS);
+    }, { selectors: CONFIG.NOTIFICATION_SELECTORS, trackWeek: options.trackWeek });
 }
 
 export async function runFollowerWatcher(options = {}) {
@@ -129,13 +122,13 @@ export async function runFollowerWatcher(options = {}) {
     console.log(`   DM RESPONDER - NEW FOLLOWER WATCHER`);
     console.log(`========================================`);
     console.log(`   Profile: ${profile}`);
+    console.log(`   Track Week: ${!!options.trackWeek}`);
     
     let browser = null;
     let page = null;
     let processedCount = 0;
     
     try {
-        // Step 1: Init Browser
         const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
         const browserResult = await initBrowser({ 
             profile,
@@ -149,8 +142,20 @@ export async function runFollowerWatcher(options = {}) {
         // Step 2: Go to Notifications
         await goToNotifications(page);
         
+        // Optional: Scroll to load more (e.g. "This Week")
+        if (options.trackWeek) {
+            console.log('   Scrolling to load "This Week" section...');
+            await page.evaluate(async () => {
+                for (let i = 0; i < 3; i++) {
+                    window.scrollTo(0, document.body.scrollHeight);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            });
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        
         // Step 3: Scan for followers
-        const newFollowers = await scanForNewFollowers(page);
+        const newFollowers = await scanForNewFollowers(page, { trackWeek: options.trackWeek });
         console.log(`   Found ${newFollowers.length} potential new follower(s).`);
         
         if (newFollowers.length === 0) {
@@ -196,14 +201,11 @@ export async function runFollowerWatcher(options = {}) {
             }
             
             // 8. Open DM and prepare message
-            console.log(`   ✅ Qualifié ! Préparation du message d'accueil...`);
-            
-            // We use the same first message logic as Outreach
-            // ÉTAPE 1 : À froid (Premier contact)
             const firstName = metadata.fullName ? metadata.fullName.split(' ')[0] : username;
-            const welcomeMessage = firstName && firstName !== username 
-                ? `${firstName} ? 🙂` 
-                : `Hey !`;
+            const welcomeMessage = `Hello ${firstName} 🌷
+Merci beaucoup pour ton abonnement, bienvenue ici 💫
+Je partage pas mal de choses autour de l’hypersensibilité et de la dépendance affective, toujours dans une approche bienveillante.
+Est-ce que ce sont des thématiques qui te parlent aussi ou pas du tout ? 💕`;
             
             if (options.dryRun) {
                 console.log(`   🚧 DRY RUN: Would type: "${welcomeMessage}"`);
