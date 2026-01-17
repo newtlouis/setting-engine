@@ -750,3 +750,65 @@ export async function goToDirectDM(page, dmUrl) {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Navigate to the notifications page
+ */
+export async function goToNotifications(page) {
+    console.log('   Navigating to notifications...');
+    await page.goto('https://www.instagram.com/notifications/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await delay(3000, 5000);
+    return true;
+}
+
+/**
+ * Scrape basic metadata from a profile page (Bio, Full Name, Following status)
+ */
+export async function scrapeProfileMetadata(page, username) {
+    try {
+        console.log(`   Scraping metadata for @${username}...`);
+        
+        const metadata = await page.evaluate(() => {
+            const getAltText = (el) => el?.getAttribute('alt') || '';
+            const getText = (sel) => document.querySelector(sel)?.innerText?.trim() || '';
+            
+            // Full Name (usually an h2 or a span with specific classes)
+            let fullName = '';
+            const header = document.querySelector('header section');
+            if (header) {
+                const spans = Array.from(header.querySelectorAll('span'));
+                // The full name is often a span that isn't the username
+                const nameCandidate = spans.find(s => s.innerText && s.innerText.length > 0 && !s.innerText.includes('@'));
+                if (nameCandidate) fullName = nameCandidate.innerText;
+            }
+
+            // Bio
+            const bioElement = document.querySelector('header section div:last-child span');
+            let bio = '';
+            // bio often in a div with 특정 class after the name section
+            const sections = document.querySelectorAll('header section > div');
+            if (sections.length >= 3) {
+                bio = sections[sections.length - 1].innerText || '';
+            }
+
+            // Check if we already follow them
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const following = buttons.some(b => 
+                b.innerText.includes('Following') || 
+                b.innerText.includes('Suivi(e)') || 
+                b.innerText.includes('S’abonner déjà')
+            );
+
+            return {
+                fullName,
+                bio,
+                isFollowing: following
+            };
+        });
+
+        return { success: true, ...metadata };
+    } catch (error) {
+        console.error('   Error scraping profile metadata:', error.message);
+        return { success: false, error: error.message };
+    }
+}

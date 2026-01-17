@@ -1,0 +1,263 @@
+/**
+ * @file Follower Watcher for DM Responder
+ * 
+ * Scans Instagram notifications for "started following you".
+ * Qualifies the new follower and sends the first outreach message.
+ */
+
+import { 
+  initBrowser, 
+  goToNotifications,
+  scrapeProfileMetadata,
+  typeInOpenTab,
+  registerOpenTab,
+  waitForUserToFinish,
+  closeBrowser,
+  getOpenMessageTabs,
+  openDMAndScrape
+} from './scraper.js';
+import {
+  initDB,
+  getLeadWithContext,
+  addMessage,
+  setDmThreadStatus,
+  getOrCreateAccount
+} from './db_integration.js';
+import { qualifyLead } from '../../outreach/src/qualify_lead.js';
+import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import path from 'path';
+
+// ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+  NOTIFICATION_SELECTORS: {
+    ITEMS: 'div[role="listitem"]',
+    FOLLOW_TEXT: [
+      'commencé à vous suivre',
+      'started following you',
+      'a commencé à vous suivre'
+    ]
+  },
+  MAX_FOLLOWERS_PER_SESSION: 10
+};
+
+/**
+ * Scan notifications for new followers in specific sections
+ */
+async function scanForNewFollowers(page) {
+    console.log('   Scanning notifications in sections: Nouveau, Aujourd\'hui, Hier...');
+    
+    return await page.evaluate((selectors) => {
+        const results = [];
+        // Handle both straight and curly apostrophes
+        const sectionsToTrack = ['nouveau', 'aujourd\'hui', 'aujourd’hui', 'hier', 'today', 'yesterday', 'new'];
+        
+        // Find all notification containers
+        // Instagram structure: Headings and Items are often grouped in a way where the heading 
+        // is a sibling or an ancestor's sibling of the item.
+        const allItems = Array.from(document.querySelectorAll('div[data-pressable-container="true"]'));
+        console.log(`Debug Context: Found ${allItems.length} total notification items.`);
+        
+        for (const item of allItems) {
+            const text = item.innerText || '';
+            const isFollow = selectors.FOLLOW_TEXT.some(t => text.toLowerCase().includes(t));
+            
+            if (isFollow) {
+                // Find section name by searching for the "nearest" preceding heading
+                let sectionName = "";
+                let current = item;
+                
+                // IG Hierarchy often: Item -> Parent -> ... -> Section Container
+                // We'll search backwards in the DOM for any heading role
+                
+                // Helper to check for heading text
+                const findHeadingBefore = (element) => {
+                    let prev = element;
+                    while (prev) {
+                        // Check siblings backwards
+                        let sib = prev.previousElementSibling;
+                        while (sib) {
+                            // Check if sibling is a heading or contains one
+                            const heading = sib.matches('[role="heading"]') ? sib : sib.querySelector('[role="heading"]');
+                            if (heading) return heading.innerText?.trim().toLowerCase();
+                            sib = sib.previousElementSibling;
+                        }
+                        // Move up to parent and continue
+                        prev = prev.parentElement;
+                        // Avoid going too far up
+                        if (prev?.matches('main') || prev?.id === 'mount_0_0') break;
+                    }
+                    return "";
+                };
+
+                sectionName = findHeadingBefore(item);
+                console.log(`Found Follow: "${text.substring(0, 30)}..." | Section: "${sectionName}"`);
+
+                const isTargetSection = sectionName && sectionsToTrack.some(t => sectionName.includes(t));
+                
+                if (isTargetSection) {
+                    // Extract username
+                    const link = item.querySelector('a[href^="/"]');
+                    if (link) {
+                        const href = link.getAttribute('href');
+                        const username = href.replace(/\//g, '').split('?')[0]; // Clean up possible query params
+                        if (username && !['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) {
+                            results.push({
+                                username,
+                                text: text.substring(0, 50) + '...'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        return results;
+    }, CONFIG.NOTIFICATION_SELECTORS);
+}
+
+export async function runFollowerWatcher(options = {}) {
+    await initDB();
+    
+    const profile = options.profile || process.env.IG_PROFILE;
+    if (!profile) {
+        throw new Error('Profile name is required. Use --profile <name>.');
+    }
+    
+    console.log(`\n========================================`);
+    console.log(`   DM RESPONDER - NEW FOLLOWER WATCHER`);
+    console.log(`========================================`);
+    console.log(`   Profile: ${profile}`);
+    
+    let browser = null;
+    let page = null;
+    let processedCount = 0;
+    
+    try {
+        // Step 1: Init Browser
+        const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
+        const browserResult = await initBrowser({ 
+            profile,
+            headless: options.headless !== undefined ? options.headless : false 
+        });
+        page = browserResult.page;
+        
+        const profileConfig = await loadProfileConfig(profile);
+        const account = await getOrCreateAccount(profile);
+        
+        // Step 2: Go to Notifications
+        await goToNotifications(page);
+        
+        // Step 3: Scan for followers
+        const newFollowers = await scanForNewFollowers(page);
+        console.log(`   Found ${newFollowers.length} potential new follower(s).`);
+        
+        if (newFollowers.length === 0) {
+            console.log('   ✅ No new followers found in recent notifications.');
+            return;
+        }
+        
+        // Deduplicate
+        const uniqueFollowers = Array.from(new Set(newFollowers.map(f => f.username)))
+            .map(username => newFollowers.find(f => f.username === username));
+            
+        console.log(`   Processing ${Math.min(uniqueFollowers.length, CONFIG.MAX_FOLLOWERS_PER_SESSION)} unique follower(s)...`);
+
+        for (const follower of uniqueFollowers.slice(0, CONFIG.MAX_FOLLOWERS_PER_SESSION)) {
+            const username = follower.username;
+            console.log(`\n--- Checking: @${username} ---`);
+            
+            // 4. Check if already in DB
+            const existingLead = await getLeadWithContext(username);
+            if (existingLead && (existingLead.status === 'conversation' || existingLead.status === 'contacted' || existingLead.status === 'outreach')) {
+                console.log(`   ⏭️ @${username} already contacted or in conversation. Skipping.`);
+                continue;
+            }
+            
+            // 5. Navigate to Profile
+            await page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'domcontentloaded' });
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // 6. Scrape Metadata
+            const metadata = await scrapeProfileMetadata(page, username);
+            if (!metadata.success) {
+                console.log(`   ⚠️ Failed to scrape metadata for @${username}. Skipping.`);
+                continue;
+            }
+            
+            // 7. Qualify Lead
+            console.log(`   🔍 Qualifying @${username}...`);
+            const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
+            
+            if (!qualification.qualified) {
+                console.log(`   ❌ @${username} not qualified: ${qualification.reason}`);
+                continue;
+            }
+            
+            // 8. Open DM and prepare message
+            console.log(`   ✅ Qualifié ! Préparation du message d'accueil...`);
+            
+            // We use the same first message logic as Outreach
+            // ÉTAPE 1 : À froid (Premier contact)
+            const firstName = metadata.fullName ? metadata.fullName.split(' ')[0] : username;
+            const welcomeMessage = firstName && firstName !== username 
+                ? `${firstName} ? 🙂` 
+                : `Hey !`;
+            
+            if (options.dryRun) {
+                console.log(`   🚧 DRY RUN: Would type: "${welcomeMessage}"`);
+                continue;
+            }
+            
+            const dmResult = await openDMAndScrape({
+                username,
+                profile_url: `https://www.instagram.com/${username}/`
+            });
+            
+            if (!dmResult.success) {
+                console.log(`   ❌ Failed to open DM: ${dmResult.error}`);
+                continue;
+            }
+            
+            const dmTab = dmResult.tab;
+            const history = dmResult.scrapedMessages || [];
+            
+            if (history.length > 0) {
+                console.log(`   ⚠️ Existing conversation history found (${history.length} msgs). Skipping outreach.`);
+                await dmTab.close().catch(() => {});
+                continue;
+            }
+            
+            // 9. Type & Register
+            await typeInOpenTab(dmTab, welcomeMessage);
+            registerOpenTab(username, dmTab, welcomeMessage);
+            
+            // 10. Sync DB
+            await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach');
+            await setDmThreadStatus(username, 'outreach', { 
+                last_contact_at: new Date().toISOString(),
+                full_name: metadata.fullName,
+                biography: metadata.bio,
+                account_id: account.id
+            });
+            
+            processedCount++;
+            
+            // Small break between profiles
+            await new Promise(r => setTimeout(r, 3000));
+        }
+        
+        if (processedCount > 0) {
+            console.log(`\n✨ Prepared ${processedCount} outreach messages for review.`);
+            await waitForUserToFinish();
+        } else {
+            console.log('\nNo new outreach messages prepared.');
+        }
+        
+    } catch (err) {
+        console.error(`\n❌ Fatal error: ${err.message}`);
+    } finally {
+        await closeBrowser();
+    }
+}

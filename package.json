@@ -28,6 +28,7 @@
         "reply:followup": "cd agents/dmresponder && npm run followup --",
         "postreply:auto": "npm run backup:remote",
         "respond:inbox": "cd agents/dmresponder && npm run inbox --",
+        "respond:followers": "cd agents/dmresponder && npm run followers --",
         "postrespond:inbox": "npm run backup:remote",
         "open:session": "node open_session.js",
         "db:admin": "python3 -m sqlite_web ./agents/collector/permanent-data/leads.db --port 8081 --no-browser",
