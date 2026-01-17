@@ -278,6 +278,12 @@ export async function setDmThreadStatus(username, status, updates = {}) {
   return dbFunctions.updateDmThreadStatus(username, status, updates);
 }
 
+export async function fullUpsertLead(username, accountId, data) {
+  await initDB();
+  if (!dbFunctions?.fullUpsertLead) return null;
+  return dbFunctions.fullUpsertLead(username, accountId, data);
+}
+
 export async function getOrCreateAccount(name) {
   await initDB();
   if (!dbFunctions?.getOrCreateAccount) return null;
