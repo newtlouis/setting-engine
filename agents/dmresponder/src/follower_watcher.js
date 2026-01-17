@@ -202,10 +202,14 @@ export async function runFollowerWatcher(options = {}) {
             
             // 8. Open DM and prepare message
             const firstName = metadata.fullName ? metadata.fullName.split(' ')[0] : username;
-            const welcomeMessage = `Hello ${firstName} 🌷
-Merci beaucoup pour ton abonnement, bienvenue ici 💫
-Je partage pas mal de choses autour de l’hypersensibilité et de la dépendance affective, toujours dans une approche bienveillante.
-Est-ce que ce sont des thématiques qui te parlent aussi ou pas du tout ? 💕`;
+            
+            let welcomeMessage = "";
+            if (profileConfig.outreach?.follower_template) {
+                welcomeMessage = profileConfig.outreach.follower_template.replace('{{firstName}}', firstName);
+            } else {
+                // Fallback
+                welcomeMessage = `Hello ${firstName} ! �`;
+            }
             
             if (options.dryRun) {
                 console.log(`   🚧 DRY RUN: Would type: "${welcomeMessage}"`);

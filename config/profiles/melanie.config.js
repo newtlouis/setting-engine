@@ -104,6 +104,10 @@ Username: @{username}
 Bio: {bio}
 
 Réponse (OUI ou NON):`,
+        follower_template: `Hello {{firstName}} 🌷
+Merci beaucoup pour ton abonnement, bienvenue ici 💫
+Je partage pas mal de choses autour de l’hypersensibilité et de la dépendance affective, toujours dans une approche bienveillante.
+Est-ce que ce sont des thématiques qui te parlent aussi ou pas du tout ? 💕`,
         templates: {
             pain_based: [
                 {
