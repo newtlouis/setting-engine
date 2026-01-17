@@ -168,6 +168,46 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
 
     // Ensure composite unique index exists (Crucial for UPSERT)
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_username_account_unique ON leads(username, account_id)`);
+
+    // ---------------------------------------------------------
+    // FOLLOW-UP SYSTEM TABLES & MIGRATIONS
+    // ---------------------------------------------------------
+
+    // Create Follow-up Templates Table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS followup_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_text TEXT NOT NULL,
+        step_order INTEGER NOT NULL,  -- 1, 2, 3... controls sequence
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Migration: Add last_followup_template_id to leads
+    if (!leadsColumns.some(col => col.name === 'last_followup_template_id')) {
+      console.log('🔄 Migrating: Adding last_followup_template_id to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN last_followup_template_id INTEGER REFERENCES followup_templates(id)`);
+    }
+
+    // Seed default templates if empty
+    const templateCount = db.prepare('SELECT COUNT(*) as count FROM followup_templates').get().count;
+    if (templateCount === 0) {
+      console.log('🌱 Seeding default follow-up templates...');
+      const defaultTemplates = [
+        { order: 1, text: "Coucou {{firstName}} 🌸 Je me permets de te relancer tout doucement — parfois les messages se perdent dans la boîte Instagram 😅 Prends ton temps pour répondre bien sûr, je voulais juste m’assurer que tu l’avais bien vu 🌷" },
+        { order: 2, text: "Hello {{firstName}} 💫 J’espère que ta semaine se passe bien 🌺 Je repensais à notre échange... Tu as eu un peu de temps pour y repenser ? 💛" },
+        { order: 3, text: "Hello {{firstName}} 🌷 Tu veux qu’on regarde ensemble un moment pour ton petit appel de 30 min cette semaine ? J’ai encore quelques créneaux, dis-moi ce qui t’arrange le mieux 🌸" },
+        { order: 4, text: "Coucou {{firstName}} ! Juste un petit message pour ne pas perdre le fil 😊 Si tu n'es plus intéressée ou si ce n'est pas le bon moment, dis-le moi simplement, je ne veux pas t'embêter ! Belle journée ☀️" },
+        { order: 5, text: "Un dernier petit coucou {{firstName}} 👋 Je suppose que tu es très occupée ! Je ne vais pas insister davantage, mais ma porte reste ouverte si tu veux reprendre notre échange plus tard. Prends soin de toi 🌺" }
+      ];
+      
+      const insertTpl = db.prepare('INSERT INTO followup_templates (step_order, template_text) VALUES (@order, @text)');
+      for (const tpl of defaultTemplates) {
+        insertTpl.run(tpl);
+      }
+    }
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }
@@ -991,3 +1031,47 @@ function calculateEngagementMetrics(comments) {
 }
 
 export { calculateEngagementMetrics };
+
+// ============================================
+// FOLLOW-UP SYSTEM OPERATIONS
+// ============================================
+
+/**
+ * Get the next follow-up template for a lead
+ * @param {number|null} lastTemplateId - The ID of the last sent template (null if none)
+ * @returns {Object|null} The next template or null if end of sequence
+ */
+export function getNextFollowupTemplate(lastTemplateId) {
+  if (!lastTemplateId) {
+    // No previous follow-up, get the first one
+    return db.prepare('SELECT * FROM followup_templates WHERE is_active = 1 ORDER BY step_order ASC LIMIT 1').get();
+  }
+
+  // Get the order of the last template
+  const lastTemplate = db.prepare('SELECT step_order FROM followup_templates WHERE id = ?').get(lastTemplateId);
+  
+  if (!lastTemplate) {
+    // If ID not found (e.g. deleted), start from beginning to be safe
+    return db.prepare('SELECT * FROM followup_templates WHERE is_active = 1 ORDER BY step_order ASC LIMIT 1').get();
+  }
+
+  // Get the next one in sequence
+  return db.prepare(`
+    SELECT * FROM followup_templates 
+    WHERE is_active = 1 AND step_order > ? 
+    ORDER BY step_order ASC 
+    LIMIT 1
+  `).get(lastTemplate.step_order);
+}
+
+/**
+ * Update the last used follow-up template for a lead
+ */
+export function updateLeadLastFollowup(username, templateId) {
+  return db.prepare(`
+    UPDATE leads SET 
+      last_followup_template_id = ?,
+      updated_at = datetime('now')
+    WHERE username = ?
+  `).run(templateId, username);
+}

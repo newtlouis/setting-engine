@@ -26,53 +26,53 @@ const __dirname = path.dirname(__filename);
 /**
  * Finds threads that need a follow-up.
  * Criteria: 
- * - Status is 'conversation' or 'outreach'
+ * - Status is 'conversation'
  * - Last message was from 'assistant'
- * - Last message was sent > X days ago
+ * - Last message was sent > X hours ago
  */
-async function getStaleThreads(db, accountId, days) {
-    const daysMs = days * 24 * 60 * 60 * 1000;
-    const cutoffDate = new Date(Date.now() - daysMs).toISOString();
+async function getStaleThreads(db, accountId, hours = 24) {
+    const cutoffDate = new Date(Date.now() - (hours * 60 * 60 * 1000)).toISOString();
 
-    // We can use a complex query or just get all conversations and filter in JS.
-    // Given we need to check the *last message*, a SQL query is better.
-    
-    // This query finds leads where the most recent message in 'conversations' table is from 'assistant'
+    // Query finding leads where the most recent message is from 'assistant' and older than cutoff
     const sql = `
+        WITH LastMessages AS (
+            SELECT lead_id, role, sent_at, 
+                   ROW_NUMBER() OVER(PARTITION BY lead_id ORDER BY sent_at DESC) as rn
+            FROM conversations
+        )
         SELECT l.*, 
-               MAX(c.sent_at) as last_msg_at,
-               (SELECT role FROM conversations WHERE lead_id = l.id ORDER BY sent_at DESC LIMIT 1) as last_role,
-               (SELECT message_text FROM conversations WHERE lead_id = l.id ORDER BY sent_at DESC LIMIT 1) as last_text
+               lm.sent_at as last_msg_at,
+               lm.role as last_role
         FROM leads l
-        JOIN conversations c ON l.id = c.lead_id
+        JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
         WHERE l.account_id = ?
-          AND l.status IN ('conversation', 'outreach')
+          AND l.status = 'conversation'
           AND l.booking_status IS NOT 'completed'
           AND l.is_ignored = 0
-        GROUP BY l.id
-        HAVING last_role = 'assistant' AND last_msg_at < ?
-        ORDER BY last_msg_at ASC
-        LIMIT ?
+          AND lm.role = 'assistant'
+          AND lm.sent_at < ?
+        ORDER BY lm.sent_at ASC
+        LIMIT 50
     `;
 
-    return db.prepare(sql).all(accountId, cutoffDate, 50); // limit 50 at a time
+    return db.prepare(sql).all(accountId, cutoffDate);
 }
 
 export async function runFollowupWatcher(options = {}) {
-    const { days = 2, limit = 10, profile, dryRun = false } = options;
+    const { hours = 24, limit = 10, profile, dryRun = false } = options;
 
     if (!profile) throw new Error('Profile is required');
 
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
-    console.log(`   Criteria: Last msg from Assistant > ${days} days ago.`);
+    console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
 
     const dbFunctions = await initDB();
-    const db = await dbFunctions.getDatabase(); // Access raw db
+    const db = await dbFunctions.getDatabase();
     const account = await getOrCreateAccount(profile);
     const accountId = account.id;
 
     // 1. Find Stale Threads
-    const threads = await getStaleThreads(db, accountId, days);
+    const threads = await getStaleThreads(db, accountId, hours);
     
     if (threads.length === 0) {
         console.log('✅ No stale threads found needing follow-up.');
@@ -86,18 +86,14 @@ export async function runFollowupWatcher(options = {}) {
 
     if (dryRun) {
         console.log('🚧 DRY RUN MODE. Would process:');
-        targetThreads.forEach(t => {
-            console.log(`   - @${t.username} (Last msg: ${t.last_msg_at})`);
-        });
+        for (const t of targetThreads) {
+            const nextTpl = await dbFunctions.getNextFollowupTemplate(t.last_followup_template_id);
+            console.log(`   - @${t.username} (Last: ${t.last_msg_at}) -> Next: ${nextTpl ? nextTpl.step_order : 'NONE (End of sequence)'}`);
+        }
         return;
     }
 
-    // 2. Load Config
-    // We construct a SPECIAL prompt for follow-ups that OVERRIDES the standard system prompt logic slightly
-    // or we just inject a strong instruction.
-    const profileConfig = await loadProfileConfig(profile);
-
-    // 3. Init Browser
+    // 2. Init Browser
     const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
     let browser = await initBrowser({ 
         userDataDir,
@@ -110,6 +106,14 @@ export async function runFollowupWatcher(options = {}) {
     try {
         for (const thread of targetThreads) {
             console.log(`\n--- Follow-up for @${thread.username} ---`);
+
+            // 3. Get Next Template
+            const nextTemplate = await dbFunctions.getNextFollowupTemplate(thread.last_followup_template_id);
+            
+            if (!nextTemplate) {
+                console.log(`ℹ️  No more follow-up templates for @${thread.username}. Skipping.`);
+                continue;
+            }
 
             // 4. Open DM
             const result = await openDMAndScrape({
@@ -126,75 +130,38 @@ export async function runFollowupWatcher(options = {}) {
             const openTab = result.tab;
             
             // 5. Verify Context (Double check scraping)
-            // If the user HAS replied since our DB record, `scrapedMessages` will show it.
-            // We must NOT send a follow-up if they replied.
             const scrapedMessages = result.scrapedMessages || [];
             if (scrapedMessages.length > 0) {
                 const lastScraped = scrapedMessages[scrapedMessages.length - 1];
                 if (lastScraped.role === 'user') {
-                    console.log('⚠️  User has replied recently! Aborting follow-up.');
-                    // Sync DB
+                    console.log('⚠️  User has replied! Syncing and aborting follow-up.');
                     await addMessage(thread.username, 'user', lastScraped.text); 
                     await openTab.close();
                     continue;
                 }
             }
 
-            // 6. Generate Follow-up
-            // We use the Engine but we inject a "Force Follow Up" instruction
-            const history = await getConversationHistory(thread.username);
-            const leadContext = await getLeadWithContext(thread.username);
+            // 6. Format Template
+            // Simple placeholder replacement. We can add more context if needed.
+            let message = nextTemplate.template_text;
+            const firstName = thread.full_name ? thread.full_name.split(' ')[0] : thread.username;
+            message = message.replace(/\{\{firstName\}\}/g, firstName);
 
-            // SPECIAL FOLLOW-UP PROMPT INJECTION
-            // We wrap the profile config to override the system prompt or add context
-            const followupContext = `
-            🚨 **MODE RELANCE ACTIVÉ** 🚨
+            console.log(`💬 Follow-up #${nextTemplate.step_order}: "${message}"`);
             
-            CONTEXTE : Cela fait plus de ${days} jours que tu as envoyé ton dernier message et le prospect n'a pas répondu.
-            TA MISSION : Écrire un message de RELANCE (Follow-up) court et naturel pour réengager la conversation.
-            
-            RÈGLES :
-            - Ne répète pas ton dernier message.
-            - Utilise les "Etapes 6 (Relances)" de ton script.
-            - Si c'est la première relance : "Je me permets de te relancer doucement..."
-            - Si c'est la deuxième : "Je repensais à notre échange..."
-            - Ton : Doux, pas harcelant, bienveillant.
-            - PAS DE TAG [ALERT_BOOKING] ICI.
-            `;
-
-            console.log('🤖 Generating follow-up...');
-            const response = await generateResponse({
-                conversationHistory: history,
-                leadContext: leadContext,
-                profileConfig: profileConfig,
-                additionalContext: followupContext // We need to ensure Engine supports this or append to system prompt
-            });
-
-            const message = response.next_message || response.message || response.suggested_message;
-
-            if (!message) {
-                console.log('❌ No message generated');
-                await openTab.close();
-                continue;
-            }
-
-            console.log(`💬 Suggestion: "${message}"`);
-            
-            // 7. Type
+            // 7. Type & Register
             await typeInOpenTab(openTab, message);
-            
-            // Register for Review
             registerOpenTab(thread.username, openTab, message);
             
-            // Save as 'assistant' to update timestamp so we don't spam
-            // But mark it as a 'followup' type if possible, or just standard text.
-            await addMessage(thread.username, 'assistant', message);
+            // 8. Update DB (Stage and Template Tracking)
+            await addMessage(thread.username, 'assistant', message, `followup_${nextTemplate.step_order}`);
+            await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id);
             
             processedCount++;
         }
 
         if (processedCount > 0) {
-            console.log(`\n✨ Prepared ${processedCount} follow-ups.`);
+            console.log(`\n✨ Prepared ${processedCount} follow-ups review.`);
             await waitForUserToFinish();
         } else {
             console.log('No follow-ups prepared.');

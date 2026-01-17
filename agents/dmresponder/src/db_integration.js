@@ -302,6 +302,8 @@ export function parseThreadMetadata(rawMetadata) {
    getTrackedDmThreads,
    setDmThreadStatus,
    getOrCreateAccount,
-   parseThreadMetadata
+   parseThreadMetadata,
+   getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),
+   updateLeadLastFollowup: (username, tplId) => dbFunctions.updateLeadLastFollowup(username, tplId)
  };
 
