@@ -182,6 +182,8 @@ async function selectLead(username) {
              }
         }
         
+        document.getElementById('fieldStep').value = lead.conversation_step || 0;
+        
         document.getElementById('fieldProfileUrl').value = lead.profile_url || '';
         document.getElementById('linkProfile').href = lead.profile_url || `https://instagram.com/${lead.username}`;
         
@@ -242,6 +244,7 @@ function resetFields() {
     document.getElementById('fieldSource').value = '';
     document.getElementById('fieldComment').value = '';
     document.getElementById('fieldPostUrl').value = '';
+    document.getElementById('fieldStep').value = '';
     
     document.getElementById('linkPost').style.opacity = '0.5';
     document.getElementById('linkPost').style.pointerEvents = 'none';
@@ -393,3 +396,34 @@ window.onclick = (event) => {
         closeAddLeadModal();
     }
 };
+
+// Save Step Logic
+document.getElementById('btnSaveStep').addEventListener('click', async () => {
+    if (!currentLead) return;
+    
+    const newStep = parseInt(document.getElementById('fieldStep').value);
+    
+    try {
+        const res = await fetch(`/api/leads/${currentLead.username}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_step: newStep })
+        });
+        
+        if (res.ok) {
+            const btn = document.getElementById('btnSaveStep');
+            const originalText = btn.textContent;
+            btn.textContent = 'Saved!';
+            btn.style.background = '#238636'; 
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = 'var(--accent)';
+            }, 2000);
+        } else {
+            alert('Failed to save step.');
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Network error while saving step.');
+    }
+});

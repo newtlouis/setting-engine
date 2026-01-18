@@ -282,6 +282,11 @@ async function loadLeads(filter) {
                     </div>
                 </td>
                 <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                <td>
+                    <div style="font-weight: 700; color: var(--accent); text-align: center;">
+                        ${lead.conversation_step || 0}
+                    </div>
+                </td>
                 <td><span class="badge ${typeBadgeClass}">${(lead.lead_type || 'cold').toUpperCase()}</span></td>
                 <td>
                     <div style="font-size: 12px; color: var(--text-secondary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${lead.lead_source || 'Unknown'}">

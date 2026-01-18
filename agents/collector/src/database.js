@@ -170,6 +170,19 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     if (!leadsColumns.some(col => col.name === 'conversation_step')) {
       console.log('🔄 Migrating: Adding conversation_step to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN conversation_step INTEGER DEFAULT 0`);
+      
+      // Data Migration: Initialize state for existing contacted leads
+      console.log('🔄 Migrating: Initializing conversation_step for existing leads...');
+      db.exec(`
+        UPDATE leads 
+        SET conversation_step = CASE 
+          WHEN total_messages_received > 0 THEN 3 -- Déjà en discussion
+          WHEN lead_source IN ('follower_outreach', 'post_like', 'post_comment') THEN 2
+          ELSE 1 
+        END
+        WHERE conversation_step = 0 
+          AND (status != 'new' OR total_messages_sent > 0)
+      `);
     }
 
     // Ensure composite unique index exists (Crucial for UPSERT)

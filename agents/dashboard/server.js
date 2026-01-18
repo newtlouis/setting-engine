@@ -102,7 +102,7 @@ app.get('/api/leads', (req, res) => {
             SELECT id, username,
                    engagement_score, 
                    status, warmth, booking_status,
-                   lead_source, lead_type, bio, account_id,
+                   lead_source, lead_type, bio, account_id, conversation_step,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE is_ignored = 0
@@ -221,7 +221,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored', 'full_name'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored', 'full_name', 'conversation_step'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {
