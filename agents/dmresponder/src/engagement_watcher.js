@@ -255,7 +255,8 @@ export async function runEngagementWatcher(options = {}) {
                         full_name: metadata.fullName,
                         bio: metadata.bio,
                         lead_source: lead.source,
-                        dm_url: dmResult.dmUrl
+                        dm_url: dmResult.dmUrl,
+                        conversation_step: 2
                     });
                     await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
                     preparedCount++;

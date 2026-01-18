@@ -75,6 +75,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     if (leadContext.biography) contextDescription += `- Bio: ${leadContext.biography}\n`;
     if (leadContext.pain_points) contextDescription += `- Problèmes identifiés: ${leadContext.pain_points}\n`;
     if (leadContext.goals) contextDescription += `- Objectifs: ${leadContext.goals}\n`;
+    if (leadContext.conversation_step) contextDescription += `- Étape actuelle (1-6): ${leadContext.conversation_step}\n`;
     if (leadContext.notes) contextDescription += `- Notes: ${leadContext.notes}\n`;
   }
 

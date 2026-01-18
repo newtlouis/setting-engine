@@ -408,12 +408,14 @@ export async function runOutreach(options = {}) {
                           dm_url = ?,
                           full_name = COALESCE(?, full_name),
                           bio = COALESCE(?, bio),
+                          conversation_step = COALESCE(?, conversation_step),
                           updated_at = datetime('now')
                         WHERE username = ?
                       `).run(
                         result.dmUrl || null, 
                         result.fullName || null,
                         result.steps.find(s => s.step === 'scrape_profile')?.bio || null,
+                        1, // initial conversation_step
                         result.username
                       );
                 } else if (result.skipped) {

@@ -70,6 +70,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       conversation_stage TEXT,
       is_ignored INTEGER DEFAULT 0,
       pain_points TEXT,  -- JSON array
+      conversation_step INTEGER DEFAULT 0,
       notes TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -164,6 +165,11 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     if (!leadsColumns.some(col => col.name === 'last_contact_at')) {
       console.log('🔄 Migrating: Adding last_contact_at to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN last_contact_at TEXT`);
+    }
+
+    if (!leadsColumns.some(col => col.name === 'conversation_step')) {
+      console.log('🔄 Migrating: Adding conversation_step to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN conversation_step INTEGER DEFAULT 0`);
     }
 
     // Ensure composite unique index exists (Crucial for UPSERT)
@@ -316,9 +322,9 @@ export function saveLeads(leadsData) {
   // Prepare bulk insert statement
   const insert = db.prepare(`
     INSERT INTO leads (
-      username, profile_url, lead_source, lead_type, account_id, updated_at
+      username, profile_url, lead_source, lead_type, account_id, conversation_step, updated_at
     ) VALUES (
-      @username, @profile_url, @lead_source, @lead_type, @account_id, datetime('now')
+      @username, @profile_url, @lead_source, @lead_type, @account_id, @conversation_step, datetime('now')
     )
     ON CONFLICT(username, account_id) DO UPDATE SET
       updated_at = datetime('now')
@@ -357,7 +363,8 @@ export function saveLeads(leadsData) {
           profile_url: lead.profileUrl || `https://instagram.com/${lead.username}`,
           lead_source: lead.source || null, // Allow passing source
           lead_type: lead.type || 'cold',    // Default to cold
-          account_id: lead.account_id || null
+          account_id: lead.account_id || null,
+          conversation_step: lead.conversation_step || 0
         });
         
         // Get lead ID
@@ -543,11 +550,12 @@ export function markLeadFailed(username, reason) {
  */
 function upsertLead(lead) {
   const stmt = db.prepare(`
-    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, updated_at)
-    VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, datetime('now'))
+    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, conversation_step, updated_at)
+    VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, @conversation_step, datetime('now'))
     ON CONFLICT(username, account_id) DO UPDATE SET 
       updated_at = datetime('now'),
-      lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source)
+      lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source),
+      conversation_step = COALESCE(NULLIF(@conversation_step, 0), conversation_step)
     RETURNING *
   `);
   
@@ -556,7 +564,8 @@ function upsertLead(lead) {
     profile_url: lead.profile_url || `https://instagram.com/${lead.username}`,
     lead_source: lead.lead_source || null,
     lead_type: lead.lead_type || 'cold',
-    account_id: lead.account_id || null
+    account_id: lead.account_id || null,
+    conversation_step: lead.conversation_step || 0
   });
 }
 
