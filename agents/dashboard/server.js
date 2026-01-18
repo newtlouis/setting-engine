@@ -82,6 +82,7 @@ app.get('/api/stats', (req, res) => {
             conversation: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation') AND (booking_status IS NULL OR booking_status = '') AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
             confirm_bookings: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
             booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            not_interested: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status='not_interested' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
             failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c
         };
         res.json(stats);
@@ -123,6 +124,8 @@ app.get('/api/leads', (req, res) => {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
                  sql += " AND booking_status = 'completed'";
+            } else if (status === 'not_interested') {
+                 sql += " AND status = 'not_interested'";
             } else if (status === 'failed') {
                  sql += " AND status = 'failed'";
             } else {

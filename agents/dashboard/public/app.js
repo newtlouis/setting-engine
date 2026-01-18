@@ -177,6 +177,7 @@ async function loadLeads(filter) {
             (filter === 'conversation' && btn.textContent === 'Conversation') ||
             (filter === 'confirm_bookings' && btn.textContent === 'Confirm Bookings') ||
             (filter === 'booked' && btn.textContent === 'Booked') ||
+            (filter === 'not_interested' && btn.textContent === 'Not Interested') ||
             (filter === 'failed' && btn.textContent === 'Failed')) {
             btn.classList.add('active');
         }
@@ -238,6 +239,9 @@ async function loadLeads(filter) {
             } else if (lead.status === 'new') {
                 badgeClass = 'badge-neutral';
                 statusText = 'New';
+            } else if (lead.status === 'not_interested') {
+                badgeClass = 'badge-danger';
+                statusText = 'Not Interested';
             } else if (lead.status === 'failed_outreach') {
                 badgeClass = 'badge-danger'; 
                 statusText = 'Failed';
