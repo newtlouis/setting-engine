@@ -160,12 +160,11 @@ async function loadStats() {
         document.getElementById('stat-booked').textContent = data.booked;
 
         // Step Breakdown (Funnel)
-        if (data.step_breakdown) {
-            for (let i = 1; i <= 6; i++) {
-                const count = data.step_breakdown[`step${i}`] || 0;
-                const el = document.getElementById(`funnel-step-${i}`);
-                if (el) el.textContent = count;
-            }
+        // Update funnel steps 1-5
+        for (let i = 1; i <= 5; i++) {
+            const count = data.step_breakdown[`step${i}`] || 0;
+            const el = document.getElementById(`funnel-step-${i}`);
+            if (el) el.textContent = count;
         }
     } catch (e) {
         console.error('Stats load error', e);

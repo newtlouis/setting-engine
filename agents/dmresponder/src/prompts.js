@@ -65,11 +65,6 @@ Une fois le problème compris :
 Si elle a partagé son objectif :
 - "C’est déjà une belle prise de conscience 💫 A la limite ce que je peux te proposer, c'est de prendre 30 minutes ensemble cette semaine pour faire le point sur ta situation et t'apporter des pistes 🌼 Tu serais dispo ces prochains jours pour en discuter ensemble ?"
 
-➡️ **ÉTAPE 6 : Relances**
-- **Relance 1 (2-3 jours sans réponse)** : "Coucou [Prénom] 🌸 Je me permets de te relancer tout doucement — parfois les messages se perdent dans la boîte Instagram 😅 Prends ton temps pour répondre bien sûr, je voulais juste m’assurer que tu l’avais bien vu 🌷"
-- **Relance 2 (Pour reprendre)** : "Hello [Prénom] 💫 J’espère que ta semaine se passe bien 🌺 Je repensais à notre échange... Tu as eu un peu de temps pour y repenser ? 💛"
-- **Relance 3 (Pour l'appel)** : "Hello [Prénom] 🌷 Tu veux qu’on regarde ensemble un moment pour ton petit appel de 30 min cette semaine ? J’ai encore quelques créneaux, dis-moi ce qui t’arrange le mieux 🌸"
-
 **KNOWLEDGE BASE (SCÉNARIOS & RÉPONSES TYPES) :**
 
 💡 **1. GESTION DES OBJECTIONS (Si elle hésite pour l'appel)**
