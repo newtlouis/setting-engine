@@ -175,10 +175,10 @@ export async function runFollowerWatcher(options = {}) {
             const username = follower.username;
             console.log(`\n--- Checking: @${username} ---`);
             
-            // 4. Check if already in DB
+            // 4. Check if already in DB (Avoid redundant scraping/evaluation)
             const existingLead = await getLeadWithContext(username);
-            if (existingLead && (existingLead.status === 'conversation' || existingLead.status === 'contacted' || existingLead.status === 'outreach')) {
-                console.log(`   ⏭️ @${username} already contacted or in conversation. Skipping.`);
+            if (existingLead) {
+                console.log(`   ⏭️ @${username} already in database (status: ${existingLead.status}). Skipping.`);
                 continue;
             }
             
@@ -243,32 +243,39 @@ export async function runFollowerWatcher(options = {}) {
                 continue;
             }
             
-            const dmTab = dmResult.tab;
-            const history = dmResult.scrapedMessages || [];
-            
-            if (history.length > 0) {
-                console.log(`   ⚠️ Existing conversation history found (${history.length} msgs). Skipping outreach.`);
-                await dmTab.close().catch(() => {});
-                continue;
+            if (dmResult.success && dmResult.scrapedMessages.length === 0) {
+                // 9. Type & Register
+                await typeInOpenTab(dmTab, welcomeMessage);
+                registerOpenTab(username, dmTab, welcomeMessage);
+                
+                // 10. Sync DB
+                await fullUpsertLead(username, account.id, {
+                    status: 'outreach',
+                    full_name: metadata.fullName,
+                    bio: metadata.bio,
+                    lead_source: 'follower_outreach',
+                    dm_url: dmResult.dmUrl,
+                    conversation_step: 1
+                });
+    
+                await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach', account.id);
+                
+                processedCount++;
+            } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
+                console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
+                
+                // Register as known contact with context
+                await fullUpsertLead(username, account.id, {
+                    status: 'known_contact',
+                    full_name: metadata.fullName,
+                    bio: metadata.bio,
+                    lead_source: 'follower_outreach',
+                    dm_url: dmResult.dmUrl,
+                    notes: `Discussion existante détectée (${dmResult.scrapedMessages.length} messages).`
+                });
+                
+                if (dmTab) await dmTab.close().catch(() => {});
             }
-            
-            // 9. Type & Register
-            await typeInOpenTab(dmTab, welcomeMessage);
-            registerOpenTab(username, dmTab, welcomeMessage);
-            
-            // 10. Sync DB
-            await fullUpsertLead(username, account.id, {
-                status: 'outreach',
-                full_name: metadata.fullName,
-                bio: metadata.bio,
-                lead_source: 'follower_outreach',
-                dm_url: dmResult.dmUrl,
-                conversation_step: 1
-            });
-
-            await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach', account.id);
-            
-            processedCount++;
             
             // Small break between profiles
             await new Promise(r => setTimeout(r, 3000));

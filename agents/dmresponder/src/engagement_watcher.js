@@ -195,9 +195,10 @@ export async function runEngagementWatcher(options = {}) {
             for (const lead of uniqueLeads.slice(0, CONFIG.MAX_LEADS_PER_POST)) {
                 const username = lead.username;
                 
-                // 4. Check if already in DB
+                // 4. Check if already in DB (Avoid redundant scraping/evaluation)
                 const existingLead = await getLeadWithContext(username);
-                if (existingLead && ['conversation', 'contacted', 'outreach'].includes(existingLead.status)) {
+                if (existingLead) {
+                    console.log(`   ⏭️ @${username} already in database (status: ${existingLead.status}). Skipping.`);
                     continue;
                 }
                 
@@ -260,6 +261,20 @@ export async function runEngagementWatcher(options = {}) {
                     });
                     await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
                     preparedCount++;
+                } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
+                    console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
+                    
+                    // Register as known contact with context
+                    await fullUpsertLead(username, account.id, {
+                        status: 'known_contact',
+                        full_name: metadata.fullName,
+                        bio: metadata.bio,
+                        lead_source: lead.source,
+                        dm_url: dmResult.dmUrl,
+                        notes: `Discussion existante détectée (${dmResult.scrapedMessages.length} messages).`
+                    });
+                    
+                    if (dmResult.tab) await dmResult.tab.close().catch(() => {});
                 } else if (dmResult.tab) {
                     await dmResult.tab.close().catch(() => {});
                 }
