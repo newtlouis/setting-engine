@@ -170,20 +170,20 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     if (!leadsColumns.some(col => col.name === 'conversation_step')) {
       console.log('🔄 Migrating: Adding conversation_step to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN conversation_step INTEGER DEFAULT 0`);
-      
-      // Data Migration: Initialize state for existing contacted leads
-      console.log('🔄 Migrating: Initializing conversation_step for existing leads...');
-      db.exec(`
-        UPDATE leads 
-        SET conversation_step = CASE 
-          WHEN total_messages_received > 0 THEN 3 -- Déjà en discussion
-          WHEN lead_source IN ('follower_outreach', 'post_like', 'post_comment') THEN 2
-          ELSE 1 
-        END
-        WHERE conversation_step = 0 
-          AND (status != 'new' OR total_messages_sent > 0)
-      `);
     }
+
+    // Re-sync distribution based on message counts (Step 1: Sent > 0, Step 2: Recv = 1, Step 3: Recv > 1)
+    console.log('🔄 Migrating: Re-syncing conversation_step distribution...');
+    db.exec(`
+      UPDATE leads 
+      SET conversation_step = CASE 
+        WHEN total_messages_received > 1 THEN 3
+        WHEN total_messages_received = 1 THEN 2
+        WHEN total_messages_sent > 0 THEN 1
+        ELSE 0 
+      END
+      WHERE conversation_step <= 3
+    `);
 
     // Ensure composite unique index exists (Crucial for UPSERT)
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_username_account_unique ON leads(username, account_id)`);
@@ -795,6 +795,7 @@ export function addConversationMessage(leadId, role, messageText, messageType = 
     db.prepare(`
       UPDATE leads SET 
         total_messages_sent = total_messages_sent + 1,
+        conversation_step = CASE WHEN conversation_step = 0 THEN 1 ELSE conversation_step END,
         last_contact_at = datetime('now'),
         updated_at = datetime('now')
       WHERE id = ?
@@ -803,6 +804,11 @@ export function addConversationMessage(leadId, role, messageText, messageType = 
     db.prepare(`
       UPDATE leads SET 
         total_messages_received = total_messages_received + 1,
+        conversation_step = CASE 
+          WHEN (total_messages_received + 1) = 1 AND conversation_step < 2 THEN 2
+          WHEN (total_messages_received + 1) > 1 AND conversation_step < 3 THEN 3
+          ELSE conversation_step
+        END,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(leadId);
@@ -878,10 +884,10 @@ export function fullUpsertLead(username, account_id, data = {}) {
   const stmt = db.prepare(`
     INSERT INTO leads (
       username, account_id, profile_url, status, 
-      full_name, bio, dm_url, lead_source, notes, updated_at
+      full_name, bio, dm_url, lead_source, conversation_step, notes, updated_at
     ) VALUES (
       @username, @account_id, @profile_url, @status,
-      @full_name, @bio, @dm_url, @lead_source, @notes, datetime('now')
+      @full_name, @bio, @dm_url, @lead_source, @conversation_step, @notes, datetime('now')
     )
     ON CONFLICT(username, account_id) DO UPDATE SET
       status = COALESCE(@status, status),
@@ -889,6 +895,7 @@ export function fullUpsertLead(username, account_id, data = {}) {
       bio = COALESCE(@bio, bio),
       dm_url = COALESCE(@dm_url, dm_url),
       lead_source = COALESCE(lead_source, @lead_source),
+      conversation_step = COALESCE(NULLIF(@conversation_step, 0), conversation_step),
       notes = COALESCE(@notes, notes),
       updated_at = datetime('now')
     RETURNING *
@@ -903,6 +910,7 @@ export function fullUpsertLead(username, account_id, data = {}) {
     bio: data.bio || null,
     dm_url: data.dm_url || null,
     lead_source: data.lead_source || null,
+    conversation_step: data.conversation_step || 0,
     notes: data.notes || null
   });
 }
