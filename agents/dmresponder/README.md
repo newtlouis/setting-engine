@@ -123,22 +123,40 @@ Options:
   --help                      Display help
 ```
 
-### Cron Watcher (Automated Polling)
-
-Once the Outreach agent saves DM URLs into the shared database/Excel file, you can let the DM Responder check for new replies automatically.
-
-```
-# Run once (ideal for a cron job every 5 minutes)
-node bin/cron.js --limit 3 --statuses message_ready,awaiting_reply
-
-# Or via npm
-npm run cron -- --limit 3
-```
-
-- Requires `INSTAGRAM_USERNAME` and `INSTAGRAM_PASSWORD` in `.env` so the watcher can log in headlessly.
-- Headless mode is default; pass `--show-browser` to watch the automation.
 - Suggestions are saved as JSON files under `output/suggestions/` (configurable via `--output-dir`).
 - Each processed thread updates the `dm_threads` table with the latest status plus metadata (last check, last suggestion path), so other agents or dashboards can read the same source of truth.
+
+---
+
+### 4b. Follower Watcher (New Follower Outreach) ⭐ NOUVEAU
+
+Monitors new Instagram followers and initiates personalized outreach messages.
+
+```bash
+# Scan today's new followers
+npm run followers -- --profile my_account
+
+# Scan this week's followers (includes scrolling)
+npm run followers -- --profile my_account --track-week
+```
+
+- **Database Integration**: Automatically creates leads in the database with `outreach` status.
+- **AI Personalization**: Extracts names from bios and generates friendly welcomes.
+- **Configuration**: Uses `follower_template` from `melanie.config.js`.
+
+---
+
+### 4c. Follow-up Agent ⭐ NOUVEAU
+
+Identifies leads who haven't replied to your last message and sends strategic follow-ups.
+
+```bash
+npm run followup -- --profile my_account
+```
+
+- **Timing**: Defaults to 48h after the last message.
+- **Context-Aware**: Generates follow-ups based on the conversation stage.
+- **Limit**: Set `--limit` to control daily outreach volume.
 
 ## 📊 Input Format
 

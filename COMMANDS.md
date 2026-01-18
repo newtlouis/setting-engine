@@ -13,7 +13,8 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | **Prospector** | `npm run prospect -- [options]` | ⭐ **Nouveau**. Pipeline unifié (Scrape + Qualification + Outreach). |
 | **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
 | **Inbox Responder** | `npm run respond:inbox` | Scanne la boîte de réception pour les nouveaux messages. |
-| **Follow-up** | `npm run reply:followup -- [options]` | ⭐ **Nouveau**. Relance les leads silencieux (> 2 jours). |
+| **Follower Outreach** | `npm run respond:followers` | ⭐ **Nouveau**. Souhaite la bienvenue aux nouveaux abonnés. |
+| **Follow-up** | `npm run reply:followup` | ⭐ **Nouveau**. Relance les leads silencieux (> 2 jours). |
 | **Open Session** | `npm run open:session <profile>` | Ouvre Instagram manuellement pour un profil spécifique. |
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
@@ -190,6 +191,48 @@ npm run reply:auto -- --profile mon_compte
 - `--conversation-only` : **Nouveau**. Filtre uniquement les leads en statut `conversation` (ceux qui ont répondu).
 - `--outreach-only` : **Nouveau**. Filtre uniquement les leads en statut `outreach` (ceux qui n'ont pas encore répondu).
 - `--limit <nombre>` : Augmente le nombre maximum de leads à parcourir (défaut: 1000).
+
+---
+
+### 4b. Follower Outreach (Accueil des nouveaux abonnés) ⭐ NOUVEAU
+*Alias racine : `npm run respond:followers --`*
+
+Scanne les notifications pour identifier les nouveaux abonnés et leur envoyer un message de bienvenue personnalisé (si configuré dans `melanie.config.js`).
+
+**Exemples :**
+```bash
+# Scanner les abonnés ultra-récents (Aujourd'hui)
+npm run respond:followers -- --profile melanie
+
+# Scanner aussi ceux de la semaine (plus lent, nécessite du scroll)
+npm run respond:followers -- --profile melanie --track-week
+
+# Voir ce qui serait fait sans envoyer (Simulation)
+npm run respond:followers -- --profile melanie --dry-run
+```
+
+**Options :**
+- `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
+- `-w, --track-week` : Scanne aussi la section "Cette semaine" dans les notifications.
+- `-d, --dry-run` : Analyse les profils mais n'envoie pas de message.
+- `--show-browser` : Affiche la fenêtre (défaut: true).
+
+---
+
+### 4c. Follow-up Agent (Relances automatiques) ⭐ NOUVEAU
+*Alias racine : `npm run reply:followup --`*
+
+Identifie les leads qui ont reçu un message mais n'ont pas répondu depuis plus de 2 jours (48h). Envoie une relance basée sur le contexte et les étapes de la conversation.
+
+**Exemples :**
+```bash
+# Lancer les relances pour un profil
+npm run reply:followup -- --profile melanie
+```
+
+**Options :**
+- `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
+- `--limit <n>` : Limite le nombre de relances (prévention spam).
 
 ---
 

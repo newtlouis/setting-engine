@@ -270,19 +270,16 @@ try {
 ]
 ```
 
-### response.json
+### 3. DM Responder Agent
 
-**Structure**:
-```json
-{
-  "next_message": "string",
-  "conversation_stage": "string",
-  "message_type": "string",
-  "reasoning": "string",
-  "alternative_approaches": ["string"],
-  "next_steps": ["string"]
-}
-```
+**Purpose**: Manage ongoing conversations and initiate contact with new followers.
+
+#### Features
+- **Conversation State Detection**: Automatically tracks the stage of the lead.
+- **Inbox Scanner**: Checks for new unread messages and suggests replies.
+- **Follower Watcher (New)**: Welcomes new followers via notifications.
+- **Follow-up Agent (New)**: Re-engages leads who stopped replying after 48h.
+- **AI Name Extraction**: Uses LLM to find real names in bios for better personalization.
 
 ---
 

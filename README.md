@@ -27,8 +27,10 @@ Identifies top prospects and sends personalized first messages.
 - ✅ **Output**: Updates lead status, logs sent messages
 
 ### 3. **DM Responder Agent** (Conversation AI)
-Generates contextual follow-up messages for ongoing conversations.
+Generates contextual follow-up messages for ongoing conversations and handles new follower outreach.
 - ✅ Analyzes conversation history
+- ✅ **New Follower Outreach**: Scans notifications to welcome new followers
+- ✅ **Follow-up System**: Re-engages leads who stopped responding (> 2 days)
 - ✅ Suggests empathetic, qualified responses
 - ✅ Handles objections and value propositions
 - ✅ **Output**: Suggests replies, tracks conversation state
@@ -72,6 +74,12 @@ npm run respond:inbox -- --profile fitness_coach
 
 # Répondre à toutes les conversations actives (Mode URL)
 npm run reply -- --profile fitness_coach
+
+# Welcome new followers (Follower Outreach)
+npm run respond:followers -- --profile fitness_coach
+
+# Re-engage leads who stopped responding (Follow-ups)
+npm run reply:followup -- --profile fitness_coach
 
 # Ouvrir une session manuelle pour se connecter
 npm run open:session fitness_coach
