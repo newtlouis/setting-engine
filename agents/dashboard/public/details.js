@@ -117,8 +117,8 @@ async function searchLeads(query) {
                 const div = document.createElement('div');
                 div.className = 'search-result-item';
                 div.innerHTML = `
-                    <div style="font-weight: 600;">@${lead.username}</div>
-                    <div style="font-size: 11px; color: #8b949e;">${lead.status} • ${lead.lead_type || 'cold'}</div>
+                    <div style="font-weight: 600;">${lead.full_name ? lead.full_name : '@' + lead.username}</div>
+                    <div style="font-size: 11px; color: #8b949e;">${lead.full_name ? '@' + lead.username + ' • ' : ''}${lead.status} • ${lead.lead_type || 'cold'}</div>
                 `;
                 div.onclick = () => selectLead(lead.username);
                 searchResults.appendChild(div);

@@ -107,7 +107,7 @@ app.get('/api/leads', (req, res) => {
         
         // Build dynamic query
         let sql = `
-            SELECT id, username,
+            SELECT id, username, full_name,
                    engagement_score, 
                    status, warmth, booking_status,
                    lead_source, lead_type, bio, account_id, conversation_step,
@@ -149,8 +149,8 @@ app.get('/api/leads', (req, res) => {
         }
         
         if (search) {
-             sql += " AND username LIKE ?";
-             params.push(`%${search}%`);
+             sql += " AND (username LIKE ? OR full_name LIKE ?)";
+             params.push(`%${search}%`, `%${search}%`);
         }
 
         sql += ` ORDER BY engagement_score DESC LIMIT ? OFFSET ?`;
