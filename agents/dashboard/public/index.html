@@ -481,25 +481,25 @@
         <!-- Stats -->
         <div class="stats-grid" id="statsGrid">
 
-            <div class="stat-card" onclick="loadLeads('new')">
-                <div class="stat-value" id="stat-new" style="color: var(--accent);">-</div>
-                <div class="stat-label">To contact</div>
+            <div class="stat-card" onclick="loadLeads('contacted_total')">
+                <div class="stat-value" id="stat-total_contacted" style="color: var(--warning);">-</div>
+                <div class="stat-label">Total Contactés</div>
             </div>
-            <div class="stat-card" onclick="loadLeads('contacted')">
-                <div class="stat-value" id="stat-contacted" style="color: var(--warning);">-</div>
-                <div class="stat-label">Contact</div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-reply_rate" style="color: var(--accent);">-</div>
+                <div class="stat-label">Taux de Réponse</div>
             </div>
             <div class="stat-card" onclick="loadLeads('conversation')">
                 <div class="stat-value" id="stat-conversation" style="color: #a371f7;">-</div>
                 <div class="stat-label">Conversation</div>
             </div>
-            <div class="stat-card" onclick="loadLeads('confirm_bookings')">
-                <div class="stat-value" id="stat-confirm_bookings" style="color: var(--success);">-</div>
-                <div class="stat-label">Confirm Booking</div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-booking_rate" style="color: var(--success);">-</div>
+                <div class="stat-label">Taux de RDV</div>
             </div>
             <div class="stat-card" onclick="loadLeads('booked')">
                 <div class="stat-value" id="stat-booked" style="color: var(--success);">-</div>
-                <div class="stat-label">Booked</div>
+                <div class="stat-label">RDV Effectués</div>
             </div>
 
         </div>

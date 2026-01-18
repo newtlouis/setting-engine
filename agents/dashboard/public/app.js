@@ -153,10 +153,10 @@ async function loadStats() {
         const res = await fetch('/api/stats' + params);
         const data = await res.json();
         
-        document.getElementById('stat-new').textContent = data.new;
-        document.getElementById('stat-contacted').textContent = data.contacted;
+        document.getElementById('stat-total_contacted').textContent = data.total_contacted;
+        document.getElementById('stat-reply_rate').textContent = data.reply_rate + '%';
         document.getElementById('stat-conversation').textContent = data.conversation;
-        document.getElementById('stat-confirm_bookings').textContent = data.confirm_bookings;
+        document.getElementById('stat-booking_rate').textContent = data.booking_rate + '%';
         document.getElementById('stat-booked').textContent = data.booked;
 
         // Step Breakdown (Funnel)

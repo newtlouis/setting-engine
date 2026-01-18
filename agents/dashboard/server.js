@@ -75,15 +75,17 @@ app.get('/api/stats', (req, res) => {
         const accountFilter = account_id ? ' AND account_id = ?' : '';
         const accountParam = account_id ? [parseInt(account_id)] : [];
         
+        const totalContacted = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+        const replied = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND total_messages_received > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+        const booked = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+        const conversation = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation') AND (booking_status IS NULL OR booking_status = '') AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+
         const stats = {
-            total: db.prepare('SELECT COUNT(*) as c FROM leads WHERE is_ignored = 0' + accountFilter).get(...accountParam).c,
-            new: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status='new' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            contacted: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('outreach') AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            conversation: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation') AND (booking_status IS NULL OR booking_status = '') AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            confirm_bookings: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
-            not_interested: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status='not_interested' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            total_contacted: totalContacted,
+            reply_rate: totalContacted > 0 ? ((replied / totalContacted) * 100).toFixed(1) : 0,
+            conversation: conversation,
+            booked: booked,
+            booking_rate: totalContacted > 0 ? ((booked / totalContacted) * 100).toFixed(1) : 0,
             step_breakdown: {
                 step1: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 1 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
                 step2: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 2 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
@@ -129,8 +131,8 @@ app.get('/api/leads', (req, res) => {
         }
 
         if (status && status !== 'all') {
-            if (status === 'contacted') {
-                sql += " AND status = 'outreach'";
+            if (status === 'contacted_total') {
+                sql += " AND total_messages_sent > 0";
             } else if (status === 'conversation') {
                 sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status = '')";
             } else if (status === 'confirm_bookings') {
