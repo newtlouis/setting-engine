@@ -14,6 +14,13 @@ let currentAccountId = null;
 document.addEventListener('DOMContentLoaded', async () => {
     await loadAccounts();
     await loadDefaultAccount();
+    
+    // Check for username in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const username = urlParams.get('username');
+    if (username) {
+        selectLead(username);
+    }
 });
 
 // ==========================================

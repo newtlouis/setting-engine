@@ -310,6 +310,10 @@ async function loadLeads(filter) {
                      <div style="display: flex; gap: 8px; align-items: center;">
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
                         ${actionButtons}
+                        <a href="/lead_details.html?username=${lead.username}" 
+                           class="btn-action-icon" 
+                           title="Lead Details" 
+                           style="background: rgba(88, 166, 255, 0.1); border-radius: 4px; padding: 4px; text-decoration: none; display: flex; align-items: center; justify-content: center;">🔍</a>
                         <button onclick="showIgnoreConfirm('${lead.username}')" 
                                 class="btn-action-icon" 
                                 title="Ignore Lead">🗑️</button>
