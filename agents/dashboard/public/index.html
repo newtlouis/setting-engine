@@ -374,7 +374,77 @@
 
         .btn-cancel:hover {
             color: var(--text-primary);
+            color: var(--text-primary);
             border-color: var(--text-secondary);
+        }
+
+        /* Funnel Layout */
+        .funnel-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .funnel-step {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .funnel-step:hover {
+            border-color: var(--accent);
+            background: #1c2128;
+            transform: translateY(-2px);
+        }
+
+        .funnel-step.inactive {
+            opacity: 0.5;
+        }
+
+        .funnel-step.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(88, 166, 255, 0.2);
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .funnel-step-num {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .funnel-step-val {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .funnel-step-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .funnel-arrow {
+            display: flex;
+            align-items: center;
+            color: var(--border);
+            font-size: 18px;
         }
     </style>
 </head>
@@ -432,6 +502,51 @@
                 <div class="stat-label">Booked</div>
             </div>
 
+        </div>
+
+        <!-- Workflow Funnel -->
+        <div style="margin-bottom: 32px;">
+            <h2
+                style="font-size: 16px; margin-bottom: 12px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                📊 Workflow Funnel (Conversation Progress)
+            </h2>
+            <div class="funnel-container" id="funnelContainer">
+                <div class="funnel-step" onclick="filterByStep(1)" id="step-1-card">
+                    <div class="funnel-step-num">Étape 1</div>
+                    <div class="funnel-step-val" id="funnel-step-1">-</div>
+                    <div class="funnel-step-label">Premier contact</div>
+                </div>
+                <div class="funnel-arrow">➜</div>
+                <div class="funnel-step" onclick="filterByStep(2)" id="step-2-card">
+                    <div class="funnel-step-num">Étape 2</div>
+                    <div class="funnel-step-val" id="funnel-step-2">-</div>
+                    <div class="funnel-step-label">Connexion</div>
+                </div>
+                <div class="funnel-arrow">➜</div>
+                <div class="funnel-step" onclick="filterByStep(3)" id="step-3-card">
+                    <div class="funnel-step-num">Étape 3</div>
+                    <div class="funnel-step-val" id="funnel-step-3">-</div>
+                    <div class="funnel-step-label">Exploration</div>
+                </div>
+                <div class="funnel-arrow">➜</div>
+                <div class="funnel-step" onclick="filterByStep(4)" id="step-4-card">
+                    <div class="funnel-step-num">Étape 4</div>
+                    <div class="funnel-step-val" id="funnel-step-4">-</div>
+                    <div class="funnel-step-label">Objectif</div>
+                </div>
+                <div class="funnel-arrow">➜</div>
+                <div class="funnel-step" onclick="filterByStep(5)" id="step-5-card">
+                    <div class="funnel-step-num">Étape 5</div>
+                    <div class="funnel-step-val" id="funnel-step-5">-</div>
+                    <div class="funnel-step-label">Appel</div>
+                </div>
+                <div class="funnel-arrow">➜</div>
+                <div class="funnel-step" onclick="filterByStep(6)" id="step-6-card">
+                    <div class="funnel-step-num">Étape 6</div>
+                    <div class="funnel-step-val" id="funnel-step-6">-</div>
+                    <div class="funnel-step-label">Relances</div>
+                </div>
+            </div>
         </div>
 
         <!-- Confirm Bookings Section (Always Visible if Bookings Exist) -->

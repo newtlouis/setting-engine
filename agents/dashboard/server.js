@@ -83,7 +83,15 @@ app.get('/api/stats', (req, res) => {
             confirm_bookings: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'pending' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
             booked: db.prepare("SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
             not_interested: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status='not_interested' AND is_ignored=0 ${accountFilter}`).get(...accountParam).c,
-            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c
+            failed: db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'failed_outreach' AND is_ignored = 0" + accountFilter).get(...accountParam).c,
+            step_breakdown: {
+                step1: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 1 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step2: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 2 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step3: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 3 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step4: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 4 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step5: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 5 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step6: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 6 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c
+            }
         };
         res.json(stats);
     } catch (err) {
@@ -94,7 +102,7 @@ app.get('/api/stats', (req, res) => {
 // GET /api/leads
 app.get('/api/leads', (req, res) => {
     try {
-        const { page = 1, limit = 50, status, search, account_id } = req.query;
+        const { page = 1, limit = 50, status, search, account_id, conversation_step } = req.query;
         const offset = (page - 1) * limit;
         
         // Build dynamic query
@@ -113,6 +121,12 @@ app.get('/api/leads', (req, res) => {
         if (account_id) {
             sql += ' AND account_id = ?';
             params.push(parseInt(account_id));
+        }
+        
+        // Step filter
+        if (conversation_step) {
+            sql += ' AND conversation_step = ?';
+            params.push(parseInt(conversation_step));
         }
 
         if (status && status !== 'all') {

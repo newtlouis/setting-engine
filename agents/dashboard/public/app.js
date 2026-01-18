@@ -2,6 +2,7 @@ let selectedLeads = new Set();
 let currentLeads = []; // Track currently visible leads for "Select All"
 let currentAccountId = null; // Selected account filter
 let currentFilter = 'new';
+let currentStepFilter = null; // New: track active step filter
 let searchTimeout = null;
 
 // Init
@@ -157,6 +158,15 @@ async function loadStats() {
         document.getElementById('stat-conversation').textContent = data.conversation;
         document.getElementById('stat-confirm_bookings').textContent = data.confirm_bookings;
         document.getElementById('stat-booked').textContent = data.booked;
+
+        // Step Breakdown (Funnel)
+        if (data.step_breakdown) {
+            for (let i = 1; i <= 6; i++) {
+                const count = data.step_breakdown[`step${i}`] || 0;
+                const el = document.getElementById(`funnel-step-${i}`);
+                if (el) el.textContent = count;
+            }
+        }
     } catch (e) {
         console.error('Stats load error', e);
     }
@@ -194,6 +204,9 @@ async function loadLeads(filter) {
         let url = `/api/leads?status=${filter}&limit=100`;
         if (currentAccountId) {
             url += `&account_id=${currentAccountId}`;
+        }
+        if (currentStepFilter) {
+            url += `&conversation_step=${currentStepFilter}`;
         }
         if (search) {
             url += `&search=${encodeURIComponent(search)}`;
@@ -452,3 +465,33 @@ window.onclick = (event) => {
         closeModal();
     }
 };
+
+// Funnel Filtering
+function filterByStep(step) {
+    if (currentStepFilter === step) {
+        currentStepFilter = null; // Toggle off if clicked again
+    } else {
+        currentStepFilter = step;
+        currentFilter = 'all'; // Default to 'all' status when filtering by step
+    }
+    
+    // Update UI highlights
+    document.querySelectorAll('.funnel-step').forEach(el => {
+        el.classList.remove('active');
+        if (currentStepFilter) {
+            el.classList.add('inactive');
+        } else {
+            el.classList.remove('inactive');
+        }
+    });
+    
+    if (currentStepFilter) {
+        const activeCard = document.getElementById(`step-${currentStepFilter}-card`);
+        if (activeCard) {
+            activeCard.classList.remove('inactive');
+            activeCard.classList.add('active');
+        }
+    }
+    
+    loadLeads(currentFilter);
+}
