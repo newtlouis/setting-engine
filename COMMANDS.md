@@ -14,6 +14,7 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
 | **Inbox Responder** | `npm run respond:inbox` | Scanne la boîte de réception pour les nouveaux messages. |
 | **Follower Outreach** | `npm run respond:followers` | ⭐ **Nouveau**. Souhaite la bienvenue aux nouveaux abonnés. |
+| **Engagement Watcher** | `npm run respond:engagement` | ⭐ **Nouveau**. Contacte ceux qui likent/commentent tes posts. |
 | **Follow-up** | `npm run reply:followup` | ⭐ **Nouveau**. Relance les leads silencieux (> 2 jours). |
 | **Open Session** | `npm run open:session <profile>` | Ouvre Instagram manuellement pour un profil spécifique. |
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
@@ -233,6 +234,34 @@ npm run reply:followup -- --profile melanie
 **Options :**
 - `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
 - `--limit <n>` : Limite le nombre de relances (prévention spam).
+
+---
+
+### 4d. Engagement Watcher (Likes & Commentaires) ⭐ NOUVEAU
+*Alias racine : `npm run respond:engagement --`*
+
+Scanne tes notifications pour trouver les personnes qui interagissent avec tes propres posts (likes et commentaires) et leur envoie un message personnalisé.
+
+**Exemples :**
+```bash
+# Lancer le scan des interactions récentes
+npm run respond:engagement -- profile melanie
+
+# Voir ce qui serait fait sans envoyer (Simulation)
+npm run respond:engagement -- --profile melanie --dry-run
+```
+
+**Workflow :**
+1. Scanne les notifications pour identifier les posts likés ou commentés.
+2. Se rend sur chaque post.
+3. Extrait la liste des personnes ayant liké et commenté.
+4. Qualifie chaque profil et prépare un message d'approche spécifique.
+
+**Options :**
+- `--profile <nom>` : **(Obligatoire)** Profil Instagram à utiliser.
+- `-w, --track-week` : Scanne aussi la section "Cette semaine" dans les notifications.
+- `-d, --dry-run` : Analyse mais n'envoie pas de message.
+- `--show-browser` : Affiche la fenêtre (défaut: true).
 
 ---
 

@@ -18,7 +18,9 @@
     "cron": "node bin/cron.js",
     "followup": "node bin/followup.js",
     "followers": "node bin/follower_watcher.js",
-    "followers:auto": "node bin/follower_watcher.js --show-browser"
+    "followers:auto": "node bin/follower_watcher.js --show-browser",
+    "engagement": "node bin/engagement_watcher.js",
+    "engagement:auto": "node bin/engagement_watcher.js --show-browser"
   },
   "keywords": [
     "instagram",

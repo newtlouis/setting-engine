@@ -840,8 +840,188 @@ export async function scrapeProfileMetadata(page, username) {
         }, username);
 
         return { success: true, ...metadata };
+        return { success: true, ...metadata };
     } catch (error) {
         console.error('   Error scraping profile metadata:', error.message);
         return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Scrape usernames of people who liked a post
+ * @param {Page} page - Playwright page object (post must be loaded)
+ * @returns {Promise<string[]>} Array of usernames
+ */
+export async function scrapePostLikers(page) {
+    try {
+        console.log('   Scraping likers...');
+        
+        // 1. Find and click the "likes" count button
+        // Strategy: Find the heart icon and look for its nearby count button
+        const clicked = await page.evaluate(async () => {
+            const findLikersButton = () => {
+                // Helper to check if a string is purely numeric (ignoring spaces/commas)
+                const isNumeric = (val) => {
+                    const cleaned = val.replace(/[\s,.]/g, '');
+                    return cleaned.length > 0 && /^\d+$/.test(cleaned);
+                };
+
+                // 1. Try to find the Like heart SVG/Icon
+                const heart = document.querySelector('svg[aria-label="J’aime"], svg[aria-label="Like"], svg title');
+                
+                // 2. Search for a button that contains ONLY a number nearby or in sections
+                // This handles the structure: <span role="button">12</span>
+                const allButtons = Array.from(document.querySelectorAll('[role="button"], [role="link"]'));
+                
+                // Try to find buttons that are JUST a number
+                const numericButtons = allButtons.filter(b => isNumeric(b.innerText.trim()));
+                
+                if (numericButtons.length > 0) {
+                    // If we have a heart, prefer a button close to it
+                    if (heart) {
+                        const heartBtn = heart.closest('[role="button"]');
+                        if (heartBtn) {
+                            let current = heartBtn;
+                            for (let i = 0; i < 4; i++) {
+                                const parent = current.parentElement;
+                                if (!parent) break;
+                                const nearby = numericButtons.find(nb => parent.contains(nb));
+                                if (nearby) return nearby;
+                                current = parent;
+                            }
+                        }
+                    }
+                    // Otherwise just take the first one that looks like a like count (usually early in the page/post)
+                    // We avoid buttons that are too small (like 0 or 1 might be something else) or too big if we want to be safe,
+                    // but usually the first numeric button in a post context is the likes.
+                    return numericButtons[0];
+                }
+
+                return null;
+            };
+
+            const btn = findLikersButton();
+            if (btn) {
+                btn.scrollIntoView();
+                btn.click();
+                return true;
+            }
+            return false;
+        });
+
+        if (clicked) {
+            await delay(2500, 3500);
+        } else {
+            // Final fallback: Use locator for known patterns or direct numeric button
+            const fallback = await page.locator('a[href*="/liked_by/"], span[role="button"]:has-text("likes"), span[role="button"]:has-text("j’aime")').first();
+            if (await fallback.count() > 0) {
+                await fallback.click();
+                await delay(2500, 3500);
+            } else {
+                // Try searching for any span/div with role="button" that has numeric text via Playwright locator
+                const numericFallback = page.locator('[role="button"]').filter({ hasText: /^\d+$/ }).first();
+                if (await numericFallback.count() > 0) {
+                    await numericFallback.click();
+                    await delay(2500, 3500);
+                } else {
+                    console.log('   ⚠️ Could not find likers button. Maybe 0 likes?');
+                    return [];
+                }
+            }
+        }
+
+        // 2. Extract from the modal
+        const likers = await page.evaluate(async () => {
+            const results = new Set();
+            // The modal container usually has role="dialog" or a specific class
+            const modal = document.querySelector('div[role="dialog"]') || document.querySelector('div.x1cy8zhl');
+            if (!modal) return [];
+
+            // Scroll modal to load more
+            const scroller = modal.querySelector('div[style*="overflow-y: auto"]') || modal;
+            for (let i = 0; i < 4; i++) {
+                scroller.scrollBy(0, 800);
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            // Target links with the specific structure from user
+            // <a class="... _a6hd" href="/username/">
+            const links = Array.from(modal.querySelectorAll('a[href^="/"]._a6hd, a[href^="/"][role="link"]'));
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                const username = href.replace(/\//g, '').split('?')[0];
+                // Exclude common IG paths
+                const blacklisted = ['explore', 'direct', 'reels', 'p', 'stories', 'accounts', 'emails'];
+                if (username && username.length > 2 && !blacklisted.includes(username)) {
+                    results.add(username);
+                }
+            });
+            return Array.from(results);
+        });
+
+        // Close modal
+        await page.keyboard.press('Escape');
+        await delay(500, 1000);
+
+        console.log(`   Found ${likers.length} likers.`);
+        return likers;
+    } catch (error) {
+        console.error('   Error scraping likers:', error.message);
+        return [];
+    }
+}
+
+/**
+ * Lightweight version of scrapePostComments for DM Responder
+ * @param {Page} page - Playwright page object (post must be loaded)
+ * @returns {Promise<Object[]>} Array of {username, text}
+ */
+export async function scrapePostComments(page) {
+    try {
+        console.log('   Scraping comments...');
+        
+        // Basic scroll to load comments
+        await page.evaluate(async () => {
+            window.scrollBy(0, 500);
+            await new Promise(r => setTimeout(r, 1000));
+        });
+
+        const comments = await page.evaluate(() => {
+            const results = [];
+            const seen = new Set();
+            
+            // Look for profile links and their accompanying text
+            // In the new DIV-only structure
+            const allDivs = Array.from(document.querySelectorAll('div'));
+            
+            allDivs.forEach(div => {
+                const link = div.querySelector('a[href^="/"]');
+                if (!link) return;
+                
+                const href = link.getAttribute('href');
+                const username = href.replace(/\//g, '').split('?')[0];
+                if (!username || ['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) return;
+
+                // Find text span in the same div or next sibling
+                const textSpan = div.querySelector('span[dir="auto"]');
+                if (textSpan) {
+                    const text = textSpan.innerText.trim();
+                    if (text && text !== username && text.length > 2) {
+                        const key = `${username}:${text}`;
+                        if (!seen.has(key)) {
+                            results.push({ username, text });
+                            seen.add(key);
+                        }
+                    }
+                }
+            });
+            return results;
+        });
+
+        console.log(`   Found ${comments.length} comments.`);
+        return comments;
+    } catch (error) {
+        console.error('   Error scraping comments:', error.message);
+        return [];
     }
 }

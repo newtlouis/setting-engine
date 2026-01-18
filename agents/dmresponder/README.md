@@ -158,6 +158,24 @@ npm run followup -- --profile my_account
 - **Context-Aware**: Generates follow-ups based on the conversation stage.
 - **Limit**: Set `--limit` to control daily outreach volume.
 
+---
+
+### 4d. Engagement Watcher (Likes & Commentaires) ⭐ NOUVEAU
+
+Contacte les personnes qui interagissent avec tes propres posts.
+
+```bash
+# Lancer le scan des interactions récentes (Nouveau, Aujourd'hui, Hier)
+npm run engagement -- --profile my_account
+
+# Inclure la section "Cette semaine" (avec scrolling)
+npm run engagement -- --profile my_account --track-week
+```
+
+- **Scan automatique** : Identifie les posts récents ayant des likes ou commentaires.
+- **Double Outreach** : Scanne à la fois la liste des "j'aime" et les commentaires pour trouver des leads.
+- **Dédoublonnage** : Vérifie automatiquement si le lead est déjà en base ou déjà contacté.
+
 ## 📊 Input Format
 
 ### conversation_history.json
