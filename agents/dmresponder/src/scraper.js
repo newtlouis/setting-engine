@@ -306,22 +306,90 @@ async function goToProfileAndOpenDM(page, profileUrl) {
     }
 
     // Find and click Contact button
-    const selectors = CONFIG.SELECTORS.CONTACT_BUTTON;
+    // ⚠️ CRITICAL START: Avoid clicking the nav bar "Message" icon by ensuring the button is inside the main content
+    const specificSelectors = [
+        'main header button:has-text("Message")',
+        'main header button:has-text("Contacter")',
+        'main div[role="button"]:has-text("Message")', 
+        'main div[role="button"]:has-text("Contacter")'
+    ];
     
-    for (const selector of selectors) {
-      const button = await page.$(selector).catch(() => null);
+    // Add generic fallback selectors but prioritize main content ones
+    const allSelectors = [...specificSelectors, ...CONFIG.SELECTORS.CONTACT_BUTTON];
+    
+    let clicked = false;
+    
+    for (const selector of allSelectors) {
+      // Ensure we are selecting things inside 'main' if possible to avoid nav bar
+      const finalSelector = selector.startsWith('main') ? selector : `main ${selector}`;
+      
+      const button = await page.$(finalSelector).catch(() => null);
       if (button) {
         const isVisible = await button.isVisible().catch(() => false);
         if (isVisible) {
-          console.log(`      Found: ${selector}`);
-          await button.click();
+          console.log(`      Found: ${finalSelector}`);
+          
+          await Promise.all([
+             page.waitForNavigation({ url: /\/direct\//, timeout: 5000 }).catch(() => null),
+             button.click()
+          ]);
+          
           await delay(2000, 3000);
-          return { success: true };
+          clicked = true;
+          break;
         }
       }
     }
     
-    return { success: false, error: 'no_contact_button' };
+    if (!clicked) {
+        // Fallback: Try searching for specific partial matches if semantic selectors fail
+        const fallback = await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+            const msgBtn = btns.find(b => {
+                const txt = b.innerText?.toLowerCase();
+                return (txt === 'message' || txt === 'contacter') && b.closest('main');
+            });
+            if (msgBtn) {
+                msgBtn.click();
+                return true;
+            }
+            return false;
+        });
+        
+        if (fallback) {
+             await delay(2500, 3500);
+             clicked = true;
+        }
+    }
+
+    if (!clicked) {
+        return { success: false, error: 'no_contact_button' };
+    }
+    
+    // ⚠️ CRITICAL CHECK: Verify we actually landed on a DM page OR opened a popup
+    const currentUrl = page.url();
+    
+    // Case 1: URL is a /direct/ page (Best Case)
+    if (currentUrl.includes('/direct/')) {
+        return { success: true };
+    }
+    
+    // Case 2: URL is still profile, but a "Message" popup opened bottom-right
+    // We check for the presence of a message input field
+    const messageInput = await page.$(CONFIG.SELECTORS.MESSAGE_INPUT.join(', ')).catch(() => null);
+    if (messageInput) {
+        const isVisible = await messageInput.isVisible().catch(() => false);
+        if (isVisible) {
+             console.log(`      ✅ Message popup detected (URL didn't change, but input is visible)`);
+             return { success: true, isPopup: true };
+        }
+    }
+
+    // Failure Case
+    console.warn(`      ❌ Clicked button but URL is not /direct/ and no popup found: ${currentUrl}`);
+    // It might be a "Contact" popup (email/phone). We should close it if so and fail.
+    await page.keyboard.press('Escape');
+    return { success: false, error: 'click_did_not_open_dm' };
     
   } catch (error) {
     return { success: false, error: error.message };
@@ -964,32 +1032,119 @@ export async function scrapePostLikers(page) {
             }
         }
 
-        // 2. Extract from the modal
+
+
+        // 2. Extract from the modal with human-like scrolling
         const likers = await page.evaluate(async () => {
             const results = new Set();
             // The modal container usually has role="dialog" or a specific class
-            const modal = document.querySelector('div[role="dialog"]') || document.querySelector('div.x1cy8zhl');
+            const modal = document.querySelector('div[role="dialog"]');
             if (!modal) return [];
 
-            // Scroll modal to load more
-            const scroller = modal.querySelector('div[style*="overflow-y: auto"]') || modal;
-            for (let i = 0; i < 4; i++) {
-                scroller.scrollBy(0, 800);
-                await new Promise(r => setTimeout(r, 1000));
+            // Find the scrollable area within the modal
+            // Robust strategy: Find the element that is actually scrollable (has content larger than view)
+            // and has overflow set.
+            const allDivs = Array.from(modal.querySelectorAll('div'));
+            
+            // 1. Prioritize element from user's HTML snippet style
+            let scroller = allDivs.find(el => el.getAttribute('style')?.includes('overflow: hidden auto'));
+            
+            if (!scroller) {
+                // 2. Find any element with scrollable content and explicit overflow style
+                scroller = allDivs.find(el => {
+                    const style = window.getComputedStyle(el);
+                    const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+                    const hasOverflow = el.scrollHeight > el.clientHeight;
+                    return isScrollable && hasOverflow;
+                });
             }
 
-            // Target links with the specific structure from user
-            // <a class="... _a6hd" href="/username/">
+            if (!scroller) {
+                 // 3. Fallback: Find largest scrollable element
+                 const scrollableCandidates = allDivs.filter(el => el.scrollHeight > el.clientHeight);
+                 if (scrollableCandidates.length > 0) {
+                     // Pick the one with the biggest scrollHeight (usually the main list)
+                     scroller = scrollableCandidates.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];
+                 } else {
+                     scroller = modal;
+                 }
+            }
+            
+            console.log(`      Debugging Scroller: Found element with scrollHeight=${scroller.scrollHeight}, clientHeight=${scroller.clientHeight}`);
+
+            // Helper for human delay
+            const randomDelay = (min, max) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
+
+            // Human-like scrolling loop
+            // Goal: Scroll enough to capture a good batch of leads, mimicking a user browsing
+            let previousHeight = 0;
+            let noChangeCount = 0;
+            const MAX_SCROLLS = 15; // Limit to avoid infinite loops, but enough for ~100+ likers
+
+            for (let i = 0; i < MAX_SCROLLS; i++) {
+                // Collect visible usernames BEFORE scrolling
+                const links = Array.from(modal.querySelectorAll('a[href^="/"]._a6hd, a[href^="/"][role="link"]'));
+                links.forEach(link => {
+                    const href = link.getAttribute('href');
+                    const username = href.replace(/\//g, '').split('?')[0];
+                    if (username && username.length > 2 && username !== 'explore' && username !== 'direct') {
+                        results.add(username);
+                    }
+                });
+
+                // Scroll logic - REVISED: Focus on robustness
+                // Try standard scroll first
+                if (scroller.scrollHeight > scroller.clientHeight) {
+                     // Try multiple ways to scroll
+                     const currentTop = scroller.scrollTop;
+                     const scrollAmount = 600 + Math.random() * 400; // Variable scroll amount
+                     scroller.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+                     
+                     // Helper: if JS scroll failed (scrollTop didn't change), try focusing and using keys
+                     // This often works better for dynamic lists
+                     /*
+                     if (scroller.scrollTop === currentTop) {
+                         scroller.focus();
+                         // We can't actually trigger real keyboard press from inside evaluate, 
+                         // but we can try to force scroll via scrollTo if scrollBy failed
+                         scroller.scrollTop += scrollAmount;
+                     }
+                     */
+                } else {
+                     // Fallback for when we picked the wrong scroller: try scrolling the modal itself
+                     modal.scrollBy({ top: 600, behavior: 'smooth' });
+                }
+
+                // Variable pause to read/load
+                await randomDelay(1000, 2500);
+
+                // Check if we hit bottom
+                const currentHeight = scroller.scrollHeight;
+                if (currentHeight === previousHeight) {
+                    noChangeCount++;
+                    if (noChangeCount >= 3) break; // Increased patience to 3
+                } else {
+                    noChangeCount = 0;
+                    previousHeight = currentHeight;
+                }
+                
+                // Occasional "micro-scroll" up/down to simulate reading/adjusting
+                if (Math.random() > 0.8) {
+                     scroller.scrollBy({ top: -100, behavior: 'smooth' });
+                     await randomDelay(500, 800);
+                }
+            }
+            
+            // Final collection pass
             const links = Array.from(modal.querySelectorAll('a[href^="/"]._a6hd, a[href^="/"][role="link"]'));
             links.forEach(link => {
                 const href = link.getAttribute('href');
                 const username = href.replace(/\//g, '').split('?')[0];
-                // Exclude common IG paths
-                const blacklisted = ['explore', 'direct', 'reels', 'p', 'stories', 'accounts', 'emails'];
-                if (username && username.length > 2 && !blacklisted.includes(username)) {
+                if (username && username.length > 2 && username !== 'explore' && username !== 'direct') {
                     results.add(username);
                 }
             });
+
             return Array.from(results);
         });
 
