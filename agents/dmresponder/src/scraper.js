@@ -381,26 +381,42 @@ async function typeMessageOnly(page, message) {
  */
 export async function scrapeConversationMessages(page) {
   try {
-    // Wait a bit for messages to load
-    await delay(1000, 1500);
+    // Wait a bit for messages to load - slightly longer to be safe
+    await delay(1500, 2500);
     
+    // Check for "Empty Folder" / "Say hi" state first
+    const isEmptyState = await page.evaluate(() => {
+        const main = document.querySelector('div[role="main"]');
+        if (!main) return false;
+        const text = main.innerText;
+        return text.includes('Say hi to') || text.includes('Envoyez un message à') || text.includes('No messages') || text.includes('Aucun message');
+    });
+
     const messages = await page.evaluate(() => {
       const result = [];
       
-      // Find all message containers using the "Double tap to like" button
-      const messageButtons = document.querySelectorAll('[role="button"][aria-label*="Double tap"]');
+      // Strategy 1: Find all message containers using the "Double tap to like" button (Most reliable for DM)
+      let messageElements = Array.from(document.querySelectorAll('[role="button"][aria-label*="Double tap"], [role="button"][aria-label*="J’aime"], [role="button"][aria-label*="Like"]'));
       
-      messageButtons.forEach(button => {
+      // Strategy 2: If no buttons found, look for generic message rows
+      if (messageElements.length === 0) {
+          // Fallback: look for typical message container structures
+          // Note: This is riskier as class names change, but 'div[role="row"]' is sometimes used
+          messageElements = Array.from(document.querySelectorAll('div[role="row"]'));
+      }
+
+      messageElements.forEach(container => {
         // Find the text content inside this message
-        const textElement = button.querySelector('div[dir="auto"]');
+        // Usually in a div with dir="auto"
+        const textElement = container.querySelector('div[dir="auto"]');
         if (!textElement) return;
         
         const text = textElement.innerText?.trim();
-        if (!text || text.length < 2) return;
+        if (!text || text.length < 1) return;
         
         // Skip UI elements
         if (text.includes('Message...') || text.includes('Votre message')) return;
-        if (text === 'Seen' || text === 'Vu' || text === 'Active now') return;
+        if (text === 'Seen' || text === 'Vu' || text === 'Active now' || text === 'En ligne') return;
         if (text === 'Envoyer' || text === 'Send') return;
         
         // ----- ROLE DETECTION -----
@@ -410,7 +426,7 @@ export async function scrapeConversationMessages(page) {
         let isUser = false;
         
         // Walk up parents and at each level, check SIBLINGS for profile link
-        let currentEl = button;
+        let currentEl = container;
         for (let depth = 0; depth < 8; depth++) {
           const parent = currentEl.parentElement;
           if (!parent) break;
@@ -421,14 +437,8 @@ export async function scrapeConversationMessages(page) {
             if (sibling === currentEl) continue; // Skip self
             
             // Check if this sibling contains a profile link
-            const profileLink = sibling.querySelector('a[aria-label*="Open the profile page"]');
+            const profileLink = sibling.querySelector('a[aria-label*="Open the profile page"], a[href^="/"][role="link"] img');
             if (profileLink) {
-              isUser = true;
-              break;
-            }
-            
-            // Also check if the sibling IS the profile link
-            if (sibling.matches && sibling.matches('a[aria-label*="Open the profile page"]')) {
               isUser = true;
               break;
             }
@@ -446,6 +456,14 @@ export async function scrapeConversationMessages(page) {
       
       return result;
     });
+
+    // If we found nothing but it's NOT an empty state, try one last scroll up
+    if (messages.length === 0 && !isEmptyState) {
+        console.log('      ⚠️ No messages found but not empty state. Attempting scroll up...');
+        await page.mouse.wheel(0, -500);
+        await delay(1000);
+        // (You could recursively call scrape here, but let's keep it simple and just return empty so we don't hang)
+    }
     
     // Deduplicate consecutive identical messages
     const deduped = [];

@@ -240,12 +240,12 @@ Bio: {bio}
 
 Réponse (OUI ou NON):`,
         follower_template: `Hello {{firstName}} 🌷
-Merci beaucoup pour ton abonnement, bienvenue ici 💫
-Je partage pas mal de choses autour de l’hypersensibilité et de la dépendance affective, toujours dans une approche bienveillante.
-Est-ce que ce sont des thématiques qui te parlent aussi ou pas du tout ? 💕`,
+Merci pour ton abonnement, bienvenue ici !
+Je partage pas mal de choses sur l’hypersensibilité et la dépendance affective, toujours de manière simple et bienveillante.
+Est-ce que ce sont des sujets qui te parlent ou pas du tout ? 💕`,
         like_outreach_template: `Hello {{firstName}} 🌺
-Merci pour ton ❤️ sur mon post à propos de la dépendance affective.
-C’est souvent un sujet qui résonne fort chez les personnes sensibles...
-Est-ce que c’est quelque chose qui te parle personnellement ou c’était juste un contenu qui t’a inspirée ? 💬`
+Merci pour ton ❤️ sur mon post sur la dépendance affective.
+C’est un sujet qui touche beaucoup de personnes sensibles.
+Est-ce que ça te parle personnellement ou c’était juste le contenu qui t’a inspiré ? 💬`
     }
 }
