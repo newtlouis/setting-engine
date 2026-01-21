@@ -20,6 +20,7 @@ import {
   addMessage,
   parseThreadMetadata,
   setDmThreadStatus,
+  fullUpsertLead,
   getOrCreateAccount
 } from './db_integration.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
@@ -289,12 +290,22 @@ async function processThread(thread, options) {
       return { success: false };
     }
     
-    console.log(`   💬 Response: "${message.substring(0, 50)}..."`);
+    console.log(`\n   💬 SENDING RESPONSE:`);
+    console.log(`   Profile: ${profileUrl}`);
+    console.log(`   Message: "${message}"\n`);
     
     // Save suggestion to file
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     
-    // Step 5: Type message in the already-open tab
+    // Step 5: Update conversation step if LLM detected one
+    if (response.step_used) {
+        console.log(`   📈 Updating conversation step to: ${response.step_used}`);
+        await fullUpsertLead(username, options.accountId, {
+            conversation_step: response.step_used
+        });
+    }
+
+    // Step 6: Type message in the already-open tab
     // Check for special tags
     let finalMessage = message;
     let newStatus = 'conversation';

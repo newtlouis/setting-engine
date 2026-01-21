@@ -384,7 +384,10 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          console.log(`   💬 Suggested: "${message.substring(0, 50)}..."`);
+          const profileUrl = `https://www.instagram.com/${username}/`;
+          console.log(`\n   💬 SENDING RESPONSE:`);
+          console.log(`   Profile: ${profileUrl}`);
+          console.log(`   Message: "${message}"\n`);
           
           // 7. Special Tags Detection
           let finalMessage = message;
@@ -445,11 +448,13 @@ export async function runInboxScanner(options = {}) {
     console.log(`Skipped: ${skippedCount}\n`);
     
     if (processedResults.length > 0) {
-      console.table(processedResults.map(r => ({
-        User: r.username,
-        Name: r.name,
-        Response: r.message.substring(0, 40) + '...'
-      })));
+      console.log(`\n--- DETAILED SUMMARY ---`);
+      processedResults.forEach((r, i) => {
+          console.log(`\n[${i+1}] @${r.username} (${r.name})`);
+          console.log(`URL: ${r.url}`);
+          console.log(`Response: "${r.message}"`);
+          console.log(`----------------------------------------`);
+      });
       
       console.log(`\nRequested Action: OPENING TABS FOR MANUAL REVIEW...`);
       console.log(`Each message will be re-typed in a new tab for you to send.\n`);

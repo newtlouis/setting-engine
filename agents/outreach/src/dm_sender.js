@@ -828,6 +828,11 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     
     // Step 4: Type message (but DON'T send, DON'T clear - keep it ready)
     if (onProgress) onProgress('typing', username);
+    
+    console.log(`\n   💬 SENDING OUTREACH:`);
+    console.log(`   Profile: ${profileUrl || 'https://www.instagram.com/' + username + '/'}`);
+    console.log(`   Message: "${message}"\n`);
+    
     const typeResult = await typeMessageOnly(newTab, message);
     result.steps.push({ step: 'type', ...typeResult });
     

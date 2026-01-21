@@ -245,6 +245,10 @@ export async function runFollowerWatcher(options = {}) {
             
             if (dmResult.success && dmResult.scrapedMessages.length === 0) {
                 // 9. Type & Register
+                console.log(`\n   💬 SENDING FOLLOWER WELCOME:`);
+                console.log(`   Profile: https://www.instagram.com/${username}/`);
+                console.log(`   Message: "${welcomeMessage}"\n`);
+
                 await typeInOpenTab(dmTab, welcomeMessage);
                 registerOpenTab(username, dmTab, welcomeMessage);
                 

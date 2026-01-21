@@ -229,7 +229,14 @@
                     <div class="form-group">
                         <label class="form-label">Étape du Workflow (1-6)</label>
                         <div style="display: flex; gap: 8px;">
-                            <input type="number" id="fieldStep" class="form-input" min="0" max="6">
+                            <select id="fieldStep" class="form-input">
+                                <option value="0">0 - Nouveau Lead</option>
+                                <option value="1">1 - À froid (Premier contact)</option>
+                                <option value="2">2 - Connexion émotionnelle (Après réponse)</option>
+                                <option value="3">3 - Exploration du vécu</option>
+                                <option value="4">4 - Objectif / Projection</option>
+                                <option value="5">5 - Proposition d’appel (Pivot)</option>
+                            </select>
                             <button id="btnSaveStep" class="btn-filter active"
                                 style="background: var(--accent); color: white; border: none;">Save</button>
                         </div>

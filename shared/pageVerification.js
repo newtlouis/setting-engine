@@ -129,6 +129,24 @@ async function validateProfilePage(page, expectedUsername) {
   try {
     const url = page.url();
     
+    // Check for "Profile not available" or similar messages
+    const isUnavailable = await page.evaluate(() => {
+        const text = document.body?.innerText?.toLowerCase() || '';
+        const patterns = [
+            'profile n’est pas disponible',
+            'profile is not available',
+            'lien est peut-être brisé',
+            'link may be broken',
+            'page introuvable',
+            'page not found'
+        ];
+        return patterns.some(p => text.includes(p));
+    });
+
+    if (isUnavailable) {
+        return { valid: false, reason: 'Profile unavailable (blocked/deleted)', isFatal: true };
+    }
+
     // URL should contain the username
     if (!url.includes(`/${expectedUsername}`)) {
       return { valid: false, reason: `URL doesn't contain username: ${expectedUsername}` };
@@ -386,6 +404,15 @@ export async function verifyPage(page, options = {}) {
       console.log(`   Raison: ${validationResult.reason}`);
       console.log(`   URL actuelle: ${page.url()}`);
       
+      // If it's a fatal error (like profile unavailable), do not block
+      if (validationResult.isFatal) {
+          console.log('   ⚠️ Erreur fatale détectée (profil indisponible), non-bloquant.');
+          result.success = false;
+          result.reason = validationResult.reason;
+          result.blocked = false;
+          return result;
+      }
+
       if (blockOnFailure) {
         await waitForEnter('Appuie sur [ENTRÉE] pour continuer malgré tout...');
         result.blocked = true;

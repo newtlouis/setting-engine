@@ -18,7 +18,7 @@ import {
   getConversationHistory,
   getLeadWithContext
 } from './db_integration.js';
-import { generateResponse } from './engine.js';
+import { generateResponse, generateRevivalMessage } from './engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -131,6 +131,20 @@ export async function runFollowupWatcher(options = {}) {
             
             // 5. Verify Context (Double check scraping)
             const scrapedMessages = result.scrapedMessages || [];
+            
+            // --- LOGIC: Stop if user participated only once and we are already following up ---
+            const userMsgCount = scrapedMessages.filter(m => m.role === 'user').length;
+            // Assuming nextTemplate.step_order is the follow-up number (1, 2, 3...)
+            // If user sent ONLY 1 message, we allow max 1 follow-up.
+            // So if we are about to send follow-up > 1, we skip.
+            if (userMsgCount === 1 && nextTemplate.step_order > 1) {
+                console.log(`🛑 Stopping follow-ups for @${thread.username}: Only 1 user message sent (max 1 follow-up allowed).`);
+                await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id); // Mark as "done/skipped" effectively
+                await openTab.close();
+                continue;
+            }
+            // ---------------------------------------------------------------------------------
+
             if (scrapedMessages.length > 0) {
                 const lastScraped = scrapedMessages[scrapedMessages.length - 1];
                 if (lastScraped.role === 'user') {
@@ -141,20 +155,52 @@ export async function runFollowupWatcher(options = {}) {
                 }
             }
 
-            // 6. Format Template
-            // Simple placeholder replacement. We can add more context if needed.
-            let message = nextTemplate.template_text;
+            // --- LOGIC: Revival vs Template ---
+            let message = '';
+            let isRevival = false;
+
+            // Find last message from assistant
+            const lastAssistantMsg = [...scrapedMessages].reverse().find(m => m.role === 'assistant');
+            
+            const isQuestion = (text) => text && (text.trim().endsWith('?') || text.includes('? '));
+            
+            if (lastAssistantMsg && !isQuestion(lastAssistantMsg.text)) {
+                console.log('🤖 Last message was NOT a question. Generating personalized revival...');
+                try {
+                    message = await generateRevivalMessage(scrapedMessages, { 
+                        username: thread.username,
+                        fullName: thread.full_name
+                    });
+                    isRevival = true;
+                } catch (e) {
+                    console.error('Failed to generate revival, falling back to template:', e);
+                    message = nextTemplate.template_text;
+                }
+            } else {
+                console.log('📝 Last message was a question (or null). Using DB template.');
+                message = nextTemplate.template_text;
+            }
+
+            // Placeholder replacement
             const firstName = thread.full_name ? thread.full_name.split(' ')[0] : thread.username;
             message = message.replace(/\{\{firstName\}\}/g, firstName);
 
-            console.log(`💬 Follow-up #${nextTemplate.step_order}: "${message}"`);
+            // LOGGING UPDATE
+            console.log(`\n💬 SENDING FOLLOW-UP:`);
+            console.log(`   Profile: ${thread.profile_url}`);
+            console.log(`   Type: ${isRevival ? 'PERSONALIZED REVIVAL' : 'TEMPLATE #' + nextTemplate.step_order}`);
+            console.log(`   Message: "${message}"\n`);
             
             // 7. Type & Register
             await typeInOpenTab(openTab, message);
             registerOpenTab(thread.username, openTab, message);
             
             // 8. Update DB (Stage and Template Tracking)
-            await addMessage(thread.username, 'assistant', message, `followup_${nextTemplate.step_order}`);
+            await addMessage(thread.username, 'assistant', message, isRevival ? 'followup_revival' : `followup_${nextTemplate.step_order}`);
+            
+            // If it was a revival, do we advance the template? 
+            // The user wants to "return to script steps", so maybe we stay on current or just mark progress.
+            // For now, let's mark progress so we don't loop forever on this step.
             await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id);
             
             processedCount++;
@@ -162,6 +208,7 @@ export async function runFollowupWatcher(options = {}) {
 
         if (processedCount > 0) {
             console.log(`\n✨ Prepared ${processedCount} follow-ups review.`);
+            // Existing waitForUserToFinish handles the manual send wait
             await waitForUserToFinish();
         } else {
             console.log('No follow-ups prepared.');

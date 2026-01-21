@@ -118,7 +118,9 @@ export async function initBrowser(options = {}) {
   const stealthOptions = getStealthContextOptions(userDataDir, {
     headless,
     slowMo: CONFIG.SLOW_MO,
-    timeout
+    timeout,
+    args: ['--start-maximized'],
+    viewport: null
   });
   
   browserContext = await chromium.launchPersistentContext(userDataDir, stealthOptions);

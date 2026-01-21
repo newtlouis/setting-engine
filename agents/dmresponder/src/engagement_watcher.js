@@ -247,6 +247,10 @@ export async function runEngagementWatcher(options = {}) {
                 });
                 
                 if (dmResult.success && dmResult.scrapedMessages.length === 0) {
+                    console.log(`\n   💬 SENDING ENGAGEMENT OUTREACH:`);
+                    console.log(`   Profile: https://www.instagram.com/${username}/`);
+                    console.log(`   Message: "${finalMessage}"\n`);
+
                     await typeInOpenTab(dmResult.tab, finalMessage);
                     registerOpenTab(username, dmResult.tab, finalMessage);
                     
