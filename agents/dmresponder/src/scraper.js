@@ -868,34 +868,47 @@ export async function scrapePostLikers(page) {
                     return cleaned.length > 0 && /^\d+$/.test(cleaned);
                 };
 
-                // 1. Try to find the Like heart SVG/Icon
-                const heart = document.querySelector('svg[aria-label="J’aime"], svg[aria-label="Like"], svg title');
+                // NEW STRATEGY: Target the specific structure from Instagram's current HTML
+                // The like count appears as: <span class="x1ypdohk x1s688f x2fvf9 xe9ewy2" role="button" tabindex="0">29</span>
+                // This span is positioned after the heart icon
                 
-                // 2. Search for a button that contains ONLY a number nearby or in sections
-                // This handles the structure: <span role="button">12</span>
-                const allButtons = Array.from(document.querySelectorAll('[role="button"], [role="link"]'));
+                // 1. Find all span elements with role="button" that contain only numeric text
+                const candidates = Array.from(document.querySelectorAll('span[role="button"]'));
+                const numericSpans = candidates.filter(span => {
+                    const text = span.innerText.trim();
+                    return isNumeric(text) && text.length > 0;
+                });
                 
-                // Try to find buttons that are JUST a number
-                const numericButtons = allButtons.filter(b => isNumeric(b.innerText.trim()));
+                // 2. Find the heart icon (liked or not liked)
+                const heartIcon = document.querySelector('svg[aria-label*="aime" i], svg[aria-label*="like" i]');
                 
-                if (numericButtons.length > 0) {
-                    // If we have a heart, prefer a button close to it
-                    if (heart) {
-                        const heartBtn = heart.closest('[role="button"]');
-                        if (heartBtn) {
-                            let current = heartBtn;
-                            for (let i = 0; i < 4; i++) {
-                                const parent = current.parentElement;
-                                if (!parent) break;
-                                const nearby = numericButtons.find(nb => parent.contains(nb));
-                                if (nearby) return nearby;
-                                current = parent;
+                if (heartIcon && numericSpans.length > 0) {
+                    // Try to find the numeric span that's closest to the heart icon
+                    // Usually it's a sibling or within the same parent container
+                    const heartContainer = heartIcon.closest('.x6s0dn4.x78zum5') || heartIcon.closest('div');
+                    
+                    if (heartContainer) {
+                        // Look for numeric span within the same parent or nearby
+                        const parentContainer = heartContainer.parentElement;
+                        if (parentContainer) {
+                            const nearbyNumeric = numericSpans.find(span => parentContainer.contains(span));
+                            if (nearbyNumeric) {
+                                return nearbyNumeric;
                             }
                         }
                     }
-                    // Otherwise just take the first one that looks like a like count (usually early in the page/post)
-                    // We avoid buttons that are too small (like 0 or 1 might be something else) or too big if we want to be safe,
-                    // but usually the first numeric button in a post context is the likes.
+                }
+                
+                // 3. Fallback: Return the first numeric span (likely to be likes count)
+                if (numericSpans.length > 0) {
+                    return numericSpans[0];
+                }
+
+                // 4. Legacy fallback: Try older button structures
+                const allButtons = Array.from(document.querySelectorAll('[role="button"], [role="link"]'));
+                const numericButtons = allButtons.filter(b => isNumeric(b.innerText.trim()));
+                
+                if (numericButtons.length > 0) {
                     return numericButtons[0];
                 }
 
@@ -904,7 +917,8 @@ export async function scrapePostLikers(page) {
 
             const btn = findLikersButton();
             if (btn) {
-                btn.scrollIntoView();
+                btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                await new Promise(r => setTimeout(r, 500)); // Wait for scroll
                 btn.click();
                 return true;
             }
