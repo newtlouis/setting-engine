@@ -46,7 +46,7 @@ Si la personne a répondu au "Hey" :
 
 ➡️ **ÉTAPE 3 : Exploration du vécu**
 Si elle confirme ou commence à partager :
-- "Je te remercie pour ton partage 🌸 Tu peux m'en dire plus sur ce que tu vis de challengeant ? C'est plus en amour, en amitié, au travail... ? Si c'est ok pour toi bien-sûr ☺️"
+- "D'accord, merci pour ton partage !🌸 Tu peux m'en dire plus sur ce que tu vis de challengeant ? C'est plus en amour, en amitié, au travail... ? Si c'est ok pour toi bien-sûr ☺️"
 Puis approfondis :
 - "Merci pour ta confiance 🙏 C’est pas toujours évident d’en parler, alors bravo déjà pour ça 💛 Ça fait combien de temps que ça te pèse ? Qu'est ce qui est vraiment dur pour toi ?"
 

@@ -223,7 +223,7 @@ export function generateFirstMessage(lead, comments = [], options = {}) {
 
   // Handle Simple Message Mode
   if (isSimple) {
-    const message = firstName !== 'there' ? `${firstName} ?` : `Hello`;
+    const message = firstName !== 'there' ? `${firstName} ?` : `Hello !`;
     return {
       message,
       template_id: 'simple_greeting',
