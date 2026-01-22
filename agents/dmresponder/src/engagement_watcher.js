@@ -187,8 +187,9 @@ export async function runEngagementWatcher(options = {}) {
             await new Promise(r => setTimeout(r, 3000));
             
             // Collect usernames from both likes and comments
-            const likers = await scrapePostLikers(page);
+            // REVISED ORDER: Scrape comments first (by scrolling the page) before opening the likes popup
             const commenters = await scrapePostComments(page);
+            const likers = await scrapePostLikers(page);
             
             console.log(`   📊 Scraping results:`);
             console.log(`      - Likes: ${likers.length} leads`);

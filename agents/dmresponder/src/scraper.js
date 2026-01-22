@@ -1176,41 +1176,56 @@ export async function scrapePostComments(page) {
     try {
         console.log('   Scraping comments...');
         
-        // Basic scroll to load comments
-        await page.evaluate(async () => {
-            window.scrollBy(0, 500);
-            await new Promise(r => setTimeout(r, 1000));
-        });
-
-        const comments = await page.evaluate(() => {
+        // 1. Better scrolling loop to load comments (Lazy loading)
+        const comments = await page.evaluate(async () => {
             const results = [];
             const seen = new Set();
+            const randomDelay = (min, max) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
             
-            // Look for profile links and their accompanying text
-            // In the new DIV-only structure
-            const allDivs = Array.from(document.querySelectorAll('div'));
-            
-            allDivs.forEach(div => {
-                const link = div.querySelector('a[href^="/"]');
-                if (!link) return;
-                
-                const href = link.getAttribute('href');
-                const username = href.replace(/\//g, '').split('?')[0];
-                if (!username || ['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) return;
+            // Goal: Scroll enough to capture several batches of comments
+            let previousHeight = 0;
+            let noChangeCount = 0;
+            const MAX_SCROLL_SESSIONS = 5;
 
-                // Find text span in the same div or next sibling
-                const textSpan = div.querySelector('span[dir="auto"]');
-                if (textSpan) {
-                    const text = textSpan.innerText.trim();
-                    if (text && text !== username && text.length > 2) {
-                        const key = `${username}:${text}`;
-                        if (!seen.has(key)) {
-                            results.push({ username, text });
-                            seen.add(key);
+            for (let i = 0; i < MAX_SCROLL_SESSIONS; i++) {
+                // Collect visible comments
+                const allDivs = Array.from(document.querySelectorAll('div'));
+                allDivs.forEach(div => {
+                    const link = div.querySelector('a[href^="/"]');
+                    if (!link) return;
+                    
+                    const href = link.getAttribute('href');
+                    const username = href.replace(/\//g, '').split('?')[0];
+                    if (!username || ['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) return;
+
+                    // Find text span in the same div or next sibling
+                    const textSpan = div.querySelector('span[dir="auto"]');
+                    if (textSpan) {
+                        const text = textSpan.innerText.trim();
+                        if (text && text !== username && text.length > 2) {
+                            const key = `${username}:${text}`;
+                            if (!seen.has(key)) {
+                                results.push({ username, text });
+                                seen.add(key);
+                            }
                         }
                     }
+                });
+
+                // Scroll down
+                window.scrollBy(0, 800);
+                await randomDelay(1200, 2000);
+
+                // Check for end
+                const currentHeight = document.body.scrollHeight;
+                if (currentHeight === previousHeight) {
+                    noChangeCount++;
+                    if (noChangeCount >= 2) break;
+                } else {
+                    noChangeCount = 0;
+                    previousHeight = currentHeight;
                 }
-            });
+            }
             return results;
         });
 
