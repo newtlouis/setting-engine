@@ -225,7 +225,21 @@ export async function runEngagementWatcher(options = {}) {
                 const metadata = await scrapeProfileMetadata(page, username);
                 if (!metadata.success) continue;
                 
-                // 6. Qualification
+                // 6. Contact Check (Optimization: Check before qualifying bio with AI)
+                if (!metadata.canContact) {
+                    console.log(`   🚫 @${username} not contactable (No Message button). Skipping AI qualification.`);
+                    // Save as uncontactable to avoid re-checking in future
+                    await fullUpsertLead(username, account.id, {
+                        status: 'uncontactable',
+                        full_name: metadata.fullName,
+                        bio: metadata.bio,
+                        lead_source: lead.source,
+                        notes: `No message button found on profile.`
+                    });
+                    continue;
+                }
+                
+                // 7. Qualification
                 const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
                 if (!qualification.qualified) {
                     console.log(`   ❌ Not qualified: ${qualification.reason}`);

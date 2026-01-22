@@ -920,14 +920,21 @@ export async function scrapeProfileMetadata(page, username) {
                 b.innerText.includes('Message')
             );
 
+            // 4. Contact Check
+            const contactButtons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+            const canContact = contactButtons.some(b => {
+                const txt = b.innerText?.trim();
+                return txt === 'Message' || txt === 'Contacter' || txt === 'Contact';
+            });
+
             return {
                 fullName,
                 bio,
-                isFollowing: following
+                isFollowing: following,
+                canContact
             };
         }, username);
 
-        return { success: true, ...metadata };
         return { success: true, ...metadata };
     } catch (error) {
         console.error('   Error scraping profile metadata:', error.message);
