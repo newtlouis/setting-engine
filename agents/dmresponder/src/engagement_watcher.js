@@ -215,6 +215,14 @@ export async function runEngagementWatcher(options = {}) {
                 const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
                 if (!qualification.qualified) {
                     console.log(`   ❌ Not qualified: ${qualification.reason}`);
+                    // Save as disqualified to avoid re-checking in future
+                    await fullUpsertLead(username, account.id, {
+                        status: 'disqualified',
+                        full_name: metadata.fullName,
+                        bio: metadata.bio,
+                        lead_source: lead.source,
+                        notes: `Disqualified by AI: ${qualification.reason}`
+                    });
                     continue;
                 }
                 
