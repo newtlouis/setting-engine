@@ -98,18 +98,25 @@ async function scanForEngagement(page, options = {}) {
                     const postHref = (bestLink || links[0]).getAttribute('href').split('?')[0];
                     const postUrl = 'https://www.instagram.com' + postHref.replace(/\/liked_by\/?$/, '/').replace(/\/comments\/?$/, '/');
                     
-                    if (!postMap.has(postUrl)) {
-                        postMap.set(postUrl, { 
-                            url: postUrl,
-                            type: isLike ? 'like' : 'comment',
-                            notifText: text.substring(0, 50).replace(/\n/g, ' ')
-                        });
-                    }
+                    const existing = postMap.get(postUrl) || { 
+                        url: postUrl,
+                        types: new Set(),
+                        notifTexts: []
+                    };
+                    
+                    if (isLike) existing.types.add('like');
+                    if (isComment) existing.types.add('comment');
+                    existing.notifTexts.push(text.substring(0, 50).replace(/\n/g, ' '));
+                    
+                    postMap.set(postUrl, existing);
                 }
             }
         }
         
-        return Array.from(postMap.values());
+        return Array.from(postMap.values()).map(p => ({
+            ...p,
+            types: Array.from(p.types)
+        }));
     }, { selectors: CONFIG.NOTIFICATION_SELECTORS, trackWeek: options.trackWeek });
 }
 
@@ -165,32 +172,39 @@ export async function runEngagementWatcher(options = {}) {
 
         console.log(`\n📋 Found ${engagedPosts.length} post(s) to analyze:`);
         engagedPosts.forEach((p, i) => {
-            console.log(`   ${i+1}. [${p.type.toUpperCase()}] ${p.url} (${p.notifText})`);
+            const typeStr = p.types.map(t => t.toUpperCase()).join(' & ');
+            console.log(`   ${i+1}. [${typeStr}] ${p.url}`);
+            console.log(`      (${p.notifTexts[0]}${p.notifTexts.length > 1 ? ` + ${p.notifTexts.length-1} more` : ''})`);
         });
 
         // 3. Process each post
         for (const post of engagedPosts.slice(0, CONFIG.MAX_POSTS_PER_SESSION)) {
             console.log(`\n🚀 Analyzing Post: ${post.url}`);
-            console.log(`   Context: ${post.notifText}`);
+            const typeStr = post.types.map(t => t.toUpperCase()).join(' & ');
+            console.log(`   Intent: Scrape ${typeStr}`);
             
             await page.goto(post.url, { waitUntil: 'domcontentloaded' });
             await new Promise(r => setTimeout(r, 3000));
             
             // Collect usernames from both likes and comments
             const likers = await scrapePostLikers(page);
-            // const commenters = await scrapePostComments(page);
+            const commenters = await scrapePostComments(page);
             
+            console.log(`   📊 Scraping results:`);
+            console.log(`      - Likes: ${likers.length} leads`);
+            console.log(`      - Comments: ${commenters.length} leads`);
+
             // Unified list of potential leads
             const potentialLeads = [
                 ...likers.map(u => ({ username: u, source: 'post_like' })),
-                // ...commenters.map(c => ({ username: c.username, source: 'post_comment', text: c.text }))
+                ...commenters.map(c => ({ username: c.username, source: 'post_comment', text: c.text }))
             ];
             
             // Deduplicate
             const uniqueLeads = Array.from(new Set(potentialLeads.map(l => l.username)))
                 .map(username => potentialLeads.find(l => l.username === username));
                 
-            console.log(`   Processing ${Math.min(uniqueLeads.length, CONFIG.MAX_LEADS_PER_POST)} unique users from this post...`);
+            console.log(`   💎 Total unique users to process: ${Math.min(uniqueLeads.length, CONFIG.MAX_LEADS_PER_POST)}`);
 
             for (const lead of uniqueLeads.slice(0, CONFIG.MAX_LEADS_PER_POST)) {
                 const username = lead.username;
