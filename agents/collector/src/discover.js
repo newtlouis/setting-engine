@@ -145,14 +145,14 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
           break;
         }
 
-        // Scroll down slowly to trigger lazy loading
+        // Scroll down faster to trigger lazy loading
         await page.evaluate(() => {
           window.scrollBy({
             top: window.innerHeight * 0.8,
             behavior: 'smooth'
           });
         });
-        await delay(3000 + Math.random() * 2000);
+        await delay(1500 + Math.random() * 1000); // Shorter delay
         scrollAttempts++;
       }
 
@@ -321,14 +321,14 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
           break;
         }
 
-        // Scroll down
+        // Scroll down faster
         await page.evaluate(() => {
           window.scrollBy({
             top: window.innerHeight * 0.8,
             behavior: 'smooth'
           });
         });
-        await delay(3000 + Math.random() * 2000);
+        await delay(1500 + Math.random() * 1000); // Shorter delay
         scrollAttempts++;
       }
 
