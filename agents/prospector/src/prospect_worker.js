@@ -68,6 +68,10 @@ function delay(min, max = null) {
  * @returns {{ type: 'hashtag' | 'profile', value: string }}
  */
 function parseSource(source) {
+  if (!source || typeof source !== 'string') {
+    return { type: 'unknown', value: 'none' };
+  }
+  
   if (source.startsWith('#')) {
     return { type: 'hashtag', value: source.slice(1) };
   } else if (source.startsWith('@')) {
@@ -102,8 +106,10 @@ export async function runProspector(options = {}) {
   const profileConfig = await loadProfileConfig(profile);
   console.log(`🧠 Loaded profile config: ${profileConfig?.niche || 'default'}`);
 
-  const sourceInfo = parseSource(source);
-  console.log(`📍 Source: ${sourceInfo.type} "${sourceInfo.value}"`);
+  if (source) {
+    const sourceInfo = parseSource(source);
+    console.log(`📍 Source (CLI): ${sourceInfo.type} "${sourceInfo.value}"`);
+  }
 
   // Stats
   let stats = {
@@ -123,9 +129,9 @@ export async function runProspector(options = {}) {
     
     // We can't actually scrape without a browser, so just show what would happen
     console.log(`Would loop until ${totalLimit} successful contacts are made:`);
-    console.log(`   1. Find batch of ${maxPosts} posts from ${sourceInfo.type} "${sourceInfo.value}"`);
+    console.log(`   1. Find batch of ${maxPosts} posts from rotated sources`);
     console.log(`   2. Process comment leads (max ${maxLeadsPerPost} per post)`);
-    console.log(`   3. If limit not reached, find NEXT batch of ${maxPosts} posts`);
+    console.log(`   3. If limit not reached, move to NEXT source and find batch of ${maxPosts} posts`);
     console.log(`   4. Repeat...`);
     return stats;
   }
