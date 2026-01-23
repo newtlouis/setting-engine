@@ -220,6 +220,24 @@ fin propre
 `,
         goal: "Book a discovery call",
     },
+    prospector: {
+        sources: [
+            "#dependanceaffective",
+            "#dépendanceaffective",
+            "#hypersensibilité",
+			"#dépendanceémotionnelle",
+			"#attachementémotionnel",
+            "#relationssaines",
+			"#relationtoxique",
+			"#relationdifficile",
+			"#amourtoxique",
+			"#amouretsanté",
+            "@https://www.instagram.com/aliajadoul_/",
+            "#renovationsentimentale",
+            "@therapie_positive",
+            "@coach_en_amour"
+        ]
+    },
     outreach: {
         qualification_prompt: `Analyse ce profil Instagram (Username et Bio) et détermine s'il s'agit d'un CONCURRENT (professionnel, coach, accompagnateur) ou d'un LEAD POTENTIEL (personne privée).
 

@@ -34,7 +34,7 @@ program
   .name('prospect')
   .description('Unified prospecting: scrape posts, qualify leads, send outreach in one browser session')
   .requiredOption('--profile <name>', 'Instagram profile/account name (REQUIRED)')
-  .requiredOption('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
+  .option('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
   .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
   .option('--leads <number>', 'Maximum leads to process per post', '10')
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')

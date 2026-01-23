@@ -93,7 +93,6 @@ export async function runProspector(options = {}) {
   } = options;
 
   if (!profile) throw new Error('Profile is required');
-  if (!source) throw new Error('Source is required (e.g., "#dependanceaffective" or "@competitor")');
 
   await loadDatabase();
   const account = dbFunctions.getOrCreateAccount(profile);
@@ -139,44 +138,75 @@ export async function runProspector(options = {}) {
 
   try {
     // STEP 1: Main Loop - Continue until goal reached
-    console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
-    const apiKey = process.env.OPENAI_API_KEY;
-    console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
+  console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
+  const apiKey = process.env.OPENAI_API_KEY;
+  console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
+  
+  // Track scraped post URLs across batches to avoid duplicates
+  const recentScrapedUrls = dbFunctions.getRecentlyScrapedPosts ? dbFunctions.getRecentlyScrapedPosts(168) : [];
+  const alreadyScraped = new Set(recentScrapedUrls); 
+  
+  if (recentScrapedUrls.length > 0) {
+    console.log(`   📚 Loaded ${recentScrapedUrls.length} recently scraped posts from database history.`);
+  }
+
+  // --- SOURCE LIST PREPARATION ---
+  // If the user provided a source via CLI, we start with it. 
+  // Otherwise, we use the list from config.
+  let sourceList = profileConfig?.prospector?.sources || [];
+  if (source && !sourceList.includes(source)) {
+      sourceList = [source, ...sourceList];
+  } else if (source && sourceList.includes(source)) {
+      // Move the CLI source to the front
+      sourceList = [source, ...sourceList.filter(s => s !== source)];
+  }
+
+  if (sourceList.length === 0) {
+      throw new Error("No sources defined via CLI or in profile config.");
+  }
+
+  console.log(`📡 Sources to rotate: ${sourceList.join(', ')}`);
+  
+  const DISCOVERY_BATCH_SIZE = maxPosts;
+  let sourceIndex = 0;
+  let exhaustionCount = 0; // Track how many sources in a row were exhausted
+
+  while (stats.leadsContacted < totalLimit && exhaustionCount < sourceList.length) {
+    const currentSourceRaw = sourceList[sourceIndex % sourceList.length];
+    const currentSource = parseSource(currentSourceRaw);
     
-    // Track scraped post URLs across batches to avoid duplicates
-    // Initialize with posts scraped in the last 7 days (168h) from DB
-    const recentScrapedUrls = dbFunctions.getRecentlyScrapedPosts ? dbFunctions.getRecentlyScrapedPosts(168) : [];
-    const alreadyScraped = new Set(recentScrapedUrls); 
+    console.log(`\n🔄 [Source ${sourceIndex % sourceList.length + 1}/${sourceList.length}] Checking ${currentSourceRaw}...`);
+    console.log(`   Current Progress: ${stats.leadsContacted}/${totalLimit}`);
     
-    if (recentScrapedUrls.length > 0) {
-      console.log(`   📚 Loaded ${recentScrapedUrls.length} recently scraped posts from database history.`);
+    let posts = [];
+    
+    // Discover a batch of posts from current source
+    try {
+        if (currentSource.type === 'hashtag') {
+          posts = await discoverFromHashtags(workingPage, [currentSource.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
+        } else {
+          posts = await discoverFromProfiles(workingPage, [currentSource.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
+        }
+    } catch (discoveryErr) {
+        console.error(`   ⚠️ Discovery error on ${currentSourceRaw}: ${discoveryErr.message}`);
+        posts = [];
     }
-    
-    const DISCOVERY_BATCH_SIZE = maxPosts; // Use the provided post limit as batch size
 
-    while (stats.leadsContacted < totalLimit) {
-      console.log(`\n🔄 Finding next batch of posts... (Current Progress: ${stats.leadsContacted}/${totalLimit})`);
-      
-      let posts = [];
-      
-      // Discover a batch of posts
-      if (sourceInfo.type === 'hashtag') {
-        posts = await discoverFromHashtags(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
-      } else {
-        posts = await discoverFromProfiles(workingPage, [sourceInfo.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
-      }
+    if (posts.length === 0) {
+      console.log(`   ⏭️ No new posts found for ${currentSourceRaw}. Moving to next source.`);
+      sourceIndex++;
+      exhaustionCount++;
+      continue; 
+    }
 
-      if (posts.length === 0) {
-        console.log('❌ No new posts found from source. Likely exhausted available content.');
-        break; // Stop loop if no more posts found
-      }
+    // Reset exhaustion count if we found posts
+    exhaustionCount = 0;
+    console.log(`   ✅ Found ${posts.length} new posts to process`);
+    stats.postsScraped += posts.length;
 
-      console.log(`✅ Batch found: ${posts.length} new posts to process`);
-      stats.postsScraped += posts.length;
-
-      // STEP 2: Process each post in the batch
-      // Note: We process the ENTIRE batch even if the contact limit is reached during processing
-      for (let postIdx = 0; postIdx < posts.length; postIdx++) {
+    // STEP 2: Process each post in the batch
+    for (let postIdx = 0; postIdx < posts.length; postIdx++) {
+      if (stats.leadsContacted >= totalLimit) break;
         const post = posts[postIdx];
         const postUrl = post.url || post.post_url;
         
