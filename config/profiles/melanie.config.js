@@ -246,6 +246,10 @@ Est-ce que ce sont des sujets qui te parlent ou pas du tout ? 💕`,
         like_outreach_template: `Hello {{firstName}} 🌺
 Merci pour ton ❤️ sur mon post sur la dépendance affective.
 C’est un sujet qui touche beaucoup de personnes sensibles.
-Est-ce que ça te parle personnellement ou c’était juste le contenu qui t’a inspiré ? 💬`
+Est-ce que ça te parle personnellement ou c’était juste le contenu qui t’a inspiré ? 💬`,
+        comment_outreach_template: `Coucou {{firstName}} 🌸
+Merci pour ton commentaire 🙏
+J’ai beaucoup aimé ce que tu as partagé, on sent que tu parles avec le cœur 💛
+C’est un sujet qui te touche personnellement ou plutôt quelque chose que tu observes autour de toi ? 🌷`
     }
 }
