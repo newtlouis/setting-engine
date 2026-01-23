@@ -497,6 +497,10 @@
                 <div class="stat-value" id="stat-booking_rate" style="color: var(--success);">-</div>
                 <div class="stat-label">Taux de RDV</div>
             </div>
+            <div class="stat-card" onclick="loadLeads('manual')">
+                <div class="stat-value" id="stat-manual" style="color: #ff7b72;">-</div>
+                <div class="stat-label">Manual / Vocaux</div>
+            </div>
             <div class="stat-card" onclick="loadLeads('booked')">
                 <div class="stat-value" id="stat-booked" style="color: var(--success);">-</div>
                 <div class="stat-label">RDV Effectués</div>
@@ -582,6 +586,7 @@
             <button class="btn-filter" onclick="loadLeads('all')">All</button>
             <button class="btn-filter active" onclick="loadLeads('new')">New</button>
             <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
+            <button class="btn-filter" onclick="loadLeads('manual')">Manual</button>
             <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
             <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
             <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>

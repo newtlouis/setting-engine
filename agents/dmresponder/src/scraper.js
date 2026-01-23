@@ -477,9 +477,20 @@ export async function scrapeConversationMessages(page) {
         // Find the text content inside this message
         // Usually in a div with dir="auto"
         const textElement = container.querySelector('div[dir="auto"]');
-        if (!textElement) return;
+        let text = textElement?.innerText?.trim();
+        let messageType = 'text';
+
+        // ----- VOICE NOTE DETECTION -----
+        // Check for common voice note indicators: waveform, play button, timer
+        const hasWaveform = container.querySelector('svg clipPath[id*="waveform"]');
+        const hasPlayButton = container.querySelector('div[role="button"][aria-label*="Lire" i], div[role="button"][aria-label*="Play" i]');
+        const hasVoiceTimer = container.querySelector('div[role="timer"]');
         
-        const text = textElement.innerText?.trim();
+        if (hasWaveform || hasPlayButton || hasVoiceTimer) {
+          text = "[Vocal]";
+          messageType = 'voice_note';
+        }
+
         if (!text || text.length < 1) return;
         
         // Skip UI elements
@@ -518,7 +529,8 @@ export async function scrapeConversationMessages(page) {
         
         result.push({
           role: isUser ? 'user' : 'assistant',
-          text: text
+          text: text,
+          type: messageType
         });
       });
       

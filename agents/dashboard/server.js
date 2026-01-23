@@ -78,12 +78,14 @@ app.get('/api/stats', (req, res) => {
         const totalContacted = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const replied = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND total_messages_received > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const booked = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+        const manual = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status = 'manual' AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const conversation = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation') AND (booking_status IS NULL OR booking_status = '') AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
 
         const stats = {
             total_contacted: totalContacted,
             reply_rate: totalContacted > 0 ? ((replied / totalContacted) * 100).toFixed(1) : 0,
             conversation: conversation,
+            manual: manual,
             booked: booked,
             booking_rate: totalContacted > 0 ? ((booked / totalContacted) * 100).toFixed(1) : 0,
             step_breakdown: {
@@ -139,6 +141,8 @@ app.get('/api/leads', (req, res) => {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
                  sql += " AND booking_status = 'completed'";
+            } else if (status === 'manual') {
+                 sql += " AND status = 'manual'";
             } else if (status === 'not_interested') {
                  sql += " AND status = 'not_interested'";
             } else if (status === 'failed') {
@@ -154,7 +158,7 @@ app.get('/api/leads', (req, res) => {
              params.push(`%${search}%`, `%${search}%`);
         }
 
-        sql += ` ORDER BY engagement_score DESC LIMIT ? OFFSET ?`;
+        sql += ` ORDER BY CASE WHEN status = 'manual' THEN 0 ELSE 1 END, engagement_score DESC LIMIT ? OFFSET ?`;
         params.push(parseInt(limit), parseInt(offset));
 
         const leads = db.prepare(sql).all(...params);

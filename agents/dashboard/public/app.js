@@ -156,6 +156,7 @@ async function loadStats() {
         document.getElementById('stat-total_contacted').textContent = data.total_contacted;
         document.getElementById('stat-reply_rate').textContent = data.reply_rate + '%';
         document.getElementById('stat-conversation').textContent = data.conversation;
+        document.getElementById('stat-manual').textContent = data.manual;
         document.getElementById('stat-booking_rate').textContent = data.booking_rate + '%';
         document.getElementById('stat-booked').textContent = data.booked;
 
@@ -186,6 +187,7 @@ async function loadLeads(filter) {
             (filter === 'conversation' && btn.textContent === 'Conversation') ||
             (filter === 'confirm_bookings' && btn.textContent === 'Confirm Bookings') ||
             (filter === 'booked' && btn.textContent === 'Booked') ||
+            (filter === 'manual' && btn.textContent === 'Manual') ||
             (filter === 'not_interested' && btn.textContent === 'Not Interested') ||
             (filter === 'failed' && btn.textContent === 'Failed')) {
             btn.classList.add('active');
@@ -252,8 +254,11 @@ async function loadLeads(filter) {
                 badgeClass = 'badge-neutral';
                 statusText = 'New';
             } else if (lead.status === 'not_interested') {
-                badgeClass = 'badge-danger';
+                badgeClass = 'badge-danger'; 
                 statusText = 'Not Interested';
+            } else if (lead.status === 'manual') {
+                badgeClass = 'badge-danger';
+                statusText = 'MANUAL / VOCAL';
             } else if (lead.status === 'failed_outreach') {
                 badgeClass = 'badge-danger'; 
                 statusText = 'Failed';

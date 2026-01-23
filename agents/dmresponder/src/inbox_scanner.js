@@ -355,15 +355,37 @@ export async function runInboxScanner(options = {}) {
           const newMessages = findNewMessages(scrapedMessages, existingHistory);
           
           let updatedHistory = [...existingHistory];
+          let hasVoiceNote = false;
+
           if (newMessages.length > 0) {
             console.log(`   💾 Saving ${newMessages.length} new message(s)`);
             for (const msg of newMessages) {
               await addMessage(username, msg.role, msg.text);
               updatedHistory.push(msg);
+              if (msg.role === 'user' && msg.type === 'voice_note') {
+                hasVoiceNote = true;
+              }
             }
           }
           
-          // 5. Check if response needed
+          // 5. Check if manual response needed (Voice Note)
+          if (hasVoiceNote) {
+            console.log(`   🎤 VOICE NOTE DETECTED! Setting status to 'manual'.`);
+            await setDmThreadStatus(username, 'manual', { 
+              last_checked_at: new Date().toISOString(),
+              notes: "Vocal reçu - nécessite une réponse manuelle."
+            });
+            processedResults.push({
+               username,
+               name: conv.name,
+               message: "[VOCAL REÇU - RÉPONSE MANUELLE REQUISE]",
+               url: conversationUrl,
+               isManual: true
+            });
+            continue; // Skip AI response generation
+          }
+
+          // 6. Check if response needed
           const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
           if (!lastMsg || lastMsg.role !== 'user') {
             console.log(`   ⏳ Last message was not from user.`);
