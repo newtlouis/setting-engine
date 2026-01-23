@@ -267,10 +267,27 @@ export async function runEngagementWatcher(options = {}) {
                 
                 // Fallback to follower template if specific ones don't exist
                 if (!messageTemplate) messageTemplate = profileConfig.outreach?.follower_template;
-                if (!messageTemplate) messageTemplate = "Hello {{firstName}} ! Merci pour ton interaction sur mon dernier post 🌸";
+                
+                // Final safety fallback to avoid empty or ultra-short messages
+                if (!messageTemplate || messageTemplate.length < 10) {
+                    messageTemplate = "Hello {{firstName}} ! Merci pour ton interaction sur mon dernier post 🌸";
+                }
 
-                let finalMessage = messageTemplate.replace('{{firstName}}', aiFirstName || '').replace(/\s+/g, ' ').trim();
-                if (!aiFirstName) finalMessage = finalMessage.replace(/Hello\s+/, 'Hello ').trim();
+                let finalMessage = messageTemplate;
+                
+                // Handle {{firstName}} placeholder
+                if (aiFirstName) {
+                    finalMessage = finalMessage.replace(/{{firstName}}/g, aiFirstName);
+                } else {
+                    // Remove {{firstName}} and clean up formatting
+                    // Handles "Hello {{firstName}}" -> "Hello", "Coucou {{firstName}}" -> "Coucou"
+                    finalMessage = finalMessage.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
+                    // If it started with "Hello !" (now that name is gone), make sure it's capitalized correctly
+                    if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
+                }
+                
+                // Final cleanup: remove double spaces and trim
+                finalMessage = finalMessage.replace(/\s+/g, ' ').trim();
 
                 if (options.dryRun) {
                     console.log(`   🚧 DRY RUN: Would contact @${username} with: "${finalMessage}"`);

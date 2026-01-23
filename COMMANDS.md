@@ -9,9 +9,7 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | Action | Commande | Description |
 |--------|----------|-------------|
 | **Dashboard** | `npm run ui` | Lance l'interface visuelle (Stats, Logs, Config). |
-| **Collector** | `npm run scrape -- [options]` | Lance la collecte de leads. |
 | **Prospector** | `npm run prospect -- [options]` | ⭐ **Nouveau**. Pipeline unifié (Scrape + Qualification + Outreach). |
-| **Outreach** | `npm run send -- [options]` | Lance l'envoi de messages (Statut: `outreach`). |
 | **Inbox Responder** | `npm run respond:inbox` | Scanne la boîte de réception pour les nouveaux messages. |
 | **Follower Outreach** | `npm run respond:followers` | ⭐ **Nouveau**. Souhaite la bienvenue aux nouveaux abonnés. |
 | **Engagement Watcher** | `npm run respond:engagement` | ⭐ **Nouveau**. Contacte ceux qui likent/commentent tes posts. |
