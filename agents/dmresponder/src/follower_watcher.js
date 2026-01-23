@@ -249,8 +249,8 @@ export async function runFollowerWatcher(options = {}) {
                 console.log(`   Profile: https://www.instagram.com/${username}/`);
                 console.log(`   Message: "${welcomeMessage}"\n`);
 
-                await typeInOpenTab(dmTab, welcomeMessage);
-                registerOpenTab(username, dmTab, welcomeMessage);
+                await typeInOpenTab(dmResult.tab, welcomeMessage);
+                registerOpenTab(username, dmResult.tab, welcomeMessage);
                 
                 // 10. Sync DB
                 await fullUpsertLead(username, account.id, {
@@ -278,7 +278,7 @@ export async function runFollowerWatcher(options = {}) {
                     notes: `Discussion existante détectée (${dmResult.scrapedMessages.length} messages).`
                 });
                 
-                if (dmTab) await dmTab.close().catch(() => {});
+                if (dmResult.tab) await dmResult.tab.close().catch(() => {});
             }
             
             // Small break between profiles
