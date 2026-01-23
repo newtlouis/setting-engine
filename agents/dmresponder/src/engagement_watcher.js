@@ -192,8 +192,8 @@ export async function runEngagementWatcher(options = {}) {
             const likers = await scrapePostLikers(page);
             
             console.log(`   📊 Scraping results:`);
-            console.log(`      - Likes: ${likers.length} leads`);
-            console.log(`      - Comments: ${commenters.length} leads`);
+            console.log(`      - Likes: ${likers.length} leads ${likers.length > 0 ? `(@${likers.slice(0, 10).join(', @')}${likers.length > 10 ? '...' : ''})` : ''}`);
+            console.log(`      - Comments: ${commenters.length} leads ${commenters.length > 0 ? `(@${commenters.slice(0, 10).map(c => c.username).join(', @')}${commenters.length > 10 ? '...' : ''})` : ''}`);
 
             // Unified list of potential leads
             const potentialLeads = [

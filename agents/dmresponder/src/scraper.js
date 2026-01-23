@@ -1176,48 +1176,117 @@ export async function scrapePostComments(page) {
     try {
         console.log('   Scraping comments...');
         
-        // 1. Better scrolling loop to load comments (Lazy loading)
-        const comments = await page.evaluate(async () => {
+        // 1. Detect Post Author (so we can exclude them)
+        const postAuthor = await page.evaluate(() => {
+            const allLinks = document.querySelectorAll('header a[href^="/"]');
+            for (const link of allLinks) {
+                const href = link.getAttribute('href');
+                const match = href.match(/^\/([a-zA-Z0-9._]+)\/?$/);
+                if (match && !['explore', 'reels', 'p', 'direct'].includes(match[1])) {
+                    return match[1];
+                }
+            }
+            return null;
+        });
+
+        if (postAuthor) console.log(`      (Post author detected: @${postAuthor})`);
+
+        // 2. Scrolling and extraction logic
+        const comments = await page.evaluate(async (author) => {
             const results = [];
             const seen = new Set();
             const randomDelay = (min, max) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
             
-            // Goal: Scroll enough to capture several batches of comments
+            // --- A. FIND SCROLLER ---
+            // On desktop, comments are in a right sidebar or modal
+            const findScroller = () => {
+                const candidates = Array.from(document.querySelectorAll('div, ul'));
+                let best = null;
+                let maxH = 0;
+                for (const el of candidates) {
+                    if (el.scrollHeight > el.clientHeight) {
+                        const style = window.getComputedStyle(el);
+                        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                            if (el.scrollHeight > maxH) {
+                                maxH = el.scrollHeight;
+                                best = el;
+                            }
+                        }
+                    }
+                }
+                return best;
+            };
+
+            const scroller = findScroller();
+            const scrollTarget = scroller || window;
+            console.log(scroller ? "Found internal scroller for comments" : "Using window as scroller");
+
             let previousHeight = 0;
             let noChangeCount = 0;
             const MAX_SCROLL_SESSIONS = 5;
 
             for (let i = 0; i < MAX_SCROLL_SESSIONS; i++) {
-                // Collect visible comments
-                const allDivs = Array.from(document.querySelectorAll('div'));
-                allDivs.forEach(div => {
-                    const link = div.querySelector('a[href^="/"]');
-                    if (!link) return;
+                // --- B. EXTRACT ---
+                // Anchor extraction around <time> elements which define a comment/reply
+                const timeElements = Array.from(document.querySelectorAll('time'));
+                
+                timeElements.forEach(timeEl => {
+                    // Find the common container for this comment (usually 3-4 levels up)
+                    let container = timeEl.parentElement;
+                    while (container && container.tagName !== 'DIV') container = container.parentElement;
+                    if (!container) return;
                     
-                    const href = link.getAttribute('href');
-                    const username = href.replace(/\//g, '').split('?')[0];
-                    if (!username || ['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) return;
+                    // We need a container that has both the profile link and the comment text
+                    // Looking for the DIV that contains the profile link and the text span
+                    let commentBlock = container.closest('div[role="none"]') || container.closest('div.x1cy8zhl') || container.parentElement;
+                    
+                    if (commentBlock) {
+                        // 1. Extract Username
+                        const usernameEl = commentBlock.querySelector('span._ap3a, a[href^="/"] span[dir="auto"]');
+                        if (!usernameEl) return;
+                        
+                        const username = usernameEl.innerText.trim();
+                        if (!username || username === author || ['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) return;
 
-                    // Find text span in the same div or next sibling
-                    const textSpan = div.querySelector('span[dir="auto"]');
-                    if (textSpan) {
-                        const text = textSpan.innerText.trim();
-                        if (text && text !== username && text.length > 2) {
-                            const key = `${username}:${text}`;
+                        // 2. Extract Comment Text
+                        // The text is usually in a span[dir="auto"] that is NOT the username span
+                        // and often has specific classes like x1lliihq
+                        const allSpans = Array.from(commentBlock.querySelectorAll('span[dir="auto"]'));
+                        let commentText = '';
+                        
+                        for (const span of allSpans) {
+                            const text = span.innerText.trim();
+                            if (text && text !== username && text.length > 1) {
+                                // Skip UI words
+                                const uiWords = ['vérifié', 'j\'aime', 'répondre', 'reply', 'like', 'voir', 'view', 'répons', 'replies'];
+                                if (uiWords.some(w => text.toLowerCase().includes(w))) continue;
+                                if (/^\d+\s*(j'aime|like|réponse|reply)$/i.test(text)) continue;
+                                
+                                commentText = text;
+                                break; 
+                            }
+                        }
+
+                        if (commentText) {
+                            const key = `${username}:${commentText.substring(0, 50)}`;
                             if (!seen.has(key)) {
-                                results.push({ username, text });
+                                results.push({ username, text: commentText });
                                 seen.add(key);
                             }
                         }
                     }
                 });
 
-                // Scroll down
-                window.scrollBy(0, 800);
+                // --- C. SCROLL ---
+                if (scrollTarget === window) {
+                   window.scrollBy(0, 800);
+                } else {
+                   scrollTarget.scrollBy({ top: 500, behavior: 'smooth' });
+                }
+                
                 await randomDelay(1200, 2000);
 
-                // Check for end
-                const currentHeight = document.body.scrollHeight;
+                const currentHeight = (scrollTarget === window) ? document.body.scrollHeight : scrollTarget.scrollHeight;
                 if (currentHeight === previousHeight) {
                     noChangeCount++;
                     if (noChangeCount >= 2) break;
@@ -1225,11 +1294,22 @@ export async function scrapePostComments(page) {
                     noChangeCount = 0;
                     previousHeight = currentHeight;
                 }
+                
+                // Click "Load more" if visible
+                const loadMore = Array.from(document.querySelectorAll('div[role="button"]'))
+                    .find(b => {
+                        const t = b.innerText.toLowerCase();
+                        return (t.includes('voir') || t.includes('view')) && (t.includes('répons') || t.includes('replies') || t.includes('comment'));
+                    });
+                if (loadMore) {
+                    loadMore.click();
+                    await randomDelay(1000, 2000);
+                }
             }
             return results;
-        });
+        }, postAuthor);
 
-        console.log(`   Found ${comments.length} comments.`);
+        console.log(`   Found ${comments.length} real comments.`);
         return comments;
     } catch (error) {
         console.error('   Error scraping comments:', error.message);
