@@ -69,7 +69,7 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
       let consecutiveNoNewPosts = 0;
       let totalProcessedCandidates = 0;
 
-      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring ${alreadyScraped.size} history)`);
+      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring ${alreadyScraped.size} history < 7 days)`);
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
         // Extract post links from current viewport - try multiple methods
@@ -185,7 +185,7 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
  */
 export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScraped = new Map()) {
   const allPosts = [];
-  const RE_SCRAPE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const RE_SCRAPE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   for (const profile of profiles) {
     // Extract username from URL or use as-is
@@ -238,7 +238,7 @@ export async function discoverFromProfiles(page, profiles, maxPosts, alreadyScra
       let consecutiveNoNewPosts = 0;
       let totalProcessedCandidates = 0;
 
-      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring history < 24h)`);
+      console.log(`      🎯 Target: ${maxPosts} NEW posts (ignoring history < 7 days)`);
 
       while (posts.length < maxPosts && scrollAttempts < maxScrolls) {
         // Extract post links - try multiple methods

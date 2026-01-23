@@ -144,8 +144,8 @@ export async function runProspector(options = {}) {
     console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
     
     // Track scraped post URLs across batches to avoid duplicates
-    // Initialize with posts scraped in the last 24h from DB
-    const recentScrapedUrls = dbFunctions.getRecentlyScrapedPosts ? dbFunctions.getRecentlyScrapedPosts(24) : [];
+    // Initialize with posts scraped in the last 7 days (168h) from DB
+    const recentScrapedUrls = dbFunctions.getRecentlyScrapedPosts ? dbFunctions.getRecentlyScrapedPosts(168) : [];
     const alreadyScraped = new Set(recentScrapedUrls); 
     
     if (recentScrapedUrls.length > 0) {
