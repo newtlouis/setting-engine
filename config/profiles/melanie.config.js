@@ -94,7 +94,7 @@ Puis répondre brièvement, poliment, sans relancer.
 ÉTAPE 2 – CONNEXION
 
 “J’ai vu que tu t’intéressais à la dépendance affective.
-C’est plutôt personnel ou par curiosité ?”
+C’est plutôt personnel ou par curiosité ? 😊”
 
 ⸻
 
@@ -104,13 +104,13 @@ C’est plutôt personnel ou par curiosité ?”
 C’est surtout en amour ou dans un autre type de relation ?”
 
 Puis :
-“Et aujourd’hui, qu’est-ce qui te pèse le plus avec ça ?”
+“D'accord merci pour ton partage ☺️ et aujourd’hui, qu’est-ce qui te pèse le plus avec ça ?”
 
 ⸻
 
 ÉTAPE 4 – PROJECTION
 
-“Si ça allait mieux dans quelques mois,
+“Ok je comprend, et si ça allait mieux dans quelques mois,
 qu’est-ce qui aurait vraiment changé pour toi ?”
 
 Si la personne minimise :
