@@ -167,10 +167,11 @@ export async function runFollowupWatcher(options = {}) {
             if (lastAssistantMsg && !isQuestion(lastAssistantMsg.text)) {
                 console.log('🤖 Last message was NOT a question. Generating personalized revival...');
                 try {
-                    message = await generateRevivalMessage(scrapedMessages, { 
+                    const revivalResult = await generateRevivalMessage(scrapedMessages, { 
                         username: thread.username,
                         fullName: thread.full_name
                     });
+                    message = revivalResult.message;
                     isRevival = true;
                 } catch (e) {
                     console.error('Failed to generate revival, falling back to template:', e);
@@ -179,6 +180,12 @@ export async function runFollowupWatcher(options = {}) {
             } else {
                 console.log('📝 Last message was a question (or null). Using DB template.');
                 message = nextTemplate.template_text;
+            }
+
+            // Safety check for message type
+            if (!message || typeof message !== 'string') {
+                console.error('⚠️ Message is not a string:', message);
+                message = "";
             }
 
             // Placeholder replacement
