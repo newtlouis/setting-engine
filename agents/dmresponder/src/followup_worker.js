@@ -124,6 +124,15 @@ export async function runFollowupWatcher(options = {}) {
 
             if (!result.success) {
                 console.log(`❌ Failed to open: ${result.error}`);
+                
+                // Handle blocked/deleted profiles
+                if (result.error?.includes('Profile unavailable') || result.error?.includes('page introuvable')) {
+                    console.log(`📡 Lead @${thread.username} seems to have blocked us or deleted their profile. Marking as not_interested.`);
+                    await setDmThreadStatus(thread.username, 'not_interested', { 
+                        notes: "Profile unavailable (likely blocked/deleted)." 
+                    });
+                }
+                
                 continue;
             }
 
@@ -139,7 +148,13 @@ export async function runFollowupWatcher(options = {}) {
             // So if we are about to send follow-up > 1, we skip.
             if (userMsgCount === 1 && nextTemplate.step_order > 1) {
                 console.log(`🛑 Stopping follow-ups for @${thread.username}: Only 1 user message sent (max 1 follow-up allowed).`);
-                await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id); // Mark as "done/skipped" effectively
+                
+                // Mark in DB so they don't come back in follow-up loop
+                await setDmThreadStatus(thread.username, 'not_interested', { 
+                    notes: "Stopped follow-ups: single reply, limit reached." 
+                });
+                
+                await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id); 
                 await openTab.close();
                 continue;
             }

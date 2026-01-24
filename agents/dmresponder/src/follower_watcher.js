@@ -240,6 +240,16 @@ export async function runFollowerWatcher(options = {}) {
             
             if (!dmResult.success) {
                 console.log(`   ❌ Failed to open DM: ${dmResult.error}`);
+                
+                // Handle blocked/deleted profiles
+                if (dmResult.error?.includes('Profile unavailable') || dmResult.error?.includes('page introuvable')) {
+                    console.log(`📡 Lead @${username} seems to have blocked Melanie or deleted their profile. Marking as not_interested.`);
+                    await fullUpsertLead(username, account.id, {
+                        status: 'not_interested',
+                        notes: "Profile unavailable (likely blocked/deleted)."
+                    });
+                }
+                
                 continue;
             }
             

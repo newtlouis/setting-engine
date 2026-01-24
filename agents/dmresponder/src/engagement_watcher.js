@@ -300,6 +300,21 @@ export async function runEngagementWatcher(options = {}) {
                     profile_url: `https://www.instagram.com/${username}/`
                 });
                 
+                if (!dmResult.success) {
+                    console.log(`   ❌ Failed to open DM: ${dmResult.error}`);
+                    
+                    // Handle blocked/deleted profiles
+                    if (dmResult.error?.includes('Profile unavailable') || dmResult.error?.includes('page introuvable')) {
+                        console.log(`📡 Lead @${username} seems to have blocked Melanie or deleted their profile. Marking as not_interested.`);
+                        await fullUpsertLead(username, account.id, {
+                            status: 'not_interested',
+                            notes: "Profile unavailable (likely blocked/deleted)."
+                        });
+                    }
+                    if (dmResult.tab) await dmResult.tab.close().catch(() => {});
+                    continue;
+                }
+
                 if (dmResult.success && dmResult.scrapedMessages.length === 0) {
                     console.log(`\n   💬 SENDING ENGAGEMENT OUTREACH:`);
                     console.log(`   Profile: https://www.instagram.com/${username}/`);
