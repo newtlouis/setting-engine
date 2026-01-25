@@ -4,9 +4,34 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { getDatabase } from '../collector/src/database.js';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment variables from multiple locations
+const possibleEnvPaths = [
+    path.join(__dirname, '..', 'dmresponder', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), 'agents', 'dmresponder', '.env')
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+    const result = dotenv.config({ path: envPath });
+    if (!result.error) {
+        console.log('✅ Loaded .env from:', envPath);
+        if (process.env.OPENAI_API_KEY) {
+            envLoaded = true;
+            break;
+        }
+    }
+}
+
+if (!envLoaded) {
+    console.warn('⚠️  Could not find a valid .env file with OPENAI_API_KEY');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -427,6 +452,18 @@ app.post('/api/test-scenarios/test', async (req, res) => {
         
         if (!conversationHistory || !Array.isArray(conversationHistory)) {
             return res.status(400).json({ error: 'Invalid request: conversationHistory array required' });
+        }
+
+        // DEBUG: Check environment
+        console.log('--- AI Test Request ---');
+        console.log('Current profile:', profile || 'melanie');
+        console.log('API Key present:', !!process.env.OPENAI_API_KEY);
+        
+        if (!process.env.OPENAI_API_KEY) {
+            console.log('Attempting emergency load of .env...');
+            const dmresponderEnvPath = path.join(__dirname, '..', 'dmresponder', '.env');
+            dotenv.config({ path: dmresponderEnvPath });
+            console.log('API Key after emergency load:', !!process.env.OPENAI_API_KEY);
         }
         
         // Load profile config (default to melanie)

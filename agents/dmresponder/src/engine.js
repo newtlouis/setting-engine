@@ -8,9 +8,6 @@ import { SYSTEM_PROMPT } from './prompts.js';
 import { validateConversation } from './utils.js';
 
 // Load environment variables from .env file
-dotenv.config();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 /**
@@ -24,7 +21,7 @@ export async function generateResponse({ conversationHistory, leadContext = null
   // Validate input
   validateConversation(conversationHistory);
 
-  if (!OPENAI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set in the environment variables.');
   }
 
@@ -60,7 +57,7 @@ export async function generateResponse({ conversationHistory, leadContext = null
  * Generates a specific revival message when the last interaction was not a question.
  */
 export async function generateRevivalMessage(conversationHistory, leadContext) {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required');
+  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required');
 
   const systemPrompt = `
     You are an Instagram outreach expert. 
@@ -91,7 +88,7 @@ export async function generateRevivalMessage(conversationHistory, leadContext) {
  */
 async function getLlmResponse(conversationHistory, leadContext, profileConfig = null) {
   const headers = {
-    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
     'Content-Type': 'application/json',
   };
 
