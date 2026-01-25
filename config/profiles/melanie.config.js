@@ -108,7 +108,7 @@ Puis répondre brièvement, poliment, sans relancer.
 [STEP_2] – CONNEXION
 
 “Coucou, j'espère que tu vas bien 🌸
-J’ai vu que tu t’intéressais à la dépendance affective.
+J’ai vu que tu t’intéressais à la dépendance affective / hypersensibilité.
 C’est plutôt personnel ou par curiosité ? 😊”
 
 ⸻
@@ -233,19 +233,23 @@ fin propre
         ]
     },
     outreach: {
-        qualification_prompt: `Analyse ce profil Instagram (Username et Bio) et détermine s'il s'agit d'un CONCURRENT (professionnel, coach, accompagnateur) ou d'un LEAD POTENTIEL (personne privée).
+        qualification_prompt: `Analyse ce profil Instagram (Username et Bio) et détermine s'il s'agit d'un CONCURRENT (professionnel de l'accompagnement mental/psy) ou d'un LEAD POTENTIEL (personne privée ou pro hors coaching mental).
 
 Tu DOIS répondre "NON" (REJET) si le profil est un CONCURRENT direct sur le plan MENTAL ou PSYCHOLOGIQUE :
 - Un Thérapeute, Psychologue, Psy, Sophrologue, ou Praticien en santé mentale.
 - Un Coach spécialisé dans la psyché (Love coach, Life coach, Coach en confiance en soi, etc.).
-- Tout profil axé sur le "bien-être mental", la "psychologie", le "développement personnel", la "gestion des émotions" ou la "santé mentale".
+- Tout profil axé sur le "bien-être mental", la "gestion des émotions", la "psychologie" ou la "santé mentale".
+- Toute personne se présentant comme "Créateur", "Influencé par" ou "Passionné de" psychologie/développement personnel qui partage du contenu sur ces thèmes.
 - S'il propose de l' "accompagnement thérapeutique", des "formations en psychologie", ou des "RDV de coaching mental".
 - Si le USERNAME contient : "coach", "psy", "sophro", "therapeute" (sauf si lié uniquement au corps).
+- **RÈGLE STRICTE :** Si la bio mentionne "Partager ma passion pour la psychologie" ou équivalent, c'est un REJET ("NON").
 
 Tu DOIS répondre "OUI" (ACCEPTER) si :
-- C'est un compte personnel.
-- C'est un professionnel du CORPS uniquement : Massage, Soins corporels, Esthéticienne, Osteopathe, Kiné, Spa, Bien-être physique (sans dimension psy/mentale).
-- C'est un pro sans rapport (Artiste, Commerçant, etc.).
+- C'est un compte personnel (aucune activité pro mentionnée).
+- C'est un professionnel du CORPS ou du SPORT uniquement : Yoga (professeur, studio), Danse, Fitness, Musculation, Massage (hors dimension énergétique/psy), Esthéticienne, Osteopathe, Kiné.
+- C'est un pro sans aucun rapport avec le bien-être (Artiste, Commerçant, Restauration, etc.).
+
+IMPORTANT : Le Yoga et la Danse sont considérés comme des LEADS POTENTIELS ("OUI"), même s'ils partagent des conseils bien-être, car ils ne traitent pas directement la dépendance affective par le coaching mental.
 
 Username: @{username}
 Bio: {bio}
