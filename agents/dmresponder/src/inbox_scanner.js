@@ -415,6 +415,15 @@ export async function runInboxScanner(options = {}) {
           let finalMessage = message;
           let newStatus = 'conversation';
           let bookingStatus = null;
+          let detectedStep = response.step_used || null;
+
+          // Extract [STEP_X] label
+          const stepMatch = finalMessage.match(/^\[STEP_([\d.]+)\]/i);
+          if (stepMatch) {
+            detectedStep = stepMatch[1];
+            console.log(`   📍 STEP DETECTED: ${detectedStep}`);
+            finalMessage = finalMessage.replace(/^\[STEP_[\d.]+\]\s*/i, '').trim();
+          }
 
           if (finalMessage.includes('[NOT_INTERESTED]')) {
             console.log(`   ⛔ NOT INTERESTED tag detected!`);
@@ -433,7 +442,8 @@ export async function runInboxScanner(options = {}) {
           await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
           await setDmThreadStatus(username, newStatus, { 
             last_checked_at: new Date().toISOString(),
-            booking_status: bookingStatus
+            booking_status: bookingStatus,
+            conversation_step: detectedStep
           });
           
           processedResults.push({

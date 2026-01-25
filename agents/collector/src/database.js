@@ -860,12 +860,13 @@ export function updateLeadDmStatus(username, status, dmUrl = null) {
  */
 export function updateDmThreadStatus(username, status, updates = {}) {
   const notes = updates.last_error || updates.notes || null;
-  const lastChecked = updates.last_checked_at || null;
+  const conversationStep = updates.conversation_step;
   
   const stmt = db.prepare(`
     UPDATE leads SET
       status = @status,
       notes = COALESCE(@notes, notes),
+      conversation_step = COALESCE(@conversation_step, conversation_step),
       updated_at = datetime('now')
     WHERE username = @username
   `);
@@ -873,7 +874,8 @@ export function updateDmThreadStatus(username, status, updates = {}) {
   return stmt.run({
     username,
     status,
-    notes
+    notes,
+    conversation_step: conversationStep !== undefined ? conversationStep : null
   });
 }
 
