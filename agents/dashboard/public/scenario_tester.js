@@ -151,12 +151,20 @@ function displayMessage(message) {
     
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.textContent = message.text;
+    
+    const roleLabel = message.role === 'user' ? '👤 Prospect' : '🤖 Assistant';
+    
+    bubble.innerHTML = `
+        <div style="font-weight: 700; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">${roleLabel}</div>
+        <div style="white-space: pre-wrap;">${escapeHtml(message.text)}</div>
+    `;
     
     // Add step indicator for AI messages
     if (message.role === 'assistant' && message.step_used) {
         const stepBadge = document.createElement('span');
         stepBadge.className = 'step-badge';
+        stepBadge.style.marginTop = '8px';
+        stepBadge.style.display = 'inline-block';
         stepBadge.textContent = `Step ${message.step_used}`;
         bubble.appendChild(stepBadge);
     }
