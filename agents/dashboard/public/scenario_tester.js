@@ -467,7 +467,7 @@ function createReplayResultHtml(result) {
     result.messages.forEach(msg => {
         html += `
             <div class="replay-message ${msg.role}">
-                <strong>${msg.role === 'user' ? 'Prospect' : 'IA'}:</strong>
+                <strong>${msg.role === 'user' ? 'Prospect' : '🤖 Assistant'}:</strong>
                 <span>${escapeHtml(msg.text)}</span>
                 ${msg.step_used ? `<span class="step-badge">Step ${msg.step_used}</span>` : ''}
             </div>
