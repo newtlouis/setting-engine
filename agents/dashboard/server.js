@@ -385,7 +385,8 @@ import {
     getScenarioById, 
     deleteScenario, 
     saveScenarioResult,
-    getScenarioResults 
+    getScenarioResults,
+    updateScenario 
 } from '../collector/src/database.js';
 
 // Import AI engine
@@ -522,8 +523,9 @@ app.post('/api/test-scenarios/:id/replay', async (req, res) => {
             });
         }
         
-        // Save result
+        // Save result and overwrite existing scenario messages
         saveScenarioResult(parseInt(id), fullConversation);
+        updateScenario(parseInt(id), fullConversation);
         
         res.json({
             scenario_id: id,
@@ -579,8 +581,9 @@ app.post('/api/test-scenarios/replay-all', async (req, res) => {
                     });
                 }
                 
-                // Save result
+                // Save result and overwrite existing scenario messages
                 saveScenarioResult(scenario.id, fullConversation);
+                updateScenario(scenario.id, fullConversation);
                 
                 results.push({
                     scenario_id: scenario.id,

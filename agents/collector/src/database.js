@@ -1225,6 +1225,19 @@ export function deleteScenario(id) {
 }
 
 /**
+ * Update a scenario's messages
+ * @param {number} id - Scenario ID
+ * @param {Array} messages - New message list
+ */
+export function updateScenario(id, messages) {
+  return db.prepare(`
+    UPDATE test_scenarios 
+    SET messages = ?, created_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JSON.stringify(messages), id);
+}
+
+/**
  * Save scenario test result
  * @param {number} scenarioId - Scenario ID
  * @param {Array} messages - Complete conversation with AI responses

@@ -456,6 +456,9 @@ async function replayScenario(id) {
         // Update save button (even though it's already saved, user might want to edit and save as new)
         document.getElementById('saveBtn').disabled = false;
         
+        // Refresh scenarios to ensure "Voir" shows the new version
+        await loadScenarios();
+        
         // Show success in systems
         showSuccessMessage(`Scénario "${scenario.name}" rejoué avec succès !`);
 
