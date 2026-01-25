@@ -454,16 +454,9 @@ app.post('/api/test-scenarios/test', async (req, res) => {
             return res.status(400).json({ error: 'Invalid request: conversationHistory array required' });
         }
 
-        // DEBUG: Check environment
-        console.log('--- AI Test Request ---');
-        console.log('Current profile:', profile || 'melanie');
-        console.log('API Key present:', !!process.env.OPENAI_API_KEY);
-        
         if (!process.env.OPENAI_API_KEY) {
-            console.log('Attempting emergency load of .env...');
             const dmresponderEnvPath = path.join(__dirname, '..', 'dmresponder', '.env');
             dotenv.config({ path: dmresponderEnvPath });
-            console.log('API Key after emergency load:', !!process.env.OPENAI_API_KEY);
         }
         
         // Load profile config (default to melanie)
@@ -504,26 +497,29 @@ app.post('/api/test-scenarios/:id/replay', async (req, res) => {
         
         // Replay the scenario
         const fullConversation = [];
-        
-        for (const msg of scenario.messages) {
+        const originalMessages = scenario.messages;
+
+        // 1. Handle potential first assistant message (template)
+        if (originalMessages.length > 0 && originalMessages[0].role === 'assistant') {
+            fullConversation.push(originalMessages[0]);
+        }
+
+        // 2. Iterate through user messages and generate fresh responses
+        for (const msg of originalMessages.filter(m => m.role === 'user')) {
             fullConversation.push(msg);
             
-            // If it's a user message, get AI response
-            if (msg.role === 'user') {
-                const response = await generateResponse({
-                    conversationHistory: fullConversation,
-                    leadContext: null,
-                    profileConfig
-                });
-                
-                const aiMessage = {
-                    role: 'assistant',
-                    text: response.next_message || response.message,
-                    step_used: response.step_used
-                };
-                
-                fullConversation.push(aiMessage);
-            }
+            // Generate fresh AI response
+            const response = await generateResponse({
+                conversationHistory: fullConversation,
+                leadContext: null,
+                profileConfig
+            });
+            
+            fullConversation.push({
+                role: 'assistant',
+                text: response.next_message || response.message,
+                step_used: response.step_used
+            });
         }
         
         // Save result
@@ -559,25 +555,28 @@ app.post('/api/test-scenarios/replay-all', async (req, res) => {
             try {
                 // Replay each scenario
                 const fullConversation = [];
-                
-                for (const msg of scenario.messages) {
+                const originalMessages = scenario.messages;
+
+                // 1. Handle potential first assistant message (template)
+                if (originalMessages.length > 0 && originalMessages[0].role === 'assistant') {
+                    fullConversation.push(originalMessages[0]);
+                }
+
+                // 2. Iterate through user messages and generate fresh responses
+                for (const msg of originalMessages.filter(m => m.role === 'user')) {
                     fullConversation.push(msg);
                     
-                    if (msg.role === 'user') {
-                        const response = await generateResponse({
-                            conversationHistory: fullConversation,
-                            leadContext: null,
-                            profileConfig
-                        });
-                        
-                        const aiMessage = {
-                            role: 'assistant',
-                            text: response.next_message || response.message,
-                            step_used: response.step_used
-                        };
-                        
-                        fullConversation.push(aiMessage);
-                    }
+                    const response = await generateResponse({
+                        conversationHistory: fullConversation,
+                        leadContext: null,
+                        profileConfig
+                    });
+                    
+                    fullConversation.push({
+                        role: 'assistant',
+                        text: response.next_message || response.message,
+                        step_used: response.step_used
+                    });
                 }
                 
                 // Save result

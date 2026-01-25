@@ -18,6 +18,9 @@ async function loadOutreachTemplates() {
         const response = await fetch('/api/outreach-templates?profile=melanie');
         const data = await response.json();
         outreachTemplates = data;
+        
+        // Initialize with default selected type if templates loaded successfully
+        onConversationTypeChange();
     } catch (err) {
         console.error('Failed to load templates:', err);
     }
@@ -402,13 +405,22 @@ async function deleteScenario(id) {
 }
 
 async function replayScenario(id) {
-    const resultsDiv = document.getElementById('replayResults');
-    const contentDiv = document.getElementById('replayResultsContent');
+    const scenario = scenarios.find(s => s.id === id);
+    if (!scenario) return;
+
+    // 1. Clear current chat
+    currentConversation = [];
+    const chatContainer = document.getElementById('chatContainer');
+    chatContainer.innerHTML = '';
     
-    resultsDiv.style.display = 'block';
-    contentDiv.innerHTML = '<div class="loading-scenarios">Rejeu en cours...</div>';
+    // Show system message
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'chat-message system';
+    infoDiv.innerHTML = `<div class="message-bubble">🔄 Rejeu du scénario : <strong>${escapeHtml(scenario.name)}</strong>...</div>`;
+    chatContainer.appendChild(infoDiv);
     
     try {
+        // 2. Call replay API
         const response = await fetch(`/api/test-scenarios/${id}/replay`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -418,14 +430,37 @@ async function replayScenario(id) {
         const data = await response.json();
         
         if (data.error) {
-            contentDiv.innerHTML = `<div class="error-scenarios">❌ ${data.error}</div>`;
+            showError(data.error);
             return;
         }
+
+        // 3. Clear chat again (to remove "Replaying..." message)
+        chatContainer.innerHTML = '';
+        currentConversation = [];
+
+        // 4. Animate message display
+        for (const msg of data.messages) {
+            // Add to state
+            currentConversation.push(msg);
+            
+            // Display message
+            displayMessage(msg);
+            
+            // Artificial delay for realism (shorter for replay)
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Scroll
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
         
-        contentDiv.innerHTML = createReplayResultHtml(data);
+        // Update save button (even though it's already saved, user might want to edit and save as new)
+        document.getElementById('saveBtn').disabled = false;
         
+        // Show success in systems
+        showSuccessMessage(`Scénario "${scenario.name}" rejoué avec succès !`);
+
     } catch (err) {
-        contentDiv.innerHTML = `<div class="error-scenarios">❌ ${err.message}</div>`;
+        showError('Erreur de replay : ' + err.message);
     }
 }
 
@@ -459,23 +494,6 @@ async function replayAllScenarios() {
     } catch (err) {
         contentDiv.innerHTML = `<div class="error-scenarios">❌ ${err.message}</div>`;
     }
-}
-
-function createReplayResultHtml(result) {
-    let html = '<div class="replay-result">';
-    
-    result.messages.forEach(msg => {
-        html += `
-            <div class="replay-message ${msg.role}">
-                <strong>${msg.role === 'user' ? 'Prospect' : '🤖 Assistant'}:</strong>
-                <span>${escapeHtml(msg.text)}</span>
-                ${msg.step_used ? `<span class="step-badge">Step ${msg.step_used}</span>` : ''}
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    return html;
 }
 
 function createAllReplayResultsHtml(results) {

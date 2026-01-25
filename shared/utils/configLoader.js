@@ -35,7 +35,6 @@ export async function loadProfileConfig(profileName) {
     // Dynamic import needs file:// URL on Windows/Mac for absolute paths sometimes
     const moduleUrl = pathToFileURL(jsPath).href;
     const module = await import(moduleUrl);
-    console.log(`✅ Loaded JavaScript configuration for profile: ${normalizedName}`);
     return module.default;
   } catch (err) {
     // If JS doesn't exist or fails, try .json
