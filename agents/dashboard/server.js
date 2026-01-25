@@ -349,6 +349,226 @@ app.post('/api/leads/:username/status', (req, res) => {
     }
 });
 
+// ============================================
+// SCENARIO TESTING API
+// ============================================
+
+// Import scenario functions
+import { 
+    createScenario, 
+    getScenarios, 
+    getScenarioById, 
+    deleteScenario, 
+    saveScenarioResult,
+    getScenarioResults 
+} from '../collector/src/database.js';
+
+// Import AI engine
+import { generateResponse } from '../dmresponder/src/engine.js';
+import { loadProfileConfig } from '../../shared/utils/configLoader.js';
+
+// POST /api/test-scenarios - Create/save a scenario
+app.post('/api/test-scenarios', (req, res) => {
+    try {
+        const { name, messages } = req.body;
+        
+        if (!name || !messages || !Array.isArray(messages)) {
+            return res.status(400).json({ error: 'Invalid request: name and messages array required' });
+        }
+        
+        const scenario = createScenario(name, messages);
+        res.json(scenario);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/test-scenarios - List all scenarios
+app.get('/api/test-scenarios', (req, res) => {
+    try {
+        const scenarios = getScenarios();
+        res.json(scenarios);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/test-scenarios/:id - Get scenario details
+app.get('/api/test-scenarios/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const scenario = getScenarioById(parseInt(id));
+        
+        if (!scenario) {
+            return res.status(404).json({ error: 'Scenario not found' });
+        }
+        
+        res.json(scenario);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/test-scenarios/:id - Delete a scenario
+app.delete('/api/test-scenarios/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        deleteScenario(parseInt(id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/test - Test a single message (returns AI response)
+app.post('/api/test-scenarios/test', async (req, res) => {
+    try {
+        const { conversationHistory, profile } = req.body;
+        
+        if (!conversationHistory || !Array.isArray(conversationHistory)) {
+            return res.status(400).json({ error: 'Invalid request: conversationHistory array required' });
+        }
+        
+        // Load profile config (default to melanie)
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        // Generate AI response
+        const response = await generateResponse({
+            conversationHistory,
+            leadContext: null,
+            profileConfig
+        });
+        
+        res.json({
+            message: response.next_message || response.message,
+            step_used: response.step_used
+        });
+    } catch (err) {
+        console.error('Test error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/:id/replay - Replay a saved scenario
+app.post('/api/test-scenarios/:id/replay', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { profile } = req.body;
+        
+        const scenario = getScenarioById(parseInt(id));
+        if (!scenario) {
+            return res.status(404).json({ error: 'Scenario not found' });
+        }
+        
+        // Load profile config
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        // Replay the scenario
+        const fullConversation = [];
+        
+        for (const msg of scenario.messages) {
+            fullConversation.push(msg);
+            
+            // If it's a user message, get AI response
+            if (msg.role === 'user') {
+                const response = await generateResponse({
+                    conversationHistory: fullConversation,
+                    leadContext: null,
+                    profileConfig
+                });
+                
+                const aiMessage = {
+                    role: 'assistant',
+                    text: response.next_message || response.message,
+                    step_used: response.step_used
+                };
+                
+                fullConversation.push(aiMessage);
+            }
+        }
+        
+        // Save result
+        saveScenarioResult(parseInt(id), fullConversation);
+        
+        res.json({
+            scenario_id: id,
+            messages: fullConversation
+        });
+    } catch (err) {
+        console.error('Replay error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/replay-all - Replay all scenarios
+app.post('/api/test-scenarios/replay-all', async (req, res) => {
+    try {
+        const { profile } = req.body;
+        const scenarios = getScenarios();
+        
+        if (scenarios.length === 0) {
+            return res.json({ results: [] });
+        }
+        
+        // Load profile config
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        const results = [];
+        
+        for (const scenario of scenarios) {
+            try {
+                // Replay each scenario
+                const fullConversation = [];
+                
+                for (const msg of scenario.messages) {
+                    fullConversation.push(msg);
+                    
+                    if (msg.role === 'user') {
+                        const response = await generateResponse({
+                            conversationHistory: fullConversation,
+                            leadContext: null,
+                            profileConfig
+                        });
+                        
+                        const aiMessage = {
+                            role: 'assistant',
+                            text: response.next_message || response.message,
+                            step_used: response.step_used
+                        };
+                        
+                        fullConversation.push(aiMessage);
+                    }
+                }
+                
+                // Save result
+                saveScenarioResult(scenario.id, fullConversation);
+                
+                results.push({
+                    scenario_id: scenario.id,
+                    scenario_name: scenario.name,
+                    messages: fullConversation,
+                    success: true
+                });
+            } catch (err) {
+                results.push({
+                    scenario_id: scenario.id,
+                    scenario_name: scenario.name,
+                    error: err.message,
+                    success: false
+                });
+            }
+        }
+        
+        res.json({ results });
+    } catch (err) {
+        console.error('Replay all error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`\n🚀 Dashboard running at http://localhost:${PORT}`);

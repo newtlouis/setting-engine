@@ -130,6 +130,24 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       FOREIGN KEY (lead_id) REFERENCES leads(id)
     );
     
+    -- Test Scenarios table: saved conversation scenarios for testing
+    CREATE TABLE IF NOT EXISTS test_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      messages TEXT NOT NULL,  -- JSON array of {role, text}
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    
+    -- Test Scenario Results table: results from replaying scenarios
+    CREATE TABLE IF NOT EXISTS test_scenario_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scenario_id INTEGER NOT NULL,
+      messages TEXT NOT NULL,  -- JSON array with AI responses
+      tested_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (scenario_id) REFERENCES test_scenarios(id) ON DELETE CASCADE
+    );
+    
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
@@ -138,8 +156,9 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_comments_lead_id ON comments(lead_id);
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
-    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(account_id);
+    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(post_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_test_scenario_results_scenario_id ON test_scenario_results(scenario_id);
   `);
   
   // 2. SELF-HEALING MIGRATIONS (Add columns if missing in existing DB)
@@ -1142,4 +1161,99 @@ export function updateLeadLastFollowup(username, templateId) {
       updated_at = datetime('now')
     WHERE username = ?
   `).run(templateId, username);
+}
+
+// ============================================
+// TEST SCENARIOS OPERATIONS
+// ============================================
+
+/**
+ * Create a new test scenario
+ * @param {string} name - Scenario name
+ * @param {Array} messages - Array of {role, text}
+ * @returns {Object} Created scenario
+ */
+export function createScenario(name, messages) {
+  const stmt = db.prepare(`
+    INSERT INTO test_scenarios (name, messages)
+    VALUES (?, ?)
+    RETURNING *
+  `);
+  return stmt.get(name, JSON.stringify(messages));
+}
+
+/**
+ * Get all test scenarios
+ * @returns {Array} All scenarios
+ */
+export function getScenarios() {
+  const scenarios = db.prepare(`
+    SELECT * FROM test_scenarios
+    ORDER BY created_at DESC
+  `).all();
+  
+  return scenarios.map(s => ({
+    ...s,
+    messages: JSON.parse(s.messages)
+  }));
+}
+
+/**
+ * Get a scenario by ID
+ * @param {number} id - Scenario ID
+ * @returns {Object|null} Scenario
+ */
+export function getScenarioById(id) {
+  const scenario = db.prepare(`
+    SELECT * FROM test_scenarios WHERE id = ?
+  `).get(id);
+  
+  if (!scenario) return null;
+  
+  return {
+    ...scenario,
+    messages: JSON.parse(scenario.messages)
+  };
+}
+
+/**
+ * Delete a scenario
+ * @param {number} id - Scenario ID
+ */
+export function deleteScenario(id) {
+  return db.prepare('DELETE FROM test_scenarios WHERE id = ?').run(id);
+}
+
+/**
+ * Save scenario test result
+ * @param {number} scenarioId - Scenario ID
+ * @param {Array} messages - Complete conversation with AI responses
+ */
+export function saveScenarioResult(scenarioId, messages) {
+  const stmt = db.prepare(`
+    INSERT INTO test_scenario_results (scenario_id, messages)
+    VALUES (?, ?)
+    RETURNING *
+  `);
+  return stmt.get(scenarioId, JSON.stringify(messages));
+}
+
+/**
+ * Get latest results for a scenario
+ * @param {number} scenarioId - Scenario ID
+ * @param {number} limit - Number of results to return
+ * @returns {Array} Results
+ */
+export function getScenarioResults(scenarioId, limit = 5) {
+  const results = db.prepare(`
+    SELECT * FROM test_scenario_results
+    WHERE scenario_id = ?
+    ORDER BY tested_at DESC
+    LIMIT ?
+  `).all(scenarioId, limit);
+  
+  return results.map(r => ({
+    ...r,
+    messages: JSON.parse(r.messages)
+  }));
 }
