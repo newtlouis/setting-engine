@@ -2,6 +2,7 @@
 
 let currentConversation = [];
 let scenarios = [];
+let outreachTemplates = {};
 
 // ============================================
 // INITIALIZATION
@@ -9,7 +10,62 @@ let scenarios = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     loadScenarios();
+    loadOutreachTemplates();
 });
+
+async function loadOutreachTemplates() {
+    try {
+        const response = await fetch('/api/outreach-templates?profile=melanie');
+        const data = await response.json();
+        outreachTemplates = data;
+    } catch (err) {
+        console.error('Failed to load templates:', err);
+    }
+}
+
+// ============================================
+// CONVERSATION TYPE
+// ============================================
+
+async function onConversationTypeChange() {
+    const type = document.getElementById('conversationType').value;
+    
+    if (!type) return;
+    
+    // Clear current conversation
+    currentConversation = [];
+    const chatContainer = document.getElementById('chatContainer');
+    chatContainer.innerHTML = '';
+    
+    // Get initial message based on type
+    let initialMessage = '';
+    
+    switch(type) {
+        case 'cold':
+            initialMessage = 'Hello 🙂';
+            break;
+        case 'follower':
+            initialMessage = outreachTemplates.follower || 'Hello 🌷';
+            break;
+        case 'like':
+            initialMessage = outreachTemplates.like || 'Hello 🌺';
+            break;
+        case 'comment':
+            initialMessage = outreachTemplates.comment || 'Coucou 🌸';
+            break;
+    }
+    
+    // Replace placeholder with generic name
+    initialMessage = initialMessage.replace(/\{\{firstName\}\}/g, 'Sophie');
+    
+    // Add agent's first message
+    const agentMessage = { role: 'assistant', text: initialMessage };
+    currentConversation.push(agentMessage);
+    displayMessage(agentMessage);
+    
+    // Enable save button
+    document.getElementById('saveBtn').disabled = false;
+}
 
 // ============================================
 // CHAT INTERFACE
@@ -143,7 +199,10 @@ function clearConversation() {
     
     currentConversation = [];
     const chatContainer = document.getElementById('chatContainer');
-    chatContainer.innerHTML = '<div class="chat-welcome"><p>🤖 Testez vos scénarios de conversation avec l\'IA</p><p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Envoyez un message pour commencer</p></div>';
+    chatContainer.innerHTML = '<div class="chat-welcome"><p>🤖 Testez vos scénarios de conversation avec l\'IA</p><p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Sélectionnez un type de conversation ci-dessus pour commencer</p></div>';
+    
+    // Reset type selector
+    document.getElementById('conversationType').value = '';
     
     document.getElementById('saveBtn').disabled = true;
 }

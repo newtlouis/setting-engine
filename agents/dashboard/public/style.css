@@ -399,6 +399,26 @@ tr:hover td {
     font-weight: 600;
 }
 
+.conversation-type-select {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.conversation-type-select:hover {
+    border-color: var(--accent);
+}
+
+.conversation-type-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
 /* Chat Interface */
 .chat-container {
     flex: 1;

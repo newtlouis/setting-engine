@@ -44,14 +44,24 @@
             <div class="panel left-panel">
                 <div class="panel-header">
                     <h2>🧪 Test Conversation</h2>
-                    <button onclick="clearConversation()" class="btn-action">Clear</button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="conversationType" class="conversation-type-select"
+                            onchange="onConversationTypeChange()">
+                            <option value="">-- Type --</option>
+                            <option value="cold">❄️ À Froid</option>
+                            <option value="follower">👤 Abonné</option>
+                            <option value="like">❤️ Like</option>
+                            <option value="comment">💬 Commentaire</option>
+                        </select>
+                        <button onclick="clearConversation()" class="btn-action">Clear</button>
+                    </div>
                 </div>
 
                 <div class="chat-container" id="chatContainer">
                     <div class="chat-welcome">
                         <p>🤖 Testez vos scénarios de conversation avec l'IA</p>
                         <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                            Envoyez un message pour commencer
+                            Sélectionnez un type de conversation ci-dessus pour commencer
                         </p>
                     </div>
                 </div>

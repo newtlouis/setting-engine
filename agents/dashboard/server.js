@@ -569,6 +569,28 @@ app.post('/api/test-scenarios/replay-all', async (req, res) => {
     }
 });
 
+// GET /api/outreach-templates - Get outreach templates for scenario testing
+app.get('/api/outreach-templates', async (req, res) => {
+    try {
+        const { profile } = req.query;
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        if (!profileConfig || !profileConfig.outreach) {
+            return res.status(404).json({ error: 'Profile config not found' });
+        }
+        
+        res.json({
+            follower: profileConfig.outreach.follower_template || '',
+            like: profileConfig.outreach.like_outreach_template || '',
+            comment: profileConfig.outreach.comment_outreach_template || ''
+        });
+    } catch (err) {
+        console.error('Template error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`\n🚀 Dashboard running at http://localhost:${PORT}`);
