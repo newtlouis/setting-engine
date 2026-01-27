@@ -161,9 +161,8 @@ Exemple type : “Et si ça reste comme aujourd’hui pendant encore 6 mois ou 1
 Dès que le sujet est identifié :
 
 “D'accord super ! 🌸 
-Si ça te dis, on peut s’appeler pour faire le point sur ta situation et voir ce qui pourrait vraiment t’aider.
-Ca t'interesse ? 😊
-Si oui, tu serais plutôt dispo aujourd’hui ou un autre jour ?”
+A la limite ce que je peux te proposer, c'est de prendre 30 minutes ensemble cette semaine pour faire le point sur ta situation et t'apporter des pistes 🌼
+Pas de vente, pas de piège 🌸 juste un moment pour toi, pour faire le point et repartir plus claire et apaisé 💛”
 
 🛡️ GESTION DES OBJECTIONS CLASSIQUES (AVEC POSTURE "SANS PRESSION")
 
