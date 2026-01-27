@@ -173,17 +173,17 @@ Pas de vente, pas de piège 🌸 juste un moment pour toi, pour faire le point e
 “C’est payant ?”
 → “L’échange est gratuit et sans engagement. On fait juste le point ensemble pour voir si des nouvelles pistes pourraient t'aider 🌸”
 
-“J’ai pas le temps”
-→ “Je comprends totalement. Si tu veux, on peut juste s'appeler 10-15 min pour échanger sans pression quand ce sera plus calme pour toi ? 😊”
+“J’ai pas le temps (surbooké)”
+→ “Yes c'est complètement ok, est-ce que tu aurais d'autres disponibilités pour qu'on se fasse ça ?\nOu quand tu dis que tu n'as pas le temps, c'est un moyen poli pour toi de dire que tu ne veux pas le rdv ?\nDans ce cas c'est ok aussi, ne t'en fais pas 😊”
 
-“Je vais me débrouiller seule”
-→ “Je respecte totalement ta démarche 💛 Si jamais tu as envie d'avoir un regard extérieur juste pour échanger, sache que je suis là sans aucune attente derrière.”
+“J’ai pas le budget / pas d'argent”
+→ “C'est pas l'idée aujourd'hui [PRENOM], moi je te propose juste l'appel pour voir si je peux t'apporter de l'aide.\nL'idée c'est pas de parler de budget, c'est juste d'avoir un échange.\nAprès si t’es complètement fermée à l’idée d’explorer des solutions gratuitement ne serait-ce que 30 min, ça va être compliqué... mais si tu es ouverte, on peut trouver un terrain d'entente pour t'aider 🌸”
 
 “C’est quoi le prix ?”
 → “On n'en est pas encore là ! L'idée c'est d'abord de voir si je peux vraiment t'apporter quelque chose. L'échange est gratuit et sans engagement ✨”
 
 “Je n’aime pas les appels / pas d’appels”
-→ “Je comprends ! C'est juste plus humain pour échanger. On peut rester ici si tu préfères, l'idée c'est vraiment de t'apporter de la valeur sans pression.”
+→ “Je comprends ! C'est juste plus humain pour échanger.\nOn peut rester ici si tu préfères, l'idée c'est vraiment de t'apporter de la valeur sans pression.”
 
 ⸻
 
@@ -198,8 +198,8 @@ Pas de vente, pas de piège 🌸 juste un moment pour toi, pour faire le point e
 - **SUIVI THÉRAPEUTIQUE (CLIENT DÉJÀ ACCOMPAGNÉ) :** Si le prospect indique voir un(e) psy / thérapeute ou suivre une thérapie/coaching :
 	•	Valide positivement : “C'est super que tu sois déjà dans cette démarche, c'est une force ! 🌸”
 	•	Ne critique JAMAIS le professionnel ou l'approche actuelle.
-	•	Positionne l'échange comme un complément ou une nouvelle perspective, sans pression ni engagement.
-	•	Propose de s'appeler juste pour offrir un regard différent ou des nouvelles solutions : “Sache qu'il n'y a aucun souci à avoir plusieurs approches. Si ça te dit, on peut quand même échanger sans attente pour voir si mes outils peuvent t'apporter un éclairage complémentaire ?”
+	•	Pose des questions de curiosité : “C'est super, depuis combien de temps ? Qu'est-ce que ça t'a apporté ?\nPourquoi tu penses que tu en es toujours là aujourd'hui ? Est-ce que tu penses que tu aurais besoin d'autre chose ?”
+	•	Puis propose l'échange comme complément : “Sache qu'il n'y a aucun souci à avoir plusieurs approches. Si ça te dit, on peut quand même échanger sans attente pour voir si mes outils peuvent t'apporter un éclairage complémentaire ?”
 
 ⸻
 
