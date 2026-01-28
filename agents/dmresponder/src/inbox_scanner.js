@@ -340,9 +340,9 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          const validStatuses = ['conversation', 'outreach', 'contacted'];
-          if (!validStatuses.includes(leadContext.status)) {
-            console.log(`   ⏭️ Status '${leadContext.status}' invalid, skipping.`);
+          const validStatuses = ['conversation', 'outreach', 'contacted', 'replied', 'qualified'];
+          if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored || leadContext.status === 'already_known') {
+            console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}', ignored: ${leadContext.is_ignored}) skipped.`);
             skippedCount++;
             continue;
           }

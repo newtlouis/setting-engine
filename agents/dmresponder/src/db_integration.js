@@ -81,6 +81,7 @@ export async function getLeadWithContext(username, accountId = null) {
     conversation_stage: lead.conversation_stage,
     conversation_step: lead.conversation_step || 0,
     status: lead.status,
+    is_ignored: !!lead.is_ignored,
     total_messages_sent: lead.total_messages_sent,
     total_messages_received: lead.total_messages_received,
     

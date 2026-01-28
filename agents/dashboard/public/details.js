@@ -182,7 +182,7 @@ async function selectLead(username) {
         } else if (lead.booking_status === 'pending') {
              statusSelect.value = 'scheduling';
         } else {
-             if (['new','outreach','conversation','failed', 'not_interested'].includes(lead.status)) {
+             if (['new','outreach','conversation','failed', 'not_interested', 'already_known'].includes(lead.status)) {
                  statusSelect.value = lead.status;
              } else {
                  statusSelect.value = 'conversation'; 
