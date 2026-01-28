@@ -79,7 +79,7 @@ async function scrollSidebarOnce(page) {
       const style = window.getComputedStyle(container);
       if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
         if (container.querySelector('img[alt*="profile" i]')) {
-          container.scrollTop += 500;
+          container.scrollTop += 300;
           return true;
         }
       }
@@ -92,7 +92,7 @@ async function scrollSidebarOnce(page) {
       while (parent) {
         const style = window.getComputedStyle(parent);
         if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-          parent.scrollTop += 500;
+          parent.scrollTop += 300;
           return true;
         }
         parent = parent.parentElement;
