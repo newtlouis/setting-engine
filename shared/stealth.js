@@ -131,19 +131,21 @@ export function getStealthContextOptions(userDataDir, options = {}) {
     };
   }
   
+  // Force maximized window behavior
+  const args = [...STEALTH_ARGS, '--start-maximized'];
+
   return {
     headless,
     slowMo,
-    viewport,
+    viewport: null, // Critical: null viewport allows the window to resize freely/maximize
     userAgent: USER_AGENT,
     locale: 'fr-FR',
     timezoneId: 'Europe/Paris',
-    args: STEALTH_ARGS,
+    args,
     timeout,
     ignoreDefaultArgs: ['--enable-automation'],
     hasTouch: false,
     isMobile: false,
-    deviceScaleFactor: 1,
     javaScriptEnabled: true
   };
 }
