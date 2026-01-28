@@ -367,8 +367,8 @@ export async function runProspector(options = {}) {
 
               } else if (sendResult.skipped) {
                 if (sendResult.existingConversation) {
-                  console.log(`   ⏭️  @${username}: Conversation existante détectée - lead ignoré.`);
-                  saveLeadToDb(username, comment, accountId, 'conversation', 'existing_messages', profileData, sendResult.dmUrl);
+                  console.log(`   ⏭️  @${username}: Conversation existante détectée - Marqué comme 'already_known'.`);
+                  saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl);
                 } else if (sendResult.isCompetitor) {
                    // This should have been caught by qualifyLead, but safety check
                   console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);

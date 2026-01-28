@@ -339,7 +339,7 @@ export async function runEngagementWatcher(options = {}) {
                     
                     // Register as known contact with context
                     await fullUpsertLead(username, account.id, {
-                        status: 'known_contact',
+                        status: 'already_known',
                         full_name: metadata.fullName,
                         bio: metadata.bio,
                         lead_source: lead.source,
