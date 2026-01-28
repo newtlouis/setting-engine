@@ -498,16 +498,23 @@ export async function runInboxScanner(options = {}) {
               const newPage = await browserContext.newPage();
               await newPage.goto(result.url, { waitUntil: 'domcontentloaded' });
               
-              // Re-type the message
+              // Re-type the message (only if not manual/voice note)
               await delay(1000);
-              const typeRes = await typeInOpenTab(newPage, result.message);
               
-              if (typeRes.success) {
-                  console.log(`     ✅ Typed response for ${result.username}`);
-                  // Register for the final wait loop
-                  registerOpenTab(result.username, newPage, result.message);
+              if (result.isManual) {
+                  console.log(`     ℹ️  Manual/Voice Note: Tab opened, but skipping typing.`);
+                  // Still register it so it waits for user to close
+                  registerOpenTab(result.username, newPage, ""); 
               } else {
-                  console.log(`     ❌ Failed to type for ${result.username}`);
+                  const typeRes = await typeInOpenTab(newPage, result.message);
+                  
+                  if (typeRes.success) {
+                      console.log(`     ✅ Typed response for ${result.username}`);
+                      // Register for the final wait loop
+                      registerOpenTab(result.username, newPage, result.message);
+                  } else {
+                      console.log(`     ❌ Failed to type for ${result.username}`);
+                  }
               }
           } catch (err) {
               console.error(`     ❌ Error opening tab for ${result.username}: ${err.message}`);
