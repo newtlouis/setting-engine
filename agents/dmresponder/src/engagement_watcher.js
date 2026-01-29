@@ -204,19 +204,35 @@ export async function runEngagementWatcher(options = {}) {
             // Deduplicate
             const uniqueLeads = Array.from(new Set(potentialLeads.map(l => l.username)))
                 .map(username => potentialLeads.find(l => l.username === username));
-                
-            console.log(`   💎 Total unique users to process: ${Math.min(uniqueLeads.length, CONFIG.MAX_LEADS_PER_POST)}`);
+            
+            console.log(`   💎 Analysis of ${uniqueLeads.length} unique profiles found...`);
+            
+            const leadsToProceed = [];
+            let alreadyKnownCount = 0;
 
-            for (const lead of uniqueLeads.slice(0, CONFIG.MAX_LEADS_PER_POST)) {
-                const username = lead.username;
-                
-                // 4. Check if already in DB (Avoid redundant scraping/evaluation)
-                const existingLead = await getLeadWithContext(username);
+            for (const lead of uniqueLeads) {
+                const existingLead = await getLeadWithContext(lead.username);
                 if (existingLead) {
-                    console.log(`   ⏭️ @${username} already in database (status: ${existingLead.status}). Skipping.`);
-                    continue;
+                    alreadyKnownCount++;
+                } else {
+                    leadsToProceed.push(lead);
                 }
-                
+            }
+
+            console.log(`      - Already known in DB: ${alreadyKnownCount}`);
+            console.log(`      - New leads discovered: ${leadsToProceed.length}`);
+            
+            const limitedLeads = leadsToProceed.slice(0, CONFIG.MAX_LEADS_PER_POST);
+            if (leadsToProceed.length > CONFIG.MAX_LEADS_PER_POST) {
+                console.log(`      - Action: Processing ${CONFIG.MAX_LEADS_PER_POST} out of ${leadsToProceed.length} new leads (session limit).`);
+            } else if (leadsToProceed.length > 0) {
+                console.log(`      - Action: Processing all ${leadsToProceed.length} new leads.`);
+            } else {
+                console.log(`      - Action: No new leads to process for this post.`);
+            }
+
+            for (const lead of limitedLeads) {
+                const username = lead.username;
                 console.log(`\n   --- Checking: @${username} (${lead.source}) ---`);
                 
                 // 5. Profile Check

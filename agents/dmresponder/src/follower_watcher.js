@@ -169,18 +169,35 @@ export async function runFollowerWatcher(options = {}) {
         const uniqueFollowers = Array.from(new Set(newFollowers.map(f => f.username)))
             .map(username => newFollowers.find(f => f.username === username));
             
-        console.log(`   Processing ${Math.min(uniqueFollowers.length, CONFIG.MAX_FOLLOWERS_PER_SESSION)} unique follower(s)...`);
+        console.log(`   💎 Analysis of ${uniqueFollowers.length} unique profiles found...`);
+        
+        const leadsToProceed = [];
+        let alreadyKnownCount = 0;
 
-        for (const follower of uniqueFollowers.slice(0, CONFIG.MAX_FOLLOWERS_PER_SESSION)) {
+        for (const follower of uniqueFollowers) {
+            const existingLead = await getLeadWithContext(follower.username);
+            if (existingLead) {
+                alreadyKnownCount++;
+            } else {
+                leadsToProceed.push(follower);
+            }
+        }
+
+        console.log(`      - Already known in DB: ${alreadyKnownCount}`);
+        console.log(`      - New followers discovered: ${leadsToProceed.length}`);
+        
+        const limitedFollowers = leadsToProceed.slice(0, CONFIG.MAX_FOLLOWERS_PER_SESSION);
+        if (leadsToProceed.length > CONFIG.MAX_FOLLOWERS_PER_SESSION) {
+            console.log(`      - Action: Processing ${CONFIG.MAX_FOLLOWERS_PER_SESSION} out of ${leadsToProceed.length} new followers (session limit).`);
+        } else if (leadsToProceed.length > 0) {
+            console.log(`      - Action: Processing all ${leadsToProceed.length} new followers.`);
+        } else {
+            console.log(`      - Action: No new followers to process.`);
+        }
+
+        for (const follower of limitedFollowers) {
             const username = follower.username;
             console.log(`\n--- Checking: @${username} ---`);
-            
-            // 4. Check if already in DB (Avoid redundant scraping/evaluation)
-            const existingLead = await getLeadWithContext(username);
-            if (existingLead) {
-                console.log(`   ⏭️ @${username} already in database (status: ${existingLead.status}). Skipping.`);
-                continue;
-            }
             
             // 5. Navigate to Profile
             await page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'domcontentloaded' });
