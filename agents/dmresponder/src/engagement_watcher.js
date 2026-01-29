@@ -178,7 +178,15 @@ export async function runEngagementWatcher(options = {}) {
         });
 
         // 3. Process each post
+        const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
+        console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
+        
         for (const post of engagedPosts.slice(0, CONFIG.MAX_POSTS_PER_SESSION)) {
+            if (preparedCount >= TARGET_MESSAGE_COUNT) {
+                console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}). Stopping post analysis.`);
+                break;
+            }
+
             console.log(`\n🚀 Analyzing Post: ${post.url}`);
             const typeStr = post.types.map(t => t.toUpperCase()).join(' & ');
             console.log(`   Intent: Scrape ${typeStr}`);
@@ -222,16 +230,21 @@ export async function runEngagementWatcher(options = {}) {
             console.log(`      - Already known in DB: ${alreadyKnownCount}`);
             console.log(`      - New leads discovered: ${leadsToProceed.length}`);
             
-            const limitedLeads = leadsToProceed.slice(0, CONFIG.MAX_LEADS_PER_POST);
-            if (leadsToProceed.length > CONFIG.MAX_LEADS_PER_POST) {
-                console.log(`      - Action: Processing ${CONFIG.MAX_LEADS_PER_POST} out of ${leadsToProceed.length} new leads (session limit).`);
-            } else if (leadsToProceed.length > 0) {
-                console.log(`      - Action: Processing all ${leadsToProceed.length} new leads.`);
-            } else {
-                console.log(`      - Action: No new leads to process for this post.`);
+            if (leadsToProceed.length === 0) {
+                 console.log(`      - Action: No new leads to process for this post.`);
+                 continue;
             }
+            
+            console.log(`      - Action: Processing leads until target (${TARGET_MESSAGE_COUNT}) is reached (Current: ${preparedCount})`);
 
-            for (const lead of limitedLeads) {
+            // No slicing here - we process until we hit the global target
+            for (const lead of leadsToProceed) {
+                // Check Global Target
+                 if (preparedCount >= TARGET_MESSAGE_COUNT) {
+                    console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}) during filtering. Stopping.`);
+                    break;
+                }
+
                 const username = lead.username;
                 console.log(`\n   --- Checking: @${username} (${lead.source}) ---`);
                 
@@ -307,7 +320,7 @@ export async function runEngagementWatcher(options = {}) {
 
                 if (options.dryRun) {
                     console.log(`   🚧 DRY RUN: Would contact @${username} with: "${finalMessage}"`);
-                    continue;
+                    continue; // In dry run we don't increment preparedCount for real, or we could if we wanted to simulate the limit
                 }
 
                 // 8. Outreach
@@ -350,6 +363,8 @@ export async function runEngagementWatcher(options = {}) {
                     });
                     await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
                     preparedCount++;
+                    console.log(`   ✅ Message prepared. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
+
                 } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
                     console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
                     

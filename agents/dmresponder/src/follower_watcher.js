@@ -186,16 +186,23 @@ export async function runFollowerWatcher(options = {}) {
         console.log(`      - Already known in DB: ${alreadyKnownCount}`);
         console.log(`      - New followers discovered: ${leadsToProceed.length}`);
         
-        const limitedFollowers = leadsToProceed.slice(0, CONFIG.MAX_FOLLOWERS_PER_SESSION);
-        if (leadsToProceed.length > CONFIG.MAX_FOLLOWERS_PER_SESSION) {
-            console.log(`      - Action: Processing ${CONFIG.MAX_FOLLOWERS_PER_SESSION} out of ${leadsToProceed.length} new followers (session limit).`);
-        } else if (leadsToProceed.length > 0) {
-            console.log(`      - Action: Processing all ${leadsToProceed.length} new followers.`);
-        } else {
-            console.log(`      - Action: No new followers to process.`);
+        const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
+        console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
+
+        if (leadsToProceed.length === 0) {
+             console.log(`      - Action: No new followers to process.`);
+             return; // Or continue if there was a loop, here it's main body
         }
 
-        for (const follower of limitedFollowers) {
+        console.log(`      - Action: Processing followers until target (${TARGET_MESSAGE_COUNT}) is reached (Current: ${processedCount})`);
+
+        for (const follower of leadsToProceed) {
+            // Check Global Limit
+            if (processedCount >= TARGET_MESSAGE_COUNT) {
+                console.log(`   🛑 Target reached (${processedCount}/${TARGET_MESSAGE_COUNT}). Stopping.`);
+                break;
+            }
+
             const username = follower.username;
             console.log(`\n--- Checking: @${username} ---`);
             
@@ -215,47 +222,50 @@ export async function runFollowerWatcher(options = {}) {
             const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
             
             if (!qualification.qualified) {
-                console.log(`   ❌ @${username} not qualified: ${qualification.reason}`);
+                console.log(`   ❌ Not qualified: ${qualification.reason}`);
+                // Disqualify in DB
+                await fullUpsertLead(username, account.id, {
+                    status: 'disqualified',
+                    full_name: metadata.fullName,
+                    bio: metadata.bio,
+                    lead_source: 'new_follower',
+                    notes: `Disqualified: ${qualification.reason}`
+                });
                 continue;
             }
             
-            // 8. Open DM and prepare message
-            let aiFirstName = null;
+            // 8. Prepare Message
+             let aiFirstName = null;
             try {
                 aiFirstName = await extractNameWithAI(username, metadata.fullName);
-            } catch (e) {
-                console.error(`   ⚠️ Name extraction failed for @${username}: ${e.message}`);
-            }
-
-            let welcomeMessage = "";
-            if (profileConfig.outreach?.follower_template) {
-                welcomeMessage = profileConfig.outreach.follower_template;
-                
-                if (aiFirstName) {
-                    // Replace {{firstName}} with name
-                    welcomeMessage = welcomeMessage.replace('{{firstName}}', aiFirstName);
-                } else {
-                    // Remove {{firstName}} and clean up potential double spaces or "Hello  "
-                    welcomeMessage = welcomeMessage.replace('{{firstName}}', '').replace(/\s+/g, ' ').replace('Hello 🌷', 'Hello 🌷').trim();
-                    // Specifically handle "Hello  " -> "Hello "
-                    welcomeMessage = welcomeMessage.replace(/Hello\s+/, 'Hello ');
-                }
-            } else {
-                // Fallback
-                welcomeMessage = aiFirstName ? `Hello ${aiFirstName} ! 👋` : `Hello ! 👋`;
+            } catch (e) {}
+            
+            let messageTemplate = profileConfig.outreach?.follower_template;
+             if (!messageTemplate || messageTemplate.length < 5) {
+                messageTemplate = "Hello {{firstName}} ! Merci pour ton follow, bienvenue ici 🌸";
             }
             
+             let finalMessage = messageTemplate;
+            if (aiFirstName) {
+                finalMessage = finalMessage.replace(/{{firstName}}/g, aiFirstName);
+            } else {
+                finalMessage = finalMessage.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
+                 if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
+            }
+             finalMessage = finalMessage.replace(/\s+/g, ' ').trim();
+            
             if (options.dryRun) {
-                console.log(`   🚧 DRY RUN: Would type: "${welcomeMessage}"`);
+                console.log(`   🚧 DRY RUN: Would DM @${username}: "${finalMessage}"`);
                 continue;
             }
             
-            const dmResult = await openDMAndScrape({
+            // 9. Send MD
+             const dmResult = await openDMAndScrape({
                 username,
                 profile_url: `https://www.instagram.com/${username}/`
             });
             
-            if (!dmResult.success) {
+             if (!dmResult.success) {
                 console.log(`   ❌ Failed to open DM: ${dmResult.error}`);
                 
                 // Handle blocked/deleted profiles
@@ -266,37 +276,29 @@ export async function runFollowerWatcher(options = {}) {
                         notes: "Profile unavailable (likely blocked/deleted)."
                     });
                 }
-                
                 continue;
             }
             
-            if (dmResult.success && dmResult.scrapedMessages.length === 0) {
-                // 9. Type & Register
-                console.log(`\n   💬 SENDING FOLLOWER WELCOME:`);
-                console.log(`   Profile: https://www.instagram.com/${username}/`);
-                console.log(`   Message: "${welcomeMessage}"\n`);
-
-                await typeInOpenTab(dmResult.tab, welcomeMessage);
-                registerOpenTab(username, dmResult.tab, welcomeMessage);
-                
-                // 10. Sync DB
-                await fullUpsertLead(username, account.id, {
+            if (dmResult.scrapedMessages.length === 0) {
+                 console.log(`\n   💬 PREPARING OUTREACH: "${finalMessage}"`);
+                 await typeInOpenTab(dmResult.tab, finalMessage);
+                 registerOpenTab(username, dmResult.tab, finalMessage);
+                 
+                  await fullUpsertLead(username, account.id, {
                     status: 'outreach',
                     full_name: metadata.fullName,
                     bio: metadata.bio,
-                    lead_source: 'follower_outreach',
+                    lead_source: 'new_follower',
                     dm_url: dmResult.dmUrl,
                     conversation_step: 2
                 });
-    
-                await addMessage(username, 'assistant', welcomeMessage, 'new_follower_outreach', account.id);
-                
+                await addMessage(username, 'assistant', finalMessage, 'new_follower', account.id);
                 processedCount++;
-            } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
-                console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
-                
-                // Register as known contact with context
-                await fullUpsertLead(username, account.id, {
+                console.log(`   ✅ Message prepared. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+
+            } else {
+                console.log(`   ⚠️ Conversation history found. Marking as already_known.`);
+                 await fullUpsertLead(username, account.id, {
                     status: 'already_known',
                     full_name: metadata.fullName,
                     bio: metadata.bio,
