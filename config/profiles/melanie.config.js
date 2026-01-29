@@ -254,16 +254,19 @@ Tu DOIS répondre "NON" (REJET) si le profil est un CONCURRENT direct sur le pla
 - Un Coach spécialisé dans la psyché (Love coach, Life coach, Coach en confiance en soi, etc.).
 - Tout profil axé sur le "bien-être mental", la "gestion des émotions", la "psychologie" ou la "santé mentale".
 - Toute personne se présentant comme "Créateur", "Influencé par" ou "Passionné de" psychologie/développement personnel qui partage du contenu sur ces thèmes.
-- S'il propose de l' "accompagnement thérapeutique", des "formations en psychologie", ou des "RDV de coaching mental".
-- Si le USERNAME contient : "coach", "psy", "sophro", "therapeute" (sauf si lié uniquement au corps).
-- **RÈGLE STRICTE :** Si la bio mentionne "Partager ma passion pour la psychologie" ou équivalent, c'est un REJET ("NON").
+- **RÈGLE STRICTE (FAÇADES) :** Tu DOIS rejeter ("NON") toute "façade" d'entreprise, marque, produit, ou service sans personne physique identifiée derrière (ex: E-commerce, agences, logiciels).
+- **RÈGLE STRICTE (COLLECTIFS/AGENCES) :** Tu DOIS rejeter ("NON") tout compte qui parle au PLURIEL ou utilise des termes collectifs : "Experts", "Équipe", "Team", "Nous", "Agence", "Agency". Si on sent que c'est un groupe de personnes et non un individu, rejette.
+- **RÈGLE STRICTE (B2B/GROWTH) :** Tu DOIS rejeter ("NON") les comptes qui proposent des services de croissance, marketing, promotion ou branding pour d'autres marques (ex: "Boosting businesses", "Brand growth", "Promotion").
+- **RÈGLE STRICTE (THÉMATIQUES) :** Tu DOIS rejeter ("NON") les comptes thématiques lifestyle ou liés à des villes/lieux qui ne sont pas tenus par un humain visible (ex: "Paris Lifestyle", "Vivre à Lyon", "Fans de Yoga", "Motivation Quotes"). Si c'est un compte de "curation" de contenu, rejette.
+- **RÈGLE STRICTE (INTENTION) :** Si la bio mentionne "Partager ma passion pour la psychologie" ou équivalent mais qu'on ne voit aucune offre de service personnalisée, c'est un REJET ("NON").
+- Si le USERNAME contient : "coach", "psy", "sophro", "therapeute" (sauf si lié uniquement au corps par le sport/yoga).
 
 Tu DOIS répondre "OUI" (ACCEPTER) si :
-- C'est un compte personnel (aucune activité pro mentionnée).
+- C'est un compte personnel (une personne physique qui partage sa vie, sa passion, etc. sans être une entreprise impersonnelle).
 - C'est un professionnel du CORPS ou du SPORT uniquement : Yoga (professeur, studio), Danse, Fitness, Musculation, Massage (hors dimension énergétique/psy), Esthéticienne, Osteopathe, Kiné.
-- C'est un pro sans aucun rapport avec le bien-être (Artiste, Commerçant, Restauration, etc.).
+- C'est un pro sans aucun rapport avec le bien-être ou la relation (Artiste, Commerçant local, Restauration, etc.).
 
-IMPORTANT : Le Yoga et la Danse sont considérés comme des LEADS POTENTIELS ("OUI"), même s'ils partagent des conseils bien-être, car ils ne traitent pas directement la dépendance affective par le coaching mental.
+IMPORTANT : On cherche des HUMAINS réels avec qui discuter. Pas des vitrines d'entreprises ou des comptes de repartage de photos de villes.
 
 Username: @{username}
 Bio: {bio}
