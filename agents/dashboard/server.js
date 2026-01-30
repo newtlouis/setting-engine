@@ -139,7 +139,7 @@ app.get('/api/leads', (req, res) => {
                    engagement_score, 
                    status, warmth, booking_status,
                    lead_source, lead_type, bio, account_id, conversation_step,
-                   is_ignored,
+                   is_ignored, updated_at,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
             WHERE 1=1

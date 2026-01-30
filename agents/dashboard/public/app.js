@@ -80,70 +80,13 @@ function onAccountChange(accountId) {
 }
 
 // Load Bookings (Dedicated Section)
+
+// Load Bookings - DEPRECATED / REMOVED BY USER REQUEST
 async function loadBookings() {
-    const section = document.getElementById('bookingsSection');
-    const tbody = document.getElementById('bookingsTableBody');
-    const badge = document.getElementById('bookingsCount');
-    
-    try {
-        const res = await fetch('/api/bookings');
-        const bookings = await res.json();
-        
-        // Filter to show only pending bookings
-        const pendingBookings = bookings.filter(lead => lead.booking_status === 'pending');
-        
-        if (pendingBookings.length > 0) {
-            section.style.display = 'block';
-            badge.textContent = pendingBookings.length;
-            
-            tbody.innerHTML = '';
-            pendingBookings.forEach(lead => {
-                const tr = document.createElement('tr');
-                
-                tr.innerHTML = `
-                    <td style="text-align: center;">
-                        <input type="checkbox" 
-                               onchange="toggleBooking('${lead.username}', this.checked)"
-                               style="transform: scale(1.2); cursor: pointer;">
-                    </td>
-                    <td>
-                        <div style="font-weight: 600;">@${lead.username}</div>
-                        <a href="${lead.profile_url || 'https://instagram.com/' + lead.username}" target="_blank" style="font-size: 12px; color: var(--text-secondary);">View Profile</a>
-                    </td>
-                    <td>${new Date(lead.updated_at).toLocaleDateString()}</td>
-                    <td>
-                        <span class="badge badge-warning">PENDING</span>
-                    </td>
-                    <td style="text-align: right;">
-                        <button onclick="showIgnoreConfirm('${lead.username}')" 
-                                class="btn-action-icon" 
-                                title="Ignore Lead">🗑️</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } else {
-            section.style.display = 'none';
-        }
-    } catch (e) {
-        console.error('Bookings load error', e);
-    }
+   // Function kept empty to prevent errors if called, but UI section is gone.
+   return;
 }
 
-async function toggleBooking(username, completed) {
-    try {
-        await fetch(`/api/bookings/${username}/complete`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ completed })
-        });
-        // Reload to update UI
-        loadBookings();
-        loadStats();
-    } catch (e) {
-        alert('Error updating booking');
-    }
-}
 
 
 // Load Stats
@@ -185,7 +128,9 @@ async function loadLeads(filter) {
             (filter === 'all' && btn.textContent === 'All') ||
             (filter === 'contacted' && (btn.textContent === 'Contacted' || btn.textContent === 'Contact')) ||
             (filter === 'conversation' && btn.textContent === 'Conversation') ||
-            (filter === 'confirm_bookings' && btn.textContent === 'Confirm Bookings') ||
+            (filter === 'step5_new' && btn.textContent === 'Step 5 New') ||
+            (filter === 'step5_confirmed' && btn.textContent === 'Confirmed') ||
+            (filter === 'step5_old' && btn.textContent === 'Step 5 Old') ||
             (filter === 'booked' && btn.textContent === 'Booked') ||
             (filter === 'manual' && btn.textContent === 'Manual') ||
             (filter === 'not_interested' && btn.textContent === 'Not Interested') ||
@@ -202,18 +147,62 @@ async function loadLeads(filter) {
 
     try {
         const search = document.getElementById('searchInput').value;
-        let url = `/api/leads?status=${filter}&limit=100`;
+        let apiFilter = filter;
+        let isStep5Filter = filter.startsWith('step5_');
+
+        if (isStep5Filter) {
+            if (filter === 'step5_confirmed') {
+                apiFilter = 'confirm_bookings';
+            } else {
+                // Fetch ALL leads at step 5 to filter them client-side by date/booking_status
+                apiFilter = 'all';
+            }
+        }
+
+        let url = `/api/leads?status=${apiFilter}&limit=500`; 
+        
         if (currentAccountId) {
             url += `&account_id=${currentAccountId}`;
         }
-        if (currentStepFilter) {
+        
+        if (isStep5Filter && filter !== 'step5_confirmed') {
+             url += `&conversation_step=5`;
+        } else if (currentStepFilter) {
             url += `&conversation_step=${currentStepFilter}`;
         }
+
         if (search) {
             url += `&search=${encodeURIComponent(search)}`;
         }
+        
         const res = await fetch(url);
-        const leads = await res.json();
+        let leads = await res.json();
+
+        // Apply Client-Side Filtering for Step 5 logic (New vs Old)
+        if (filter === 'step5_new' || filter === 'step5_old') {
+            const now = Date.now();
+            const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+            leads = leads.filter(l => {
+                // Keep only step 5 and active conversations
+                const step = parseInt(l.conversation_step);
+                if (step !== 5) return false;
+                
+                // Exclude confirmed/booked/ignored/not interested
+                if (l.booking_status === 'pending' || l.booking_status === 'completed' || l.is_ignored) return false;
+                if (['not_interested', 'failed', 'failed_outreach'].includes(l.status)) return false;
+
+                // Parse date - SQLite gives 'YYYY-MM-DD HH:MM:SS'
+                const dateStr = l.updated_at ? l.updated_at.replace(' ', 'T') + 'Z' : null;
+                const lastUpdateTime = dateStr ? new Date(dateStr).getTime() : 0;
+                
+                if (!lastUpdateTime) return filter === 'step5_old';
+                
+                const diff = now - lastUpdateTime;
+                return filter === 'step5_old' ? (diff > TWO_WEEKS_MS) : (diff <= TWO_WEEKS_MS);
+            });
+        }
+
         currentLeads = leads; // Store for Select All
         
         if (!Array.isArray(leads)) {
@@ -231,54 +220,46 @@ async function loadLeads(filter) {
         leads.forEach(lead => {
             const tr = document.createElement('tr');
             
-            // Status Badge Logic
-            let badgeClass = 'badge-neutral';
-            let statusText = lead.status;
-            
-            if (lead.booking_status === 'completed') {
-                 badgeClass = 'badge-success';
-                 statusText = 'Booked';
-            } else if (lead.booking_status === 'pending') {
-                 badgeClass = 'badge-success';
-                 statusText = 'Confirm Booking';
-            } else if (lead.status === 'conversation') {
-                 badgeClass = 'badge-neutral';
-                 statusText = 'Conversation';
-            } else if (lead.warmth === 'hot') {
-                badgeClass = 'badge-success';
-                statusText = 'Qualified';
-            } else if (['message_sent', 'message_ready'].includes(lead.status)) {
-                badgeClass = 'badge-warning';
-                statusText = 'Contacted';
-            } else if (lead.status === 'new') {
-                badgeClass = 'badge-neutral';
-                statusText = 'New';
-            } else if (lead.status === 'not_interested') {
-                badgeClass = 'badge-danger'; 
-                statusText = 'Not Interested';
-            } else if (lead.status === 'manual') {
-                badgeClass = 'badge-danger';
-                statusText = 'MANUAL / VOCAL';
-            } else if (lead.status === 'failed_outreach') {
-                badgeClass = 'badge-danger'; 
-                statusText = 'Failed';
-            }
-            
-            // Action Button Logic
-            let actionButtons = '';
-            
-            if (filter === 'confirm_bookings') {
-                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'completed'})" style="padding: 4px 8px; background: rgba(63,185,80,0.15); border: 1px solid rgba(63,185,80,0.4); border-radius: 4px; color: #3fb950; cursor: pointer; font-size: 11px;">✅ Done</button>`;
-            } else if (filter === 'booked') {
-                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'pending'})" style="padding: 4px 8px; background: rgba(210,153,34,0.15); border: 1px solid rgba(210,153,34,0.4); border-radius: 4px; color: #e3b341; cursor: pointer; font-size: 11px;">↩️ Undo</button>`;
-            } else if (filter !== 'booked' && !lead.booking_status) {
-                 actionButtons = `<button onclick="updateLead('${lead.username}', {booking_status: 'pending', status: 'scheduling'})" style="padding: 4px 8px; background: rgba(56,139,253,0.15); border: 1px solid rgba(56,139,253,0.4); border-radius: 4px; color: #58a6ff; cursor: pointer; font-size: 11px;">📅 Booked</button>`;
-            }
-
             // Type Badge Logic
             let typeBadgeClass = 'badge-neutral';
             if (lead.lead_type === 'hot') typeBadgeClass = 'badge-danger';
             if (lead.lead_type === 'warm') typeBadgeClass = 'badge-warning';
+
+            // Define possible statuses for dropdown
+            const statuses = [
+                { val: 'new', label: 'New' },
+                { val: 'image_analyzed', label: 'Analyzed' },
+                { val: 'message_ready', label: 'Msg Ready' },
+                { val: 'message_sent', label: 'Contacted' },
+                { val: 'conversation', label: 'Conversation' },
+                { val: 'manual', label: 'Manual/Vocal' },
+                { val: 'scheduling', label: 'Confirm Booking' },
+                // Special handling for Booked: it relies on booking_status='completed' usually, 
+                // but setting status='conversation' and booking_status='completed' is how we did it.
+                // However, let's just use 'booked' as a visual alias for convenience here.
+                // We'll handle the update logic carefully below.
+                { val: 'booked_completed', label: 'Booked (Done)' },
+                { val: 'not_interested', label: 'Not Interested' },
+                { val: 'failed_outreach', label: 'Failed' }
+            ];
+
+            // Determine current select value
+            let currentSelectVal = lead.status;
+            if (lead.booking_status === 'pending') currentSelectVal = 'scheduling';
+            if (lead.booking_status === 'completed') currentSelectVal = 'booked_completed';
+
+            // Generate options
+            const optionsHtml = statuses.map(s => 
+                `<option value="${s.val}" ${currentSelectVal === s.val ? 'selected' : ''}>${s.label}</option>`
+            ).join('');
+
+            // Dropdown HTML
+            const statusDropdown = `
+                <select onchange="onStatusDropdownChange('${lead.username}', this.value)" 
+                        style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); font-size: 11px; cursor: pointer;">
+                    ${optionsHtml}
+                </select>
+            `;
 
             tr.innerHTML = `
                 <td>
@@ -298,7 +279,7 @@ async function loadLeads(filter) {
                         </div>
                     </div>
                 </td>
-                <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                <td>${statusDropdown}</td>
                 <td>
                     <div style="font-weight: 700; color: var(--accent); text-align: center;">
                         ${lead.conversation_step || 0}
@@ -313,7 +294,6 @@ async function loadLeads(filter) {
                  <td>
                      <div style="display: flex; gap: 8px; align-items: center;">
                         <a href="https://instagram.com/${lead.username}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px;">Profile ↗</a>
-                        ${actionButtons}
                         <a href="/lead_details.html?username=${lead.username}" 
                            class="btn-action-icon" 
                            title="Lead Details" 
@@ -358,6 +338,21 @@ async function updateLead(username, updates) {
         console.error(e);
         alert('Error updating lead');
     }
+}
+
+// New Dropdown Change Handler
+async function onStatusDropdownChange(username, newVal) {
+    let updates = {};
+    if (newVal === 'booked_completed') {
+        updates = { booking_status: 'completed', status: 'conversation' }; // Or whatever status implies done
+    } else if (newVal === 'scheduling') {
+        updates = { booking_status: 'pending', status: 'scheduling' };
+    } else {
+        // Standard status change, reset booking
+        updates = { status: newVal, booking_status: null };
+    }
+    
+    await updateLead(username, updates);
 }
 
 // Selection Logic

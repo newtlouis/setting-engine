@@ -550,30 +550,6 @@
             </div>
         </div>
 
-        <!-- Confirm Bookings Section (Always Visible if Bookings Exist) -->
-        <div class="bookings-section" id="bookingsSection" style="margin-bottom: 32px; display: none;">
-            <h2
-                style="font-size: 18px; margin-bottom: 16px; color: var(--success); display: flex; align-items: center; gap: 8px;">
-                📅 Confirm Bookings <span class="badge badge-success" id="bookingsCount">0</span>
-            </h2>
-            <div class="table-container" style="border-color: var(--success);">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 50px;">Done</th>
-                            <th>Lead</th>
-                            <th>Last Update</th>
-                            <th>Status</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="bookingsTableBody">
-                        <!-- Populated by JS -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
         <!-- Section Header with Search -->
         <div
             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 20px;">
@@ -585,13 +561,24 @@
             </div>
         </div>
 
-        <div class="controls">
+        <div class="controls" style="flex-wrap: wrap;">
             <button class="btn-filter" onclick="loadLeads('all')">All</button>
             <button class="btn-filter active" onclick="loadLeads('new')">New</button>
             <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
-            <button class="btn-filter" onclick="loadLeads('manual')">Manual</button>
             <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
-            <button class="btn-filter" onclick="loadLeads('confirm_bookings')">Confirm Bookings</button>
+
+            <!-- Step 5 Sub-filters -->
+            <div
+                style="display: flex; gap: 4px; background: rgba(88, 166, 255, 0.1); padding: 4px; border-radius: 6px; border: 1px solid rgba(88, 166, 255, 0.2);">
+                <button class="btn-filter" onclick="loadLeads('step5_new')" style="border:none; background:none;">Step 5
+                    New</button>
+                <button class="btn-filter" onclick="loadLeads('step5_confirmed')"
+                    style="border:none; background:none;">Confirmed</button>
+                <button class="btn-filter" onclick="loadLeads('step5_old')" style="border:none; background:none;">Step 5
+                    Old</button>
+            </div>
+
+            <button class="btn-filter" onclick="loadLeads('manual')">Manual</button>
             <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
             <button class="btn-filter" onclick="loadLeads('not_interested')">Not Interested</button>
             <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
