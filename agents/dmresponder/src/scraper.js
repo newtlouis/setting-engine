@@ -440,6 +440,76 @@ async function typeMessageOnly(page, message) {
 }
 
 /**
+ * Upload a file in the DM conversation
+ * Uses Instagram's file input for media/document uploads
+ * 
+ * @param {Page} page - Playwright page with DM view open
+ * @param {string} filePath - Absolute path to the file to upload
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function uploadFileInDM(page, filePath) {
+  try {
+    // Check if file exists
+    const fs = await import('fs');
+    if (!fs.existsSync(filePath)) {
+      console.log(`   ❌ File not found: ${filePath}`);
+      return { success: false, error: 'file_not_found' };
+    }
+    
+    console.log(`   📎 Uploading file: ${filePath}`);
+    
+    // Instagram has a hidden file input for media uploads
+    // We need to find the "+ More" button area and handle file input
+    const fileInputSelector = 'input[type="file"]';
+    
+    // Wait for any file input to be present (Instagram dynamically creates them)
+    let fileInput = await page.$(fileInputSelector);
+    
+    if (!fileInput) {
+      // Try clicking the "+" or media button to reveal the file input
+      const mediaButtonSelectors = [
+        'svg[aria-label="Plus"]',
+        'svg[aria-label="Add Photo or Video"]',
+        '[aria-label="Plus"]',
+        '[aria-label="Open media gallery"]',
+        'svg[aria-label="Ajouter une photo ou une vidéo"]', // French
+      ];
+      
+      for (const selector of mediaButtonSelectors) {
+        const btn = await page.$(selector);
+        if (btn) {
+          await btn.click();
+          await delay(500, 800);
+          break;
+        }
+      }
+      
+      // Now try to find the file input again
+      await page.waitForSelector(fileInputSelector, { timeout: 5000 }).catch(() => null);
+      fileInput = await page.$(fileInputSelector);
+    }
+    
+    if (!fileInput) {
+      console.log(`   ❌ Could not find file input element`);
+      return { success: false, error: 'file_input_not_found' };
+    }
+    
+    // Upload the file
+    await fileInput.setInputFiles(filePath);
+    console.log(`   ✅ File selected for upload`);
+    
+    // Wait for upload to complete (Instagram shows a preview)
+    await delay(2000, 3000);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.log(`   ❌ File upload error: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Scrape all visible messages from the DM conversation
  * Uses Instagram's "Double tap to like" button as reliable message container
  * Detects role by looking for "Open the profile page" link (only in received messages)

@@ -262,7 +262,7 @@ fin propre
         sources: [
             // "#dependanceaffective",
             // "#dépendanceaffective",
-            "#hypersensibilité",
+            // "#hypersensibilité",
 			"#dépendanceémotionnelle",
 			"#attachementémotionnel",
             "#relationssaines",
@@ -313,6 +313,26 @@ Est-ce que ça te parle personnellement ou c’était juste le contenu qui t’a
         comment_outreach_template: `Coucou {{firstName}} 🌸
 Merci pour ton commentaire 🙏
 J’ai beaucoup aimé ce que tu as partagé, on sent que tu parles avec le cœur 💛
-C’est un sujet qui te touche personnellement ou plutôt quelque chose que tu observes autour de toi ? 🌷`
+C’est un sujet qui te touche personnellement ou plutôt quelque chose que tu observes autour de toi ? 🌷`,
+        
+        // CTA Resource Delivery - Keywords that trigger automatic resource uploads
+        cta_resources: {
+            // Keyword (lowercase, trimmed) -> Resource configuration
+            "sereine": {
+                file: "guide-sereine.pdf", // File must be in config/profiles/melanie/resources/
+                message_addon: "Et voilà la ressource que tu as demandée 🌸",
+                // Use a different outreach message when CTA is detected
+                outreach_template: `Coucou {{firstName}} 🌸
+Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
+Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
+            },
+            "dépendance affective": {
+                file: "guide-sereine.pdf", // Same file for now, can be changed later
+                message_addon: "Et voilà la ressource que tu as demandée 🌸",
+                outreach_template: `Coucou {{firstName}} 🌸
+Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
+Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
+            }
+        }
     }
 }

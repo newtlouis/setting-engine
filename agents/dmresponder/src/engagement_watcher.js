@@ -15,7 +15,8 @@ import {
   closeBrowser,
   scrapePostLikers,
   scrapePostComments,
-  openDMAndScrape
+  openDMAndScrape,
+  uploadFileInDM
 } from './scraper.js';
 import {
   initDB,
@@ -290,9 +291,42 @@ export async function runEngagementWatcher(options = {}) {
                     aiFirstName = await extractNameWithAI(username, metadata.fullName);
                 } catch (e) {}
 
-                let messageTemplate = lead.source === 'post_comment' 
-                    ? profileConfig.outreach?.comment_outreach_template 
-                    : profileConfig.outreach?.like_outreach_template;
+                // --- CTA Keyword Detection ---
+                let ctaMatch = null;
+                let resourceToUpload = null;
+                
+                if (lead.source === 'post_comment' && lead.text && profileConfig.outreach?.cta_resources) {
+                    const commentText = lead.text.toLowerCase().trim();
+                    const ctaKeywords = Object.keys(profileConfig.outreach.cta_resources);
+                    
+                    for (const keyword of ctaKeywords) {
+                        // Match if comment IS the keyword (with some tolerance for emojis/spaces)
+                        const cleanedComment = commentText.replace(/[^\w\sàâäéèêëïîôùûüÿçœæ]/gi, '').trim();
+                        if (cleanedComment === keyword.toLowerCase() || commentText === keyword.toLowerCase()) {
+                            ctaMatch = profileConfig.outreach.cta_resources[keyword];
+                            console.log(`   🎁 CTA Keyword detected: "${keyword}" -> Will deliver resource.`);
+                            break;
+                        }
+                    }
+                    
+                    if (ctaMatch && ctaMatch.file) {
+                        // Build absolute path to resource file
+                        const resourcesDir = path.join(process.cwd(), 'config', 'profiles', profile, 'resources');
+                        resourceToUpload = path.join(resourcesDir, ctaMatch.file);
+                    }
+                }
+                
+                // --- Select Message Template ---
+                let messageTemplate;
+                
+                if (ctaMatch && ctaMatch.outreach_template) {
+                    // Use CTA-specific template
+                    messageTemplate = ctaMatch.outreach_template;
+                } else if (lead.source === 'post_comment') {
+                    messageTemplate = profileConfig.outreach?.comment_outreach_template;
+                } else {
+                    messageTemplate = profileConfig.outreach?.like_outreach_template;
+                }
                 
                 // Fallback to follower template if specific ones don't exist
                 if (!messageTemplate) messageTemplate = profileConfig.outreach?.follower_template;
@@ -320,6 +354,7 @@ export async function runEngagementWatcher(options = {}) {
 
                 if (options.dryRun) {
                     console.log(`   🚧 DRY RUN: Would contact @${username} with: "${finalMessage}"`);
+                    if (resourceToUpload) console.log(`   🚧 DRY RUN: Would upload resource: ${resourceToUpload}`);
                     continue; // In dry run we don't increment preparedCount for real, or we could if we wanted to simulate the limit
                 }
 
@@ -350,6 +385,18 @@ export async function runEngagementWatcher(options = {}) {
                     console.log(`   Message: "${finalMessage}"\n`);
 
                     await typeInOpenTab(dmResult.tab, finalMessage);
+                    
+                    // --- CTA Resource Upload ---
+                    if (resourceToUpload) {
+                        console.log(`   📎 Uploading CTA resource...`);
+                        const uploadResult = await uploadFileInDM(dmResult.tab, resourceToUpload);
+                        if (uploadResult.success) {
+                            console.log(`   ✅ Resource uploaded successfully.`);
+                        } else {
+                            console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
+                        }
+                    }
+                    
                     registerOpenTab(username, dmResult.tab, finalMessage);
                     
                     // 9. Sync DB
@@ -359,7 +406,8 @@ export async function runEngagementWatcher(options = {}) {
                         bio: metadata.bio,
                         lead_source: lead.source,
                         dm_url: dmResult.dmUrl,
-                        conversation_step: 2
+                        conversation_step: 2,
+                        notes: ctaMatch ? `CTA resource delivered: ${ctaMatch.file}` : null
                     });
                     await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
                     preparedCount++;
