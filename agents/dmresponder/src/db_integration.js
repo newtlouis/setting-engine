@@ -316,5 +316,6 @@ export function parseThreadMetadata(rawMetadata) {
     parseThreadMetadata,
     fullUpsertLead: (username, accountId, data) => dbFunctions.fullUpsertLead(username, accountId, data),
     getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),
-   updateLeadLastFollowup: (username, tplId) => dbFunctions.updateLeadLastFollowup(username, tplId)
+    updateLeadLastFollowup: (username, tplId) => dbFunctions.updateLeadLastFollowup(username, tplId),
+    getFollowupCountForStep: (username, step) => dbFunctions.getFollowupCountForStep(username, step)
  };

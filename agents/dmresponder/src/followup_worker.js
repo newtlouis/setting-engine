@@ -63,6 +63,8 @@ export async function runFollowupWatcher(options = {}) {
 
     if (!profile) throw new Error('Profile is required');
 
+    const profileConfig = await loadProfileConfig(profile);
+
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
     console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
 
@@ -79,21 +81,64 @@ export async function runFollowupWatcher(options = {}) {
         return;
     }
 
-    console.log(`📋 Found ${threads.length} stale threads.`);
+    console.log(`📋 Found ${threads.length} stale threads. Filtering by step rules...`);
     
+    // 2. Filter threads based on Step Rules
+    const threadsToProcess = [];
+    
+    for (const t of threads) {
+        // Only process steps 2, 3, 4, 5. Step 1 gets 0 follow-ups.
+        if (!t.conversation_step || t.conversation_step < 2) continue;
+        
+        const stepKey = `step${t.conversation_step}`;
+        const stepConfig = profileConfig.outreach?.followups?.[stepKey];
+        
+        if (!stepConfig) {
+            console.log(`   Skipping @${t.username} (Step ${t.conversation_step}): No config found.`);
+            continue;
+        }
+
+        // Check max follow-ups for this step
+        const existingCount = await dbFunctions.getFollowupCountForStep(t.username, t.conversation_step);
+        
+        if (existingCount >= stepConfig.max) {
+            console.log(`   Skipping @${t.username} (Step ${t.conversation_step}): Max follow-ups reached (${existingCount}/${stepConfig.max}).`);
+            continue;
+        }
+
+        // Determine next template index (sequential)
+        // If existingCount is 0, we use template[0]. If 1, use template[1].
+        // If we want random, we could do that too, but sequential makes sense for "relance 1", "relance 2".
+        // The user said "generic relances", implying we can just cycle or pick one. 
+        // Let's use sequential for now to avoid repeating the exact same message if max > 1.
+        let templateIndex = existingCount; 
+        if (templateIndex >= stepConfig.templates.length) {
+            templateIndex = stepConfig.templates.length - 1; // Fallback to last one if we have more allowance than templates
+        }
+
+        t.nextMessage = stepConfig.templates[templateIndex];
+        t.followupIndex = existingCount + 1; // 1-based index for logging/tracking
+        threadsToProcess.push(t);
+    }
+    
+    if (threadsToProcess.length === 0) {
+        console.log('✅ No threads eligible for follow-up after filtering.');
+        return;
+    }
+
     // Filter by limit
-    const targetThreads = threads.slice(0, limit);
+    const targetThreads = threadsToProcess.slice(0, limit);
 
     if (dryRun) {
-        console.log('🚧 DRY RUN MODE. Would process:');
+        console.log(`🚧 DRY RUN MODE. Would process ${targetThreads.length} threads:`);
         for (const t of targetThreads) {
-            const nextTpl = await dbFunctions.getNextFollowupTemplate(t.last_followup_template_id);
-            console.log(`   - @${t.username} (Last: ${t.last_msg_at}) -> Next: ${nextTpl ? nextTpl.step_order : 'NONE (End of sequence)'}`);
+            console.log(`   - @${t.username} (Step ${t.conversation_step}) -> Relance #${t.followupIndex}/${profileConfig.outreach.followups[`step${t.conversation_step}`].max}`);
+            console.log(`     Message: "${t.nextMessage.substring(0, 50)}..."`);
         }
         return;
     }
 
-    // 2. Init Browser
+    // 3. Init Browser
     const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
     let browser = await initBrowser({ 
         userDataDir,
@@ -105,15 +150,7 @@ export async function runFollowupWatcher(options = {}) {
 
     try {
         for (const thread of targetThreads) {
-            console.log(`\n--- Follow-up for @${thread.username} ---`);
-
-            // 3. Get Next Template
-            const nextTemplate = await dbFunctions.getNextFollowupTemplate(thread.last_followup_template_id);
-            
-            if (!nextTemplate) {
-                console.log(`ℹ️  No more follow-up templates for @${thread.username}. Skipping.`);
-                continue;
-            }
+            console.log(`\n--- Follow-up for @${thread.username} (Step ${thread.conversation_step}) ---`);
 
             // 4. Open DM
             const result = await openDMAndScrape({
@@ -124,15 +161,11 @@ export async function runFollowupWatcher(options = {}) {
 
             if (!result.success) {
                 console.log(`❌ Failed to open: ${result.error}`);
-                
-                // Handle blocked/deleted profiles
                 if (result.error?.includes('Profile unavailable') || result.error?.includes('page introuvable')) {
-                    console.log(`📡 Lead @${thread.username} seems to have blocked us or deleted their profile. Marking as not_interested.`);
-                    await setDmThreadStatus(thread.username, 'not_interested', { 
+                     await setDmThreadStatus(thread.username, 'not_interested', { 
                         notes: "Profile unavailable (likely blocked/deleted)." 
                     });
                 }
-                
                 continue;
             }
 
@@ -141,96 +174,45 @@ export async function runFollowupWatcher(options = {}) {
             // 5. Verify Context (Double check scraping)
             const scrapedMessages = result.scrapedMessages || [];
             
-            // --- LOGIC: Stop if user participated only once and we are already following up ---
-            const userMsgCount = scrapedMessages.filter(m => m.role === 'user').length;
-            // Assuming nextTemplate.step_order is the follow-up number (1, 2, 3...)
-            // If user sent ONLY 1 message, we allow max 1 follow-up.
-            // So if we are about to send follow-up > 1, we skip.
-            if (userMsgCount === 1 && nextTemplate.step_order > 1) {
-                console.log(`🛑 Stopping follow-ups for @${thread.username}: Only 1 user message sent (max 1 follow-up allowed).`);
-                
-                // Mark in DB so they don't come back in follow-up loop
-                await setDmThreadStatus(thread.username, 'not_interested', { 
-                    notes: "Stopped follow-ups: single reply, limit reached." 
-                });
-                
-                await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id); 
-                await openTab.close();
-                continue;
-            }
-            // ---------------------------------------------------------------------------------
-
+            // Logic: Ensure last message is indeed from us (assistant) - safety check vs partial DB state
             if (scrapedMessages.length > 0) {
                 const lastScraped = scrapedMessages[scrapedMessages.length - 1];
                 if (lastScraped.role === 'user') {
-                    console.log('⚠️  User has replied! Syncing and aborting follow-up.');
+                    console.log('⚠️  User has replied recently! Syncing and aborting follow-up.');
                     await addMessage(thread.username, 'user', lastScraped.text); 
                     await openTab.close();
                     continue;
                 }
             }
 
-            // --- LOGIC: Revival vs Template ---
-            let message = '';
-            let isRevival = false;
-
-            // Find last message from assistant
-            const lastAssistantMsg = [...scrapedMessages].reverse().find(m => m.role === 'assistant');
+            // 6. Prepare Message
+            let message = thread.nextMessage;
             
-            const isQuestion = (text) => text && (text.trim().endsWith('?') || text.includes('? '));
-            
-            if (lastAssistantMsg && !isQuestion(lastAssistantMsg.text)) {
-                console.log('🤖 Last message was NOT a question. Generating personalized revival...');
-                try {
-                    const revivalResult = await generateRevivalMessage(scrapedMessages, { 
-                        username: thread.username,
-                        fullName: thread.full_name
-                    });
-                    message = revivalResult.message;
-                    isRevival = true;
-                } catch (e) {
-                    console.error('Failed to generate revival, falling back to template:', e);
-                    message = nextTemplate.template_text;
-                }
-            } else {
-                console.log('📝 Last message was a question (or null). Using DB template.');
-                message = nextTemplate.template_text;
-            }
-
-            // Safety check for message type
-            if (!message || typeof message !== 'string') {
-                console.error('⚠️ Message is not a string:', message);
-                message = "";
-            }
-
             // Placeholder replacement
             const firstName = thread.full_name ? thread.full_name.split(' ')[0] : thread.username;
-            message = message.replace(/\{\{firstName\}\}/g, firstName);
+            message = message.replace(/{{firstName}}/g, firstName);
 
-            // LOGGING UPDATE
             console.log(`\n💬 SENDING FOLLOW-UP:`);
-            console.log(`   Profile: ${thread.profile_url}`);
-            console.log(`   Type: ${isRevival ? 'PERSONALIZED REVIVAL' : 'TEMPLATE #' + nextTemplate.step_order}`);
+            console.log(`   Step: ${thread.conversation_step} | Relance #${thread.followupIndex}`);
             console.log(`   Message: "${message}"\n`);
             
             // 7. Type & Register
             await typeInOpenTab(openTab, message);
             registerOpenTab(thread.username, openTab, message);
             
-            // 8. Update DB (Stage and Template Tracking)
-            await addMessage(thread.username, 'assistant', message, isRevival ? 'followup_revival' : `followup_${nextTemplate.step_order}`);
-            
-            // If it was a revival, do we advance the template? 
-            // The user wants to "return to script steps", so maybe we stay on current or just mark progress.
-            // For now, let's mark progress so we don't loop forever on this step.
-            await dbFunctions.updateLeadLastFollowup(thread.username, nextTemplate.id);
+            // 8. Update DB 
+            // We store specific type to count later: e.g. 'followup_step3_1'
+            await addMessage(thread.username, 'assistant', message, `followup_step${thread.conversation_step}_${thread.followupIndex}`);
             
             processedCount++;
+            
+            // Close tab to save memory/resources if we are processing many? 
+            // The scraping function usually keeps it open for 'waitForUserToFinish' batch sending.
+            // But here we are just adding to tabs.
         }
 
         if (processedCount > 0) {
-            console.log(`\n✨ Prepared ${processedCount} follow-ups review.`);
-            // Existing waitForUserToFinish handles the manual send wait
+            console.log(`\n✨ Prepared ${processedCount} follow-ups for review.`);
             await waitForUserToFinish();
         } else {
             console.log('No follow-ups prepared.');

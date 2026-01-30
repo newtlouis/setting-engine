@@ -263,6 +263,7 @@ fin propre
             // "#dependanceaffective",
             // "#dépendanceaffective",
             // "#hypersensibilité",
+            "@https://www.instagram.com/aliajadoul_/",
 			"#dépendanceémotionnelle",
 			"#attachementémotionnel",
             "#relationssaines",
@@ -270,7 +271,6 @@ fin propre
 			"#relationdifficile",
 			"#amourtoxique",
 			"#amouretsanté",
-            "@https://www.instagram.com/aliajadoul_/",
             "#renovationsentimentale",
             "@therapie_positive",
             "@coach_en_amour"
@@ -334,6 +334,46 @@ Est-ce que le sujet de la dépendance affective te parle personnellement ou c'es
                 outreach_template: `Coucou {{firstName}} 🌸
 Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
 Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
+            }
+        },
+
+        // --- STEP-BASED FOLLOW-UP RULES ---
+        // Rules:
+        // Step 1 (Outreach sent): 0 follow-ups.
+        // Step 2 (Replied once): Max 1 follow-up (Classic).
+        // Step 3-4 (Conversation): Max 3 follow-ups (Generic, NO CALL mention).
+        // Step 5 (Call Proposed): Max 3 follow-ups (Can mention call).
+        followups: {
+            step1: { max: 0, templates: [] },
+            step2: { 
+                max: 1, 
+                templates: [
+                    "Coucou {{firstName}} 🌸 Je me permets de te relancer tout doucement — parfois les messages se perdent dans la boîte Instagram 😅 Prends ton temps pour répondre bien sûr, je voulais juste m’assurer que tu l’avais bien vu 🌷"
+                ] 
+            },
+            step3: { 
+                max: 3, 
+                templates: [
+                   "Coucou {{firstName}} 🌸 Je me permets de te relancer tout doucement — parfois les messages se perdent dans la boîte Instagram 😅 Prends ton temps pour répondre bien sûr, je voulais juste m’assurer que tu l’avais bien vu 🌷",
+                   "{{firstName}} ?",
+                    "Coucou {{firstName}} ! Juste un petit message pour ne pas perdre le fil 😊 Si tu n'es plus intéressée ou si ce n'est pas le bon moment, dis-le moi simplement, je ne veux pas t'embêter ! Belle journée ☀️"
+                ] 
+            },
+            step4: { 
+                max: 3, 
+                templates: [
+                   "Coucou {{firstName}} 🌸 Je me permets de te relancer tout doucement — parfois les messages se perdent dans la boîte Instagram 😅 Prends ton temps pour répondre bien sûr, je voulais juste m’assurer que tu l’avais bien vu 🌷",
+                   "{{firstName}} ?",
+                    "Coucou {{firstName}} ! Juste un petit message pour ne pas perdre le fil 😊 Si tu n'es plus intéressée ou si ce n'est pas le bon moment, dis-le moi simplement, je ne veux pas t'embêter ! Belle journée ☀️"
+                ] 
+            },
+            step5: { 
+                max: 3, 
+                templates: [
+                    "{{firstName}} ?",
+                    "Hello {{firstName}} 🌷 Tu as pu regarder pour notre petit échange ? Dis-moi ce qui t'arrange 🌸",
+                    "Un dernier petit coucou {{firstName}} 👋 Je suppose que tu es très occupée ! Je ne vais pas insister davantage pour l'appel, mais ma porte reste ouverte si tu veux reprendre notre échange plus tard. Prends soin de toi 🌺"
+                ] 
             }
         }
     }

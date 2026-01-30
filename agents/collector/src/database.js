@@ -1163,6 +1163,29 @@ export function updateLeadLastFollowup(username, templateId) {
   `).run(templateId, username);
 }
 
+/**
+ * Get count of follow-ups sent for a specific conversation step
+ * 
+ * @param {string} username - Instagram username
+ * @param {number} step - Step number (2, 3, 4...)
+ * @returns {number} Count of follow-ups sent at this step
+ */
+export function getFollowupCountForStep(username, step) {
+  // Get lead ID
+  const lead = getLeadByUsername(username);
+  if (!lead) return 0;
+  
+  const result = db.prepare(`
+    SELECT COUNT(*) as count 
+    FROM conversations 
+    WHERE lead_id = ? 
+      AND role = 'assistant'
+      AND message_type LIKE ?
+  `).get(lead.id, `followup_step${step}%`);
+  
+  return result ? result.count : 0;
+}
+
 // ============================================
 // TEST SCENARIOS OPERATIONS
 // ============================================
