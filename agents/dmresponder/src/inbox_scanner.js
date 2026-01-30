@@ -340,8 +340,10 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          const validStatuses = ['conversation', 'outreach', 'contacted', 'replied', 'qualified'];
-          if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored || leadContext.status === 'already_known') {
+          // Expanded valid statuses to include not_interested/already_known for "Question Only" check
+          const validStatuses = ['conversation', 'outreach', 'contacted', 'replied', 'qualified', 'not_interested', 'already_known'];
+          
+          if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored) {
             console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}', ignored: ${leadContext.is_ignored}) skipped.`);
             skippedCount++;
             continue;
@@ -391,8 +393,23 @@ export async function runInboxScanner(options = {}) {
             console.log(`   ⏳ Last message was not from user.`);
             continue;
           }
-          
-          // 6. Generate Response
+
+          // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' / 'ALREADY KNOWN' ---
+          if (['not_interested', 'already_known'].includes(leadContext.status)) {
+             const text = lastMsg.text || '';
+             // Strict check: Only respond if there is a question mark
+             const isQuestion = text.includes('?') || text.trim().endsWith('?');
+             
+             if (!isQuestion) {
+                 console.log(`   🛑 Status is '${leadContext.status}' and message is NOT a question ("${text}"). Keeping status as is and IGNORING.`);
+                 // We do NOT respond. We treat it as "read and handled".
+                 continue;
+             } else {
+                 console.log(`   ✅ Status is '${leadContext.status}' BUT user asked a question ("${text}"). Generating response.`);
+             }
+          }
+
+          // 7. Generate Response (renumbered)
           console.log(`   🤖 Generating response...`);
           const response = await generateResponse({
             conversationHistory: updatedHistory,
