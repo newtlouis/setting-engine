@@ -351,6 +351,14 @@ export async function runEngagementWatcher(options = {}) {
                 
                 // Final cleanup: remove double spaces and trim
                 finalMessage = finalMessage.replace(/\s+/g, ' ').trim();
+                
+                // --- CTA Delivery (URL & Message Addon) ---
+                if (ctaMatch) {
+                    let addon = "";
+                    if (ctaMatch.message_addon) addon += `\n\n${ctaMatch.message_addon}`;
+                    if (ctaMatch.url) addon += ctaMatch.message_addon ? `\n${ctaMatch.url}` : `\n\n${ctaMatch.url}`;
+                    finalMessage += addon;
+                }
 
                 if (options.dryRun) {
                     console.log(`   🚧 DRY RUN: Would contact @${username} with: "${finalMessage}"`);

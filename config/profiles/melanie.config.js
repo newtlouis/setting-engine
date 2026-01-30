@@ -319,7 +319,8 @@ C’est un sujet qui te touche personnellement ou plutôt quelque chose que tu o
         cta_resources: {
             // Keyword (lowercase, trimmed) -> Resource configuration
             "sereine": {
-                file: "guide-sereine.pdf", // File must be in config/profiles/melanie/resources/
+                file: "", // File must be in config/profiles/melanie/resources/
+                url: "https://www.youtube.com/watch?v=7RoB9DaQz1I", // Optional: Link to a video
                 message_addon: "Et voilà la ressource que tu as demandée 🌸",
                 // Use a different outreach message when CTA is detected
                 outreach_template: `Coucou {{firstName}} 🌸
@@ -327,7 +328,8 @@ Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
 Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
             },
             "dépendance affective": {
-                file: "guide-sereine.pdf", // Same file for now, can be changed later
+                file: "",
+                url: "https://www.youtube.com/watch?v=7RoB9DaQz1I",
                 message_addon: "Et voilà la ressource que tu as demandée 🌸",
                 outreach_template: `Coucou {{firstName}} 🌸
 Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
