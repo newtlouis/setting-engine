@@ -40,6 +40,7 @@ program
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
   .option('--dry-run', 'List what would be done without opening browser', false)
   .option('--skip-qualification', 'Skip bio qualification check', false)
+  .option('--prepare-only', 'Queue leads without opening browser tabs', false)
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');
@@ -60,7 +61,8 @@ program
         maxLeadsPerPost: parseInt(options.leads, 10),
         totalLimit: parseInt(options.total, 10),
         dryRun: options.dryRun,
-        skipQualification: options.skipQualification
+        skipQualification: options.skipQualification,
+        prepareOnly: options.prepareOnly
       });
       process.exit(0);
     } catch (error) {

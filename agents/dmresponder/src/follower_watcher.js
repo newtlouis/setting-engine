@@ -24,6 +24,7 @@ import {
   getOrCreateAccount,
   fullUpsertLead
 } from './db_integration.js';
+import { addToOutreachQueue, getQueueCount } from '../../collector/src/database.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
@@ -125,6 +126,7 @@ export async function runFollowerWatcher(options = {}) {
     console.log(`========================================`);
     console.log(`   Profile: ${profile}`);
     console.log(`   Track Week: ${!!options.trackWeek}`);
+    console.log(`   Prepare Only: ${!!options.prepareOnly}`);
     
     let browser = null;
     let page = null;
@@ -241,16 +243,17 @@ export async function runFollowerWatcher(options = {}) {
             } catch (e) {}
             
             let messageTemplate = profileConfig.outreach?.follower_template;
-             if (!messageTemplate || messageTemplate.length < 5) {
-                messageTemplate = "Hello {{firstName}} ! Merci pour ton follow, bienvenue ici 🌸";
-            }
             
-             let finalMessage = messageTemplate;
+            let finalMessage = "";
             if (aiFirstName) {
-                finalMessage = finalMessage.replace(/{{firstName}}/g, aiFirstName);
+                // NEW PATTERN: Just "[Name] ?"
+                finalMessage = `${aiFirstName} ?`;
             } else {
-                finalMessage = finalMessage.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
-                 if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
+                if (!messageTemplate || messageTemplate.length < 5) {
+                    messageTemplate = "Hello ! Merci pour ton follow, bienvenue ici 🌸";
+                }
+                finalMessage = messageTemplate.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
+                if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
             }
              finalMessage = finalMessage.replace(/\s+/g, ' ').trim();
             
@@ -280,21 +283,52 @@ export async function runFollowerWatcher(options = {}) {
             }
             
             if (dmResult.scrapedMessages.length === 0) {
-                 console.log(`\n   💬 PREPARING OUTREACH: "${finalMessage}"`);
-                 await typeInOpenTab(dmResult.tab, finalMessage);
-                 registerOpenTab(username, dmResult.tab, finalMessage);
-                 
-                  await fullUpsertLead(username, account.id, {
-                    status: 'outreach',
-                    full_name: metadata.fullName,
-                    bio: metadata.bio,
-                    lead_source: 'new_follower',
-                    dm_url: dmResult.dmUrl,
-                    conversation_step: 2
-                });
-                await addMessage(username, 'assistant', finalMessage, 'new_follower', account.id);
-                processedCount++;
-                console.log(`   ✅ Message prepared. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+                console.log(`\n   💬 PREPARING OUTREACH: "${finalMessage}"`);
+                
+                // --prepare-only mode: Store in queue, don't open tab
+                if (options.prepareOnly) {
+                    const queueResult = addToOutreachQueue({
+                        username,
+                        profile_url: `https://www.instagram.com/${username}/`,
+                        dm_url: dmResult.dmUrl,
+                        prepared_message: finalMessage,
+                        first_name: aiFirstName,
+                        source: 'follower'
+                     });
+                     
+                     if (queueResult) {
+                         console.log(`   📦 Queued @${username} for later sending.`);
+                         await fullUpsertLead(username, account.id, {
+                             status: 'queued',
+                             full_name: metadata.fullName,
+                             bio: metadata.bio,
+                             first_name: aiFirstName,
+                             lead_source: 'new_follower',
+                             dm_url: dmResult.dmUrl
+                         });
+                         processedCount++;
+                         console.log(`   ✅ Queued. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+                     } else {
+                         console.log(`   ⚠️ Already in queue: @${username}`);
+                     }
+                     if (dmResult.tab) await dmResult.tab.close().catch(() => {});
+                } else {
+                    // Normal mode: Open tab for review
+                    await typeInOpenTab(dmResult.tab, finalMessage);
+                    registerOpenTab(username, dmResult.tab, finalMessage);
+                    
+                    await fullUpsertLead(username, account.id, {
+                        status: 'outreach',
+                        full_name: metadata.fullName,
+                        bio: metadata.bio,
+                        lead_source: 'new_follower',
+                        dm_url: dmResult.dmUrl,
+                        conversation_step: 2
+                    });
+                    await addMessage(username, 'assistant', finalMessage, 'new_follower', account.id);
+                    processedCount++;
+                    console.log(`   ✅ Message prepared. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+                }
 
             } else {
                 console.log(`   ⚠️ Conversation history found. Marking as already_known.`);
@@ -315,8 +349,13 @@ export async function runFollowerWatcher(options = {}) {
         }
         
         if (processedCount > 0) {
-            console.log(`\n✨ Prepared ${processedCount} outreach messages for review.`);
-            await waitForUserToFinish();
+            if (options.prepareOnly) {
+                console.log(`\n✨ Queued ${processedCount} leads for later sending.`);
+                console.log(`   Total pending in queue: ${getQueueCount()}`);
+            } else {
+                console.log(`\n✨ Prepared ${processedCount} outreach messages for review.`);
+                await waitForUserToFinish();
+            }
         } else {
             console.log('\nNo new outreach messages prepared.');
         }

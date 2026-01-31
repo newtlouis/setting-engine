@@ -25,6 +25,7 @@ import {
   getOrCreateAccount,
   fullUpsertLead
 } from './db_integration.js';
+import { addToOutreachQueue, getQueueCount } from '../../collector/src/database.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
@@ -133,6 +134,7 @@ export async function runEngagementWatcher(options = {}) {
     console.log(`   DM RESPONDER - ENGAGEMENT WATCHER`);
     console.log(`========================================`);
     console.log(`   Profile: ${profile}`);
+    console.log(`   Prepare Only: ${!!options.prepareOnly}`);
     
     let browser = null;
     let page = null;
@@ -328,23 +330,18 @@ export async function runEngagementWatcher(options = {}) {
                     messageTemplate = profileConfig.outreach?.like_outreach_template;
                 }
                 
-                // Fallback to follower template if specific ones don't exist
-                if (!messageTemplate) messageTemplate = profileConfig.outreach?.follower_template;
+                let finalMessage = "";
                 
-                // Final safety fallback to avoid empty or ultra-short messages
-                if (!messageTemplate || messageTemplate.length < 10) {
-                    messageTemplate = "Hello {{firstName}} ! Merci pour ton interaction sur mon dernier post 🌸";
-                }
-
-                let finalMessage = messageTemplate;
-                
-                // Handle {{firstName}} placeholder
                 if (aiFirstName) {
-                    finalMessage = finalMessage.replace(/{{firstName}}/g, aiFirstName);
+                    // NEW PATTERN: Just "[Name] ?"
+                    finalMessage = `${aiFirstName} ?`;
                 } else {
+                    // Handle {{firstName}} placeholder
+                    if (!messageTemplate || messageTemplate.length < 10) {
+                        messageTemplate = "Hello ! Merci pour ton interaction sur mon dernier post 🌸";
+                    }
                     // Remove {{firstName}} and clean up formatting
-                    // Handles "Hello {{firstName}}" -> "Hello", "Coucou {{firstName}}" -> "Coucou"
-                    finalMessage = finalMessage.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
+                    finalMessage = messageTemplate.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
                     // If it started with "Hello !" (now that name is gone), make sure it's capitalized correctly
                     if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
                 }
@@ -388,38 +385,71 @@ export async function runEngagementWatcher(options = {}) {
                 }
 
                 if (dmResult.success && dmResult.scrapedMessages.length === 0) {
-                    console.log(`\n   💬 SENDING ENGAGEMENT OUTREACH:`);
+                    console.log(`\n   💬 PREPARING ENGAGEMENT OUTREACH:`);
                     console.log(`   Profile: https://www.instagram.com/${username}/`);
                     console.log(`   Message: "${finalMessage}"\n`);
 
-                    await typeInOpenTab(dmResult.tab, finalMessage);
-                    
-                    // --- CTA Resource Upload ---
-                    if (resourceToUpload) {
-                        console.log(`   📎 Uploading CTA resource...`);
-                        const uploadResult = await uploadFileInDM(dmResult.tab, resourceToUpload);
-                        if (uploadResult.success) {
-                            console.log(`   ✅ Resource uploaded successfully.`);
+                    // --prepare-only mode: Store in queue, don't open tab
+                    if (options.prepareOnly) {
+                        const queueResult = addToOutreachQueue({
+                            username,
+                            profile_url: `https://www.instagram.com/${username}/`,
+                            dm_url: dmResult.dmUrl,
+                            prepared_message: finalMessage,
+                            first_name: aiFirstName,
+                            source: 'engagement',
+                            resource_file: resourceToUpload || null,
+                            resource_url: ctaMatch?.url || null
+                        });
+                        
+                        if (queueResult) {
+                            console.log(`   📦 Queued @${username} for later sending.`);
+                            await fullUpsertLead(username, account.id, {
+                                status: 'queued',
+                                full_name: metadata.fullName,
+                                bio: metadata.bio,
+                                first_name: aiFirstName,
+                                lead_source: lead.source,
+                                dm_url: dmResult.dmUrl,
+                                notes: ctaMatch ? `CTA resource queued: ${ctaMatch.file}` : null
+                            });
+                            preparedCount++;
+                            console.log(`   ✅ Queued. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
                         } else {
-                            console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
+                            console.log(`   ⚠️ Already in queue: @${username}`);
                         }
+                        if (dmResult.tab) await dmResult.tab.close().catch(() => {});
+                    } else {
+                        // Normal mode: Open tab for review
+                        await typeInOpenTab(dmResult.tab, finalMessage);
+                        
+                        // --- CTA Resource Upload ---
+                        if (resourceToUpload) {
+                            console.log(`   📎 Uploading CTA resource...`);
+                            const uploadResult = await uploadFileInDM(dmResult.tab, resourceToUpload);
+                            if (uploadResult.success) {
+                                console.log(`   ✅ Resource uploaded successfully.`);
+                            } else {
+                                console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
+                            }
+                        }
+                        
+                        registerOpenTab(username, dmResult.tab, finalMessage);
+                        
+                        // 9. Sync DB
+                        await fullUpsertLead(username, account.id, {
+                            status: 'outreach',
+                            full_name: metadata.fullName,
+                            bio: metadata.bio,
+                            lead_source: lead.source,
+                            dm_url: dmResult.dmUrl,
+                            conversation_step: 2,
+                            notes: ctaMatch ? `CTA resource delivered: ${ctaMatch.file}` : null
+                        });
+                        await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
+                        preparedCount++;
+                        console.log(`   ✅ Message prepared. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
                     }
-                    
-                    registerOpenTab(username, dmResult.tab, finalMessage);
-                    
-                    // 9. Sync DB
-                    await fullUpsertLead(username, account.id, {
-                        status: 'outreach',
-                        full_name: metadata.fullName,
-                        bio: metadata.bio,
-                        lead_source: lead.source,
-                        dm_url: dmResult.dmUrl,
-                        conversation_step: 2,
-                        notes: ctaMatch ? `CTA resource delivered: ${ctaMatch.file}` : null
-                    });
-                    await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
-                    preparedCount++;
-                    console.log(`   ✅ Message prepared. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
 
                 } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
                     console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
@@ -444,8 +474,13 @@ export async function runEngagementWatcher(options = {}) {
         }
         
         if (preparedCount > 0) {
-            console.log(`\n✨ Prepared ${preparedCount} engagement outreach messages for review.`);
-            await waitForUserToFinish();
+            if (options.prepareOnly) {
+                console.log(`\n✨ Queued ${preparedCount} leads for later sending.`);
+                console.log(`   Total pending in queue: ${getQueueCount()}`);
+            } else {
+                console.log(`\n✨ Prepared ${preparedCount} engagement outreach messages for review.`);
+                await waitForUserToFinish();
+            }
         } else {
             console.log('\nNo new outreach messages prepared.');
         }

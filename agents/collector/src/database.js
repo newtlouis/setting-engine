@@ -72,6 +72,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       pain_points TEXT,  -- JSON array
       conversation_step INTEGER DEFAULT 0,
       notes TEXT,
+      first_name TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(username, account_id)
@@ -222,10 +223,41 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       );
     `);
 
+    // Create Outreach Queue Table (for harvest/send system)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS outreach_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        profile_url TEXT,
+        dm_url TEXT,
+        prepared_message TEXT NOT NULL,
+        first_name TEXT,
+        source TEXT,  -- 'follower', 'engagement', 'prospect'
+        resource_file TEXT,  -- Optional file path for CTA
+        resource_url TEXT,   -- Optional URL for CTA
+        status TEXT DEFAULT 'pending',  -- 'pending', 'sent', 'failed'
+        created_at TEXT DEFAULT (datetime('now')),
+        sent_at TEXT,
+        error TEXT
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_outreach_queue_status ON outreach_queue(status);`);
+
     // Migration: Add last_followup_template_id to leads
     if (!leadsColumns.some(col => col.name === 'last_followup_template_id')) {
       console.log('🔄 Migrating: Adding last_followup_template_id to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN last_followup_template_id INTEGER REFERENCES followup_templates(id)`);
+    }
+
+    if (!leadsColumns.some(col => col.name === 'first_name')) {
+      console.log('🔄 Migrating: Adding first_name to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN first_name TEXT`);
+    }
+
+    const queueColumns = db.prepare("PRAGMA table_info(outreach_queue)").all();
+    if (!queueColumns.some(col => col.name === 'first_name')) {
+      console.log('🔄 Migrating: Adding first_name to outreach_queue table...');
+      db.exec(`ALTER TABLE outreach_queue ADD COLUMN first_name TEXT`);
     }
 
     // Seed default templates if empty
@@ -1292,4 +1324,95 @@ export function getScenarioResults(scenarioId, limit = 5) {
     ...r,
     messages: JSON.parse(r.messages)
   }));
+}
+
+// ============================================
+// OUTREACH QUEUE OPERATIONS
+// ============================================
+
+/**
+ * Add a lead to the outreach queue
+ * @param {Object} lead - Lead data with username, profile_url, dm_url, prepared_message, source, resource_file, resource_url
+ * @returns {Object} Inserted row or null if duplicate
+ */
+export function addToOutreachQueue(lead) {
+  try {
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO outreach_queue (username, profile_url, dm_url, prepared_message, first_name, source, resource_file, resource_url)
+      VALUES (@username, @profile_url, @dm_url, @prepared_message, @first_name, @source, @resource_file, @resource_url)
+    `);
+    const info = stmt.run({
+      username: lead.username,
+      profile_url: lead.profile_url || null,
+      dm_url: lead.dm_url || null,
+      prepared_message: lead.prepared_message,
+      first_name: lead.first_name || null,
+      source: lead.source || null,
+      resource_file: lead.resource_file || null,
+      resource_url: lead.resource_url || null
+    });
+    return info.changes > 0 ? { id: info.lastInsertRowid, ...lead } : null;
+  } catch (err) {
+    console.error('❌ Error adding to outreach queue:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Get queued leads (pending status, oldest first)
+ * @param {number} limit - Max number to fetch
+ * @returns {Array} List of queued leads
+ */
+export function getQueuedLeads(limit = 5) {
+  return db.prepare(`
+    SELECT * FROM outreach_queue
+    WHERE status = 'pending'
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+/**
+ * Mark a queued lead as sent
+ * @param {string} username
+ */
+export function markQueuedLeadSent(username) {
+  return db.prepare(`
+    UPDATE outreach_queue
+    SET status = 'sent', sent_at = datetime('now')
+    WHERE username = ?
+  `).run(username);
+}
+
+/**
+ * Mark a queued lead as failed
+ * @param {string} username
+ * @param {string} error - Error message
+ */
+export function markQueuedLeadFailed(username, error) {
+  return db.prepare(`
+    UPDATE outreach_queue
+    SET status = 'failed', error = ?
+    WHERE username = ?
+  `).run(error, username);
+}
+
+/**
+ * Get count of pending leads in queue
+ * @returns {number}
+ */
+export function getQueueCount() {
+  const result = db.prepare(`SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending'`).get();
+  return result ? result.count : 0;
+}
+
+/**
+ * Clear old entries from queue (e.g., sent/failed older than X days)
+ * @param {number} days - Age threshold
+ */
+export function cleanupOutreachQueue(days = 7) {
+  return db.prepare(`
+    DELETE FROM outreach_queue
+    WHERE status IN ('sent', 'failed') AND created_at < datetime('now', '-' || ? || ' days')
+  `).run(days);
 }

@@ -289,7 +289,7 @@ async function createNewTab() {
 /**
  * Navigate to profile and click "Contacter"
  */
-async function goToProfileAndOpenDM(page, profileUrl) {
+export async function goToProfileAndOpenDM(page, profileUrl) {
   try {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: CONFIG.PAGE_TIMEOUT });
     await delay(2000, 3000);
@@ -727,6 +727,42 @@ export async function typeInOpenTab(tab, message) {
   }
   
   return typeResult;
+}
+
+/**
+ * Send a message in an already-open DM tab (Fully automated)
+ * 
+ * @param {Page} tab - Playwright page with DM open
+ * @param {string} username - Username for verification
+ * @param {string} message - Message to send
+ * @returns {Promise<{success: boolean, dmUrl?: string, error?: string}>}
+ */
+export async function sendDM(tab, username, message) {
+  try {
+    console.log(`      Automated sending to @${username}...`);
+    const input = await findMessageInput(tab);
+    
+    if (!input) {
+      return { success: false, error: 'message_input_not_found' };
+    }
+    
+    await input.click();
+    await delay(300, 500);
+    
+    await typeHumanLike(tab, message);
+    await delay(800, 1200);
+    
+    await tab.keyboard.press('Enter');
+    await delay(2000, 3000);
+    
+    // Get DM URL
+    const dmUrl = tab.url();
+    
+    return { success: true, dmUrl };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }
 
 /**
