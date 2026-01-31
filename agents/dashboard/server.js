@@ -189,7 +189,7 @@ app.get('/api/leads', (req, res) => {
              params.push(`%${search}%`, `%${search}%`);
         }
 
-        sql += ` ORDER BY CASE WHEN status = 'manual' THEN 0 ELSE 1 END, engagement_score DESC LIMIT ? OFFSET ?`;
+        sql += ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
         params.push(parseInt(limit), parseInt(offset));
 
         const leads = db.prepare(sql).all(...params);

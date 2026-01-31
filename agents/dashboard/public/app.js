@@ -211,6 +211,13 @@ async function loadLeads(filter) {
                 
                 return true;
             });
+
+            // Re-sort just in case to ensure most recent is always on top
+            leads.sort((a, b) => {
+                const dateA = a.updated_at ? new Date(a.updated_at.replace(' ', 'T') + 'Z').getTime() : 0;
+                const dateB = b.updated_at ? new Date(b.updated_at.replace(' ', 'T') + 'Z').getTime() : 0;
+                return dateB - dateA;
+            });
         }
 
         currentLeads = leads; // Store for Select All
