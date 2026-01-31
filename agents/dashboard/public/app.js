@@ -179,40 +179,42 @@ async function loadLeads(filter) {
         let leads = await res.json();
 
         // Apply Client-Side Filtering for Step 5 logic (New vs Old)
-        if (filter === 'step5_new' || filter === 'step5_old') {
-            const now = Date.now();
-            const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        if (isStep5Filter) {
+            if (filter === 'step5_new' || filter === 'step5_old') {
+                const now = Date.now();
+                const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-            leads = leads.filter(l => {
-                // Keep only step 5 and active conversations
-                const step = parseInt(l.conversation_step);
-                if (step !== 5) return false;
-                
-                // Exclude booked/ignored/not interested
-                if (l.booking_status === 'completed' || l.is_ignored) return false;
-                if (['not_interested', 'failed', 'failed_outreach'].includes(l.status)) return false;
+                leads = leads.filter(l => {
+                    // Keep only step 5 and active conversations
+                    const step = parseInt(l.conversation_step);
+                    if (step !== 5) return false;
+                    
+                    // Exclude booked/ignored/not interested
+                    if (l.booking_status === 'completed' || l.is_ignored) return false;
+                    if (['not_interested', 'failed', 'failed_outreach'].includes(l.status)) return false;
 
-                // Parse date - SQLite gives 'YYYY-MM-DD HH:MM:SS'
-                const dateStr = l.updated_at ? l.updated_at.replace(' ', 'T') + 'Z' : null;
-                const lastUpdateTime = dateStr ? new Date(dateStr).getTime() : 0;
-                
-                const diff = now - (lastUpdateTime || 0);
-                const isOld = diff > SEVEN_DAYS_MS;
+                    // Parse date - SQLite gives 'YYYY-MM-DD HH:MM:SS'
+                    const dateStr = l.updated_at ? l.updated_at.replace(' ', 'T') + 'Z' : null;
+                    const lastUpdateTime = dateStr ? new Date(dateStr).getTime() : 0;
+                    
+                    const diff = now - (lastUpdateTime || 0);
+                    const isOld = diff > SEVEN_DAYS_MS;
 
-                if (filter === 'step5_old') {
-                    // Old contains anyone stale for > 7 days (including confirmed ones)
-                    return isOld;
-                }
+                    if (filter === 'step5_old') {
+                        // Old contains anyone stale for > 7 days (including confirmed ones)
+                        return isOld;
+                    }
 
-                if (filter === 'step5_new') {
-                    // New contains only NON-confirmed leads that are fresh
-                    return !isOld && l.booking_status !== 'pending';
-                }
-                
-                return true;
-            });
+                    if (filter === 'step5_new') {
+                        // New contains only NON-confirmed leads that are fresh
+                        return !isOld && l.booking_status !== 'pending';
+                    }
+                    
+                    return true;
+                });
+            }
 
-            // Re-sort just in case to ensure most recent is always on top
+            // ALWAYS re-sort Step 5 tabs explicitly by updated_at DESC
             leads.sort((a, b) => {
                 const dateA = a.updated_at ? new Date(a.updated_at.replace(' ', 'T') + 'Z').getTime() : 0;
                 const dateB = b.updated_at ? new Date(b.updated_at.replace(' ', 'T') + 'Z').getTime() : 0;
