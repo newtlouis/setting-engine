@@ -128,9 +128,9 @@ async function loadLeads(filter) {
             (filter === 'all' && btn.textContent === 'All') ||
             (filter === 'contacted' && (btn.textContent === 'Contacted' || btn.textContent === 'Contact')) ||
             (filter === 'conversation' && btn.textContent === 'Conversation') ||
-            (filter === 'step5_new' && btn.textContent === 'Step 5 New') ||
-            (filter === 'step5_confirmed' && btn.textContent === 'Confirmed') ||
-            (filter === 'step5_old' && btn.textContent === 'Step 5 Old') ||
+            (filter === 'step5_new' && btn.textContent === 'Etape 5: New') ||
+            (filter === 'step5_confirmed' && btn.textContent === 'Etape 5: Confirmed') ||
+            (filter === 'step5_old' && btn.textContent === 'Etape 5: Old') ||
             (filter === 'booked' && btn.textContent === 'Booked') ||
             (filter === 'manual' && btn.textContent === 'Manual') ||
             (filter === 'not_interested' && btn.textContent === 'Not Interested') ||
@@ -181,25 +181,35 @@ async function loadLeads(filter) {
         // Apply Client-Side Filtering for Step 5 logic (New vs Old)
         if (filter === 'step5_new' || filter === 'step5_old') {
             const now = Date.now();
-            const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+            const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
             leads = leads.filter(l => {
                 // Keep only step 5 and active conversations
                 const step = parseInt(l.conversation_step);
                 if (step !== 5) return false;
                 
-                // Exclude confirmed/booked/ignored/not interested
-                if (l.booking_status === 'pending' || l.booking_status === 'completed' || l.is_ignored) return false;
+                // Exclude booked/ignored/not interested
+                if (l.booking_status === 'completed' || l.is_ignored) return false;
                 if (['not_interested', 'failed', 'failed_outreach'].includes(l.status)) return false;
 
                 // Parse date - SQLite gives 'YYYY-MM-DD HH:MM:SS'
                 const dateStr = l.updated_at ? l.updated_at.replace(' ', 'T') + 'Z' : null;
                 const lastUpdateTime = dateStr ? new Date(dateStr).getTime() : 0;
                 
-                if (!lastUpdateTime) return filter === 'step5_old';
+                const diff = now - (lastUpdateTime || 0);
+                const isOld = diff > SEVEN_DAYS_MS;
+
+                if (filter === 'step5_old') {
+                    // Old contains anyone stale for > 7 days (including confirmed ones)
+                    return isOld;
+                }
+
+                if (filter === 'step5_new') {
+                    // New contains only NON-confirmed leads that are fresh
+                    return !isOld && l.booking_status !== 'pending';
+                }
                 
-                const diff = now - lastUpdateTime;
-                return filter === 'step5_old' ? (diff > TWO_WEEKS_MS) : (diff <= TWO_WEEKS_MS);
+                return true;
             });
         }
 
