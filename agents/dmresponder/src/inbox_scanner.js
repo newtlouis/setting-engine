@@ -396,12 +396,23 @@ export async function runInboxScanner(options = {}) {
 
           // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' / 'ALREADY KNOWN' ---
           if (['not_interested', 'already_known'].includes(leadContext.status)) {
-             const text = lastMsg.text || '';
-             // Strict check: Only respond if there is a question mark
-             const isQuestion = text.includes('?') || text.trim().endsWith('?');
+             const text = (lastMsg.text || '').trim();
+             
+             // Stricter check:
+             // 1. Must contain a question mark
+             // 2. OR be a common question starter (Est-ce que, Pourquoi, Comment, ...)
+             // 3. AND must NOT be a common closing/thanking message
+             const hasQuestionMark = text.includes('?');
+             const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu'];
+             const startsWithQuestion = questionStarters.some(s => text.toLowerCase().startsWith(s));
+             
+             const closingWords = ['merci', 'thanks', 'ok', 'd\'accord', 'ca marche', 'ça marche', 'bonne soirée', 'bonne journée', 'super', 'cool'];
+             const isClosing = closingWords.some(w => text.toLowerCase().includes(w)) && text.length < 30 && !hasQuestionMark;
+
+             const isQuestion = (hasQuestionMark || startsWithQuestion) && !isClosing;
              
              if (!isQuestion) {
-                 console.log(`   🛑 Status is '${leadContext.status}' and message is NOT a question ("${text}"). Keeping status as is and IGNORING.`);
+                 console.log(`   🛑 Status is '${leadContext.status}' and message is NOT a clear question ("${text}"). Keeping status as is and IGNORING.`);
                  // We do NOT respond. We treat it as "read and handled".
                  continue;
              } else {
