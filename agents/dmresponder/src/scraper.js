@@ -978,52 +978,52 @@ export async function scrapeProfileMetadata(page, username) {
             const getAltText = (el) => el?.getAttribute('alt') || '';
             const getText = (sel) => document.querySelector(sel)?.innerText?.trim() || '';
             
-            // 1. Full Name Search
+            // Robust name and bio extraction heuristics
             let fullName = '';
+            let bio = '';
             
-            // Candidate 1: Real name usually in a header section span that is NOT the username
-            const spans = Array.from(document.querySelectorAll('header section span'));
-            const nameCandidate = spans.find(s => {
-                const txt = s.innerText?.trim();
-                return txt && txt.length > 0 && 
-                       txt.toLowerCase() !== targetUsername.toLowerCase() && 
-                       !txt.includes('@') &&
-                       !txt.includes('publications') &&
-                       !txt.includes('followers') &&
-                       !txt.includes('suivi');
-            });
-            if (nameCandidate) fullName = nameCandidate.innerText.trim();
+            function isValidName(text) {
+                if (!text || text.length < 2 || text.length > 500) return false; 
+                const lower = text.toLowerCase();
+                if (/publications|abonnés|suivi|posts|followers|following|views|likes/i.test(lower)) return false;
+                if (/^[\d.,\s]+[kKmM]?$/.test(text.trim())) return false;
+                if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner|abonné)$/i.test(text.trim())) return false;
+                return true;
+            }
 
-            // Candidate 2: Specifically look for the div structure usually holding the name
-            if (!fullName) {
-                const h2 = document.querySelector('h2');
-                if (h2) {
-                    // Search for a span that is a sibling or in a parallel div to the username h2
-                    // In many layouts, name is in a span near the h2
-                    const allSpans = Array.from(document.querySelectorAll('span[dir="auto"]'));
-                    for (const s of allSpans) {
-                        const txt = s.innerText?.trim();
-                        if (txt && txt.length > 0 && txt.toLowerCase() !== targetUsername.toLowerCase() && txt.length < 50) {
-                            // Basic heuristic: it's a name if it's not a stat
-                            if (!/\d+/.test(txt)) {
-                                fullName = txt;
-                                break;
-                            }
+            const header = document.querySelector('main header') || document.querySelector('header');
+            if (header) {
+                const candidates = Array.from(header.querySelectorAll('span[dir="auto"]'))
+                    .map(s => s.textContent.trim())
+                    .filter(text => isValidName(text))
+                    .filter(text => !text.includes('@'));
+
+                if (candidates.length > 0) {
+                    // Name: Usually the first short non-multiline candidate
+                    for (const c of candidates) {
+                        if (c.length < 50 && !c.includes('\n')) {
+                            fullName = c;
+                            break;
                         }
+                    }
+                    // Bio: Usually the longest remaining candidate
+                    const bioCandidates = candidates.filter(c => c !== fullName && c.length > 5);
+                    if (bioCandidates.length > 0) {
+                        bio = bioCandidates.reduce((a, b) => a.length > b.length ? a : b);
                     }
                 }
             }
 
-            // 2. Bio Search
-            let bio = '';
-            // Bio is often the last span in the header section before stats or in a specific block
-            const headerSection = document.querySelector('header section');
-            if (headerSection) {
-                const bioCandidate = headerSection.querySelector('div:last-child span');
-                if (bioCandidate) bio = bioCandidate.innerText || '';
+            // Fallback for Name: Metadata og:title
+            if (!fullName) {
+                const metaTitle = document.querySelector('meta[property="og:title"]')?.content;
+                if (metaTitle) {
+                    const match = metaTitle.match(/^(.+?)\s+\(@/);
+                    if (match && isValidName(match[1])) fullName = match[1];
+                }
             }
-            
-            // Fallback for bio: look for description meta tag (if available in DOM)
+
+            // Fallback for Bio: meta description
             if (!bio) {
                 const metaDesc = document.querySelector('meta[name="description"]');
                 if (metaDesc) bio = metaDesc.getAttribute('content') || '';
