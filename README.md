@@ -88,6 +88,9 @@ npm run harvest -- --target 30 --profile fitness_coach
 # 2. Send messages from queue (Phase 2)
 npm run send-queued -- --limit 5 --profile fitness_coach
 
+# 💡 Pro-tip: Use manual mode to review before sending
+npm run send-queued -- --limit 5 --manual
+
 # Ouvrir une session manuelle pour se connecter
 npm run open:session fitness_coach
 ```

@@ -23,7 +23,12 @@ import {
   closeBrowser, 
   sendDM,
   uploadFileInDM,
-  goToProfileAndOpenDM
+  goToProfileAndOpenDM,
+  createNewTab,
+  typeInOpenTab,
+  registerOpenTab,
+  waitForUserToFinish,
+  goToDirectDM
 } from '../agents/dmresponder/src/scraper.js';
 import { fullUpsertLead, addMessage } from '../agents/dmresponder/src/db_integration.js';
 import { getOrCreateAccount } from '../agents/collector/src/database.js';
@@ -36,7 +41,8 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const result = {
     limit: 5,
-    profile: 'melanie'
+    profile: 'melanie',
+    manual: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -46,6 +52,8 @@ function parseArgs() {
     } else if (args[i] === '--profile' && args[i + 1]) {
       result.profile = args[i + 1];
       i++;
+    } else if (args[i] === '--manual' || args[i] === '-m') {
+      result.manual = true;
     }
   }
 
@@ -53,13 +61,14 @@ function parseArgs() {
 }
 
 async function main() {
-  const { limit, profile } = parseArgs();
+  const { limit, profile, manual } = parseArgs();
 
   console.log('========================================');
   console.log('   SEND QUEUED MESSAGES');
   console.log('========================================');
   console.log(`   Limit: ${limit} messages`);
   console.log(`   Profile: ${profile}`);
+  console.log(`   Mode: ${manual ? 'MANUAL REVIEW (Type but don\'t send)' : 'AUTOMATIC SEND'}`);
   console.log('========================================\n');
 
   // Initialize DB
@@ -102,27 +111,45 @@ async function main() {
       console.log(`   Message: "${lead.prepared_message.substring(0, 50)}..."`);
 
       try {
+        // Determine page to use (Current or New Tab for manual)
+        const currentPage = manual ? await createNewTab() : page;
+        
         // Navigate to profile and open DM
         const profileUrl = lead.profile_url || `https://www.instagram.com/${lead.username}/`;
-        const openResult = await goToProfileAndOpenDM(page, profileUrl);
+        
+        // Use Direct DM URL if available for speed
+        let openResult;
+        if (lead.dm_url && lead.dm_url.includes('/t/')) {
+            openResult = await goToDirectDM(currentPage, lead.dm_url);
+        } else {
+            openResult = await goToProfileAndOpenDM(currentPage, profileUrl);
+        }
         
         if (!openResult.success) {
             console.log(`   ❌ Failed to open DM: ${openResult.error}`);
             markQueuedLeadFailed(lead.username, openResult.error);
             failedCount++;
+            if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
         }
 
-        // Send DM
-        const dmResult = await sendDM(page, lead.username, lead.prepared_message);
+        // Send or Type DM
+        let dmResult;
+        if (manual) {
+            dmResult = await typeInOpenTab(currentPage, lead.prepared_message);
+            // Register tab for manual review
+            registerOpenTab(lead.username, currentPage, lead.prepared_message);
+        } else {
+            dmResult = await sendDM(currentPage, lead.username, lead.prepared_message);
+        }
 
         if (dmResult.success) {
-          console.log(`   ✅ Message sent successfully!`);
+          console.log(manual ? `   ✅ Message typed for review!` : `   ✅ Message sent successfully!`);
 
-          // Handle resource upload if present
+          // Handle resource upload if present (even in manual mode it's helpful to pre-upload)
           if (lead.resource_file) {
             console.log(`   📎 Uploading resource: ${lead.resource_file}`);
-            const uploadResult = await uploadFileInDM(page, lead.resource_file);
+            const uploadResult = await uploadFileInDM(currentPage, lead.resource_file);
             if (!uploadResult.success) {
               console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
             }
@@ -159,6 +186,10 @@ async function main() {
     }
 
   } finally {
+    if (manual) {
+        console.log(`\n👉 ${sentCount} tabs are open for your review.`);
+        await waitForUserToFinish();
+    }
     await closeBrowser().catch(() => {});
   }
 

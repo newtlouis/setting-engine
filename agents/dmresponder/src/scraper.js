@@ -269,7 +269,7 @@ export async function initBrowser(options = {}) {
 /**
  * Create a new tab
  */
-async function createNewTab() {
+export async function createNewTab() {
   if (!browserContext) {
     throw new Error('Browser not initialized. Call initBrowser() first.');
   }

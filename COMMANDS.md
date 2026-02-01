@@ -18,11 +18,17 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
 | **Harvest (Phase 1)** | `npm run harvest -- [options]` | ⭐ **Nouveau**. Récolte des leads (Abonnés -> Engagement -> Prospector) et les met en file d'attente. |
-| **Send Queue (Phase 2)** | `npm run send-queued -- [options]` | ⭐ **Nouveau**. Envoie automatiquement les messages préparés depuis la file d'attente. |
+| **Send Queue (Phase 2)** | `npm run send-queued -- [options]` | ⭐ **Nouveau**. Envoie automatiquement les messages préparés depuis la file d'attente. Ajoutez `--manual` pour réviser avant envoi. |
+| **Relance Automatique** | `npm run followup -- [options]` | ⭐ **Nouveau**. Relance les prospects n'ayant pas répondu après X jours. |
 
 ---
 
 ## 🎭 Gestion Multi-Comptes (Nouveau)
+
+### Options communes pour `send-queued`
+- `--limit <n>` : Nombre maximum de messages à traiter (défaut: 5).
+- `--profile <nom>` : Profil à utiliser.
+- `--manual` (ou `-m`) : **Mode Manuel**. Ouvre les conversations et tape les messages sans les envoyer.
 
 Le système supporte désormais l'utilisation de plusieurs comptes Instagram en parallèle sans conflit de cookies/session.
 Utilisez l'option `--profile <nom>` sur **tous les agents** (Collector, Outreach, DM Responder).
