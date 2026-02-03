@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { SELECTORS as SHARED_SELECTORS } from '../../../shared/config/selectors.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,42 +46,8 @@ export const CONFIG = {
   PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 30000,
   DM_SEND_TIMEOUT: parseInt(process.env.DM_SEND_TIMEOUT, 10) || 15000,
   
-  // Selectors - may need updating if Instagram changes UI
-  SELECTORS: {
-    // Profile page - "Contacter" button (FR) or "Message" button (EN)
-    // This button opens the DM popup directly from the profile
-    CONTACT_BUTTON: [
-      'main header div[role="button"]:has-text("Contacter")',  // French (scoped to profile header)
-      'main header div[role="button"]:has-text("Message")',    // English
-      'main header button:has-text("Contacter")',
-      'main header button:has-text("Message")',
-       // Fallback for some layouts (mobile/responsive) where header might be different but still in main
-      'main div[role="button"]:has-text("Contacter")',
-      'main div[role="button"]:has-text("Message")',
-      'main button:has-text("Contacter")',
-      'main button:has-text("Message")'
-    ],
-    
-    // DM popup - contenteditable message input
-    MESSAGE_INPUT: [
-      'div[contenteditable="true"][role="textbox"]',
-      'div[aria-label*="message" i][contenteditable="true"]',
-      'div[aria-label*="Message" i][contenteditable="true"]',
-      'div[aria-placeholder*="message" i][contenteditable="true"]',
-      'div[data-lexical-editor="true"]'
-    ],
-    
-    // Send button (after typing, usually just Enter works)
-    SEND_BUTTON: [
-      'button[type="submit"]',
-      'div[role="button"]:has-text("Send")',
-      'div[role="button"]:has-text("Envoyer")'  // French
-    ],
-    
-    // Detection indicators
-    CHALLENGE_INDICATOR: 'form[id*="challenge"]'
-    // Note: Rate limit detection is now done with specific selectors in dm_sender.js
-  },
+  // Selectors - imported from shared config (update shared/config/selectors.js if Instagram changes UI)
+  SELECTORS: SHARED_SELECTORS,
   
   // OpenAI Configuration for Lead Qualification
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',

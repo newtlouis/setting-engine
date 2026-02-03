@@ -13,6 +13,7 @@ import { createInterface } from 'readline';
 import { applyStealthToPage } from '../../../shared/stealth.js';
 import { verifyProfilePage, checkForChallenge } from '../../../shared/pageVerification.js';
 import { BrowserService, delay, typeHumanLike, gotoWithRetry } from '../../../shared/browser/index.js';
+import { CONTACT_BUTTON, MESSAGE_INPUT } from '../../../shared/config/selectors.js';
 
 dotenv.config();
 
@@ -22,23 +23,7 @@ dotenv.config();
 const CONFIG = {
   HEADLESS: process.env.HEADLESS === 'true',
   SLOW_MO: parseInt(process.env.SLOW_MO, 10) || 80,
-  PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 60000,
-
-  SELECTORS: {
-    CONTACT_BUTTON: [
-      'div[role="button"]:has-text("Contacter")',
-      'div[role="button"]:has-text("Message")',
-      'button:has-text("Contacter")',
-      'button:has-text("Message")'
-    ],
-    MESSAGE_INPUT: [
-      'div[contenteditable="true"][role="textbox"]',
-      'div[aria-label*="message" i][contenteditable="true"]',
-      'div[aria-label*="Message" i][contenteditable="true"]',
-      'div[aria-placeholder*="message" i][contenteditable="true"]',
-      'div[data-lexical-editor="true"]'
-    ]
-  }
+  PAGE_TIMEOUT: parseInt(process.env.PAGE_TIMEOUT, 10) || 60000
 };
 
 // ============================================
@@ -142,7 +127,7 @@ export async function goToProfileAndOpenDM(page, profileUrl) {
     ];
     
     // Add generic fallback selectors but prioritize main content ones
-    const allSelectors = [...specificSelectors, ...CONFIG.SELECTORS.CONTACT_BUTTON];
+    const allSelectors = [...specificSelectors, ...CONTACT_BUTTON];
     
     let clicked = false;
     
@@ -203,7 +188,7 @@ export async function goToProfileAndOpenDM(page, profileUrl) {
     
     // Case 2: URL is still profile, but a "Message" popup opened bottom-right
     // We check for the presence of a message input field
-    const messageInput = await page.$(CONFIG.SELECTORS.MESSAGE_INPUT.join(', ')).catch(() => null);
+    const messageInput = await page.$(MESSAGE_INPUT.join(', ')).catch(() => null);
     if (messageInput) {
         const isVisible = await messageInput.isVisible().catch(() => false);
         if (isVisible) {
@@ -227,7 +212,7 @@ export async function goToProfileAndOpenDM(page, profileUrl) {
  * Find and focus the message input
  */
 async function findMessageInput(page) {
-  const selectors = CONFIG.SELECTORS.MESSAGE_INPUT;
+  const selectors = MESSAGE_INPUT;
   
   for (const selector of selectors) {
     const input = await page.$(selector).catch(() => null);
