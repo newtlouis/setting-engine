@@ -448,8 +448,19 @@ export async function runInboxScanner(options = {}) {
                   
                   if (bookingResult.success) {
                       console.log(`   ✅ Booking success: ${bookingResult.message}`);
-                      // We don't modify the message here, we let the AI confirm in its next turn or this one if it's already generated.
-                      // Usually the AI generates the confirmation message as part of the turn.
+                      
+                      // Format the slot for the confirmation message
+                      const slotDate = new Date(response.booking_intent.slot);
+                      const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+                      const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                      
+                      const template = profileConfig.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}}";
+                      const confirmationMsg = template
+                          .replace('{{day}}', day)
+                          .replace('{{hour}}', hour);
+                      
+                      console.log(`   📝 Using confirmation template: "${confirmationMsg}"`);
+                      finalMessage = confirmationMsg;
                   }
               } catch (e) {
                   console.error(`   ❌ Booking failed:`, e.message);

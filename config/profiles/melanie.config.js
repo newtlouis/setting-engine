@@ -4,6 +4,7 @@
 export default {
     profile_name: "melanie",
     niche: "Dépendance affective",
+    post_booking_message: "je te confirme notre rdv du {{day}} à {{hour}} pense à compléter cette page avant notre rdv : https://melanieportmannsophrologue.systeme.io/avantnotreappel",
     dm_responder: {
         system_prompt: `Tu es Melanie, coach experte en dépendance affective.
 Tu aides les femmes et les hommes à sortir de schémas relationnels douloureux et répétitifs.
@@ -396,3 +397,13 @@ Est-ce que le sujet de la dépendance affective te parle personnellement ou c'es
         }
     }
 }
+
+// --- Analyzing: Du bien-être à la beauté💆🏼‍♀️ ---
+//    👤 Username: @christelle.estheticienne34
+//    ⏭️ Lead @christelle.estheticienne34 (status: 'queued', ignored: false) skipped.
+
+// --- Analyzing: 🪓🥀𝑨𝒍𝒚𝒔𝒔𝒂🥀🪓 ---
+//    👤 Username: @alyza_horror
+//    ⏭️ Lead @alyza_horror (status: 'queued', ignored: false) skipped.
+
+// Pourquoi ces deux leads ont-ils été skipped? Normalement, elles n'auraient pas dû être ignorées et on aurait dû leur proposer un message. 
