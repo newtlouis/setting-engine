@@ -498,6 +498,12 @@ export async function runInboxScanner(options = {}) {
             newStatus = 'scheduling';
             bookingStatus = 'pending';
           }
+
+          if (finalMessage.includes('[MANUAL]')) {
+            console.log(`   🎤 MANUAL tag detected!`);
+            finalMessage = finalMessage.replace('[MANUAL]', '').trim();
+            newStatus = 'manual';
+          }
           
           // 8. STORE RESULT
           await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');

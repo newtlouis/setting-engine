@@ -333,6 +333,12 @@ async function processThread(thread, options) {
       newStatus = 'not_interested';
     }
 
+    if (finalMessage.includes('[MANUAL]')) {
+      console.log(`   🎤 MANUAL tag detected!`);
+      finalMessage = finalMessage.replace('[MANUAL]', '').trim();
+      newStatus = 'manual';
+    }
+
     if (finalMessage.includes('[ALERT_BOOKING]')) {
       console.log(`   🚨 BOOKING ALERT DETECTED! Sending system notification...`);
       finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();

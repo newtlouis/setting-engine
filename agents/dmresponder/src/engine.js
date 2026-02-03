@@ -133,7 +133,10 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               if (backupText) {
                   contextDescription += `- PROPOSITION DE SECOURS (Si elle refuse les premiers) : ${backupText}\n`;
               }
-              contextDescription += `\nINSTRUCTION : Si le lead accepte l'appel, propose d'abord les deux créneaux "PRIMAIRE". S'il dit qu'il ne peut pas ces jours-là, propose alors les 3 créneaux "DE SECOURS". Une fois qu'il a choisi, demande-lui son EMAIL et son TÉLÉPHONE pour confirmer le RDV.\n`;
+              contextDescription += `\nINSTRUCTIONS DE TRANSITION :\n`;
+              contextDescription += `- Si le lead a accepté le principe de l'appel mais n'a pas encore choisi de créneau -> Tu es à [STEP_6]. Propose les créneaux PRIMAIRES.\n`;
+              contextDescription += `- Si le lead a validé un créneau mais n'a pas encore donné son EMAIL/TÉLÉPHONE -> Tu es à [STEP_7]. Demande ses coordonnées.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> Le rdv va être booké. Ton message doit être la confirmation chaleureuse [STEP_8].\n`;
           }
       } catch (e) {
           console.error("[Engine] Failed to fetch Calendly availability:", e.message);
@@ -146,14 +149,14 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   IMPORTANT: Ton output DOIT être un JSON valide, sans markdown, au format suivant :
   {
       "message": "Le texte du message à envoyer",
-      "step_used": 3,
+      "step_used": "6",
       "booking_intent": {
           "slot": "2026-02-05T14:00:00Z",
           "email": "lead@mail.com",
           "phone": "06..."
       }
   }
-  "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4, 5 ou 6). Si tu es hors script, mets null.
+  "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4, 5, 6, 7, 8 ou 9).
   "booking_intent" ne doit être rempli QUE si tu as TOUTES les informations (créneau choisi, email, téléphone) pour valider le RDV. Sinon, mets null.
   `;
 
