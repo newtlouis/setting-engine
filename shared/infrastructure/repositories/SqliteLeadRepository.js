@@ -132,6 +132,7 @@ export function createSqliteLeadRepository({ getDb }) {
             total_messages_sent = @total_messages_sent,
             total_messages_received = @total_messages_received,
             conversation_step = @conversation_step,
+            funnel_step = @funnel_step,
             last_followup_template_id = @last_followup_template_id,
             last_contact_at = @last_contact_at,
             lead_source = @lead_source,
@@ -151,14 +152,14 @@ export function createSqliteLeadRepository({ getDb }) {
             username, account_id, full_name, first_name, bio, email,
             profile_url, dm_url, status, warmth, is_ignored,
             engagement_score, total_comments, total_messages_sent,
-            total_messages_received, conversation_step,
+            total_messages_received, conversation_step, funnel_step,
             last_followup_template_id, last_contact_at, lead_source,
             lead_type, booking_status, pain_points, notes
           ) VALUES (
             @username, @account_id, @full_name, @first_name, @bio, @email,
             @profile_url, @dm_url, @status, @warmth, @is_ignored,
             @engagement_score, @total_comments, @total_messages_sent,
-            @total_messages_received, @conversation_step,
+            @total_messages_received, @conversation_step, @funnel_step,
             @last_followup_template_id, @last_contact_at, @lead_source,
             @lead_type, @booking_status, @pain_points, @notes
           )
@@ -173,6 +174,7 @@ export function createSqliteLeadRepository({ getDb }) {
             total_messages_sent = excluded.total_messages_sent,
             total_messages_received = excluded.total_messages_received,
             conversation_step = excluded.conversation_step,
+            funnel_step = MAX(funnel_step, excluded.funnel_step),
             updated_at = datetime('now')
           RETURNING *
         `);

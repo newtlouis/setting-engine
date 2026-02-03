@@ -285,14 +285,27 @@ Agents ──────► Application Layer ──────► Domain Laye
 
 ## Workflow des Conversations
 
-### Schéma simplifié (v2)
+### Schéma simplifié (v3)
 
 | Champ | Type | Calcul | Usage |
 |-------|------|--------|-------|
 | `status` | ENUM | Semi-auto | Cycle de vie du lead (new → contacted → replied → qualified → converted) |
-| `conversation_step` | INTEGER (0-8) | **Auto** | Position dans la séquence d'outreach |
+| `conversation_step` | INTEGER (0-8) | **Auto** | Compteur de messages (pour relances sans réponse) |
+| `funnel_step` | INTEGER (1-9) | **Auto** | Étape du script de vente (parsé depuis [STEP_X]) |
 | `warmth` | ENUM | **Auto** | Niveau d'engagement (cold/warm/hot) |
 | `booking_status` | TEXT | Manuel | État de la réservation (pending/confirmed/completed) |
+
+### Distinction conversation_step vs funnel_step
+
+| Champ | Source | Usage |
+|-------|--------|-------|
+| `conversation_step` | Calculé depuis `total_messages_sent/received` | Savoir combien de relances envoyées |
+| `funnel_step` | Parsé depuis `[STEP_X]` dans les messages LLM | Savoir où on en est dans le script de vente |
+
+**Exemple:**
+- Lead répond → `conversation_step = 2` (FIRST_REPLY)
+- LLM génère `[STEP_3.1] Je vois...` → `funnel_step = 3` (Exploration)
+- Lead ne répond pas → `conversation_step = 4` (FOLLOW_UP_1), mais `funnel_step` reste 3
 
 ### LeadStatus (machine à états)
 
@@ -355,3 +368,43 @@ Le step est recalculé automatiquement dans:
 - `Lead._syncConversationStep()` - Appelé par `markContacted()` et `markReplied()`
 - `RecordMessage` use case - À chaque message enregistré
 - `MarkMessageSent` use case - À chaque envoi confirmé
+
+---
+
+## Funnel Steps (Étapes du script de vente)
+
+Le `funnel_step` track la progression dans le script de vente, parsé depuis les labels `[STEP_X]` générés par le LLM.
+
+### Mapping des étapes
+
+| funnel_step | Label LLM | Description | Relances |
+|-------------|-----------|-------------|----------|
+| 1 | [STEP_1] | Premier contact (Hey!) | 0 |
+| 2 | [STEP_2] | Connexion (intérêt personnel?) | 1 max, puis ignore |
+| 3 | [STEP_3.x] | Exploration (vécu, souffrance) | 3 max |
+| 4 | [STEP_4.x] | Projection (objectifs) | 3 max |
+| 5 | [STEP_5] | Proposition d'appel | 3 max (spécifiques) |
+| 6 | [STEP_6] | Créneaux proposés | 3 max |
+| 7 | [STEP_7] | Récupération infos | - |
+| 8 | [STEP_8] | Confirmation RDV | - |
+| 9 | [STEP_9] | Clôture | - |
+
+### Configuration des relances (profiles/*.config.js)
+
+```javascript
+followups: {
+  step1: { max: 0, templates: [] },           // Pas de relance
+  step2: { max: 1, templates: ["..."] },      // 1 seule relance puis ignore
+  step3: { max: 3, templates: ["...", "...", "..."] },
+  step4: { max: 3, templates: ["...", "...", "..."] },
+  step5: { max: 3, templates: ["...", "...", "..."] }  // Spécifiques booking
+}
+```
+
+### Parsing automatique
+
+Le `RecordMessage` use case parse automatiquement:
+- `[STEP_X]` → Met à jour `funnel_step` (seulement si plus grand)
+- `[NOT_INTERESTED]` → Passe le lead en `ignored`
+- `[MANUAL]` → Passe le lead en `manual`
+- `[ALERT_BOOKING]` → Détecté pour alerter (notification future)

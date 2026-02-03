@@ -62,6 +62,7 @@ export class Lead {
 
     // Conversation tracking - auto-calculated from message counts
     this.conversationStep = parseStep(data.conversation_step || data.conversationStep);
+    this.funnelStep = Number(data.funnel_step || data.funnelStep || 0); // Sales script stage (1-9)
     this.lastFollowupTemplateId = data.last_followup_template_id || data.lastFollowupTemplateId || null;
     this.lastContactAt = data.last_contact_at || data.lastContactAt || null;
 
@@ -217,6 +218,30 @@ export class Lead {
     return this;
   }
 
+  // ============ FUNNEL TRACKING ============
+
+  /**
+   * Update funnel step (only if higher than current)
+   * @param {number} step - The funnel step (1-9 from [STEP_X] labels)
+   */
+  advanceFunnelStep(step) {
+    const newStep = Number(step) || 0;
+    if (newStep > this.funnelStep) {
+      this.funnelStep = newStep;
+    }
+    return this;
+  }
+
+  /**
+   * Get the effective funnel step for follow-up config lookup
+   * Maps funnel steps to config keys (max 5)
+   */
+  getFollowupConfigStep() {
+    // Funnel steps 1-5 map directly
+    // Steps 6+ (after call proposed) use step5 config
+    return Math.min(this.funnelStep, 5);
+  }
+
   // ============ SERIALIZATION ============
 
   /**
@@ -241,6 +266,7 @@ export class Lead {
       total_messages_sent: this.totalMessagesSent,
       total_messages_received: this.totalMessagesReceived,
       conversation_step: this.conversationStep,
+      funnel_step: this.funnelStep,
       last_followup_template_id: this.lastFollowupTemplateId,
       last_contact_at: this.lastContactAt,
       lead_source: this.leadSource,
@@ -275,6 +301,7 @@ export class Lead {
       totalMessagesSent: this.totalMessagesSent,
       totalMessagesReceived: this.totalMessagesReceived,
       conversationStep: this.conversationStep,
+      funnelStep: this.funnelStep,
       lastFollowupTemplateId: this.lastFollowupTemplateId,
       lastContactAt: this.lastContactAt,
       leadSource: this.leadSource,

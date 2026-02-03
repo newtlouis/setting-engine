@@ -27,10 +27,10 @@ const __dirname = path.dirname(__filename);
 /**
  * Finds threads that need a follow-up.
  * Criteria:
- * - Status is 'contacted' (sent message, awaiting reply)
+ * - Status is 'contacted', 'replied', or 'qualified' (active conversation)
  * - Last message was from 'assistant'
  * - Last message was sent > X hours ago
- * - conversation_step indicates follow-ups not exhausted
+ * - Has a valid funnel_step for follow-up
  */
 async function getStaleThreads(db, accountId, hours = 24) {
     const cutoffDate = new Date(Date.now() - (hours * 60 * 60 * 1000)).toISOString();
@@ -48,9 +48,9 @@ async function getStaleThreads(db, accountId, hours = 24) {
         FROM leads l
         JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
         WHERE l.account_id = ?
-          AND l.status = 'contacted'
-          AND l.conversation_step < 8
-          AND l.booking_status IS NOT 'completed'
+          AND l.status IN ('contacted', 'replied', 'qualified')
+          AND l.funnel_step > 0
+          AND (l.booking_status IS NULL OR l.booking_status != 'completed')
           AND l.is_ignored = 0
           AND lm.role = 'assistant'
           AND lm.sent_at < ?
@@ -86,43 +86,53 @@ export async function runFollowupWatcher(options = {}) {
         return;
     }
 
-    console.log(`📋 Found ${threads.length} stale threads. Filtering by step rules...`);
-    
-    // 2. Filter threads based on Step Rules
+    console.log(`📋 Found ${threads.length} stale threads. Filtering by funnel step rules...`);
+
+    // 2. Filter threads based on Funnel Step Rules
     const threadsToProcess = [];
-    
+
     for (const t of threads) {
-        // Only process steps 2, 3, 4, 5. Step 1 gets 0 follow-ups.
-        if (!t.conversation_step || t.conversation_step < 2) continue;
-        
-        const stepKey = `step${t.conversation_step}`;
-        const stepConfig = profileConfig.outreach?.followups?.[stepKey];
-        
-        if (!stepConfig) {
-            console.log(`   Skipping @${t.username} (Step ${t.conversation_step}): No config found.`);
+        // Only process funnel steps 2-5 (step 1 = first contact, no follow-ups)
+        const funnelStep = t.funnel_step || 0;
+        if (funnelStep < 2) {
+            console.log(`   Skipping @${t.username}: Funnel step ${funnelStep} < 2 (no follow-ups for first contact).`);
             continue;
         }
 
-        // Check max follow-ups for this step
-        const existingCount = await dbFunctions.getFollowupCountForStep(t.username, t.conversation_step);
+        // Map funnel step to config key (max step5 for steps 5+)
+        const configStep = Math.min(funnelStep, 5);
+        const stepKey = `step${configStep}`;
+        const stepConfig = profileConfig.outreach?.followups?.[stepKey];
+        
+        if (!stepConfig) {
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): No config for step${configStep}.`);
+            continue;
+        }
+
+        // Check max follow-ups for this funnel step
+        const existingCount = await dbFunctions.getFollowupCountForStep(t.username, funnelStep);
         
         if (existingCount >= stepConfig.max) {
-            console.log(`   Skipping @${t.username} (Step ${t.conversation_step}): Max follow-ups reached (${existingCount}/${stepConfig.max}).`);
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): Max follow-ups reached (${existingCount}/${stepConfig.max}).`);
+            // If max reached for step 2 (first reply), mark as ignored
+            if (funnelStep === 2 && stepConfig.max === 1) {
+                console.log(`   ⚠️  @${t.username}: Marking as ignored (no response after step 2 follow-up).`);
+                // Mark lead as ignored since they didn't respond after first reply follow-up
+                db.prepare(`UPDATE leads SET status = 'ignored', is_ignored = 1, updated_at = datetime('now') WHERE username = ?`).run(t.username);
+            }
             continue;
         }
 
         // Determine next template index (sequential)
-        // If existingCount is 0, we use template[0]. If 1, use template[1].
-        // If we want random, we could do that too, but sequential makes sense for "relance 1", "relance 2".
-        // The user said "generic relances", implying we can just cycle or pick one. 
-        // Let's use sequential for now to avoid repeating the exact same message if max > 1.
-        let templateIndex = existingCount; 
+        let templateIndex = existingCount;
         if (templateIndex >= stepConfig.templates.length) {
-            templateIndex = stepConfig.templates.length - 1; // Fallback to last one if we have more allowance than templates
+            templateIndex = stepConfig.templates.length - 1; // Fallback to last template
         }
 
         t.nextMessage = stepConfig.templates[templateIndex];
-        t.followupIndex = existingCount + 1; // 1-based index for logging/tracking
+        t.followupIndex = existingCount + 1;
+        t.funnelStep = funnelStep;
+        t.configStep = configStep;
         threadsToProcess.push(t);
     }
     
@@ -137,7 +147,8 @@ export async function runFollowupWatcher(options = {}) {
     if (dryRun) {
         console.log(`🚧 DRY RUN MODE. Would process ${targetThreads.length} threads:`);
         for (const t of targetThreads) {
-            console.log(`   - @${t.username} (Step ${t.conversation_step}) -> Relance #${t.followupIndex}/${profileConfig.outreach.followups[`step${t.conversation_step}`].max}`);
+            const stepConfig = profileConfig.outreach.followups[`step${t.configStep}`];
+            console.log(`   - @${t.username} (Funnel step ${t.funnelStep}) -> Relance #${t.followupIndex}/${stepConfig.max}`);
             console.log(`     Message: "${t.nextMessage.substring(0, 50)}..."`);
         }
         return;
@@ -155,7 +166,7 @@ export async function runFollowupWatcher(options = {}) {
 
     try {
         for (const thread of targetThreads) {
-            console.log(`\n--- Follow-up for @${thread.username} (Step ${thread.conversation_step}) ---`);
+            console.log(`\n--- Follow-up for @${thread.username} (Funnel step ${thread.funnelStep}) ---`);
 
             // 4. Open DM
             const result = await openDMAndScrape({
@@ -198,16 +209,16 @@ export async function runFollowupWatcher(options = {}) {
             message = message.replace(/{{firstName}}/g, firstName);
 
             console.log(`\n💬 SENDING FOLLOW-UP:`);
-            console.log(`   Step: ${thread.conversation_step} | Relance #${thread.followupIndex}`);
+            console.log(`   Funnel Step: ${thread.funnelStep} | Relance #${thread.followupIndex}`);
             console.log(`   Message: "${message}"\n`);
-            
+
             // 7. Type & Register
             await typeInOpenTab(openTab, message);
             registerOpenTab(thread.username, openTab, message);
-            
-            // 8. Update DB 
-            // We store specific type to count later: e.g. 'followup_step3_1'
-            await addMessage(thread.username, 'assistant', message, `followup_step${thread.conversation_step}_${thread.followupIndex}`);
+
+            // 8. Update DB
+            // Store followup type with funnel step: e.g. 'followup_funnel3_1'
+            await addMessage(thread.username, 'assistant', message, `followup_funnel${thread.funnelStep}_${thread.followupIndex}`);
             
             processedCount++;
             

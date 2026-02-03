@@ -9,6 +9,11 @@ import { Message, MessageRole, MessageType } from '../../domain/entities/Message
 import { Lead } from '../../domain/entities/Lead.js';
 import { LeadStatus } from '../../domain/value-objects/LeadStatus.js';
 import { calculateStep } from '../../domain/value-objects/ConversationStep.js';
+import {
+  parseFunnelStep,
+  isNotInterested,
+  needsManualIntervention
+} from '../../domain/services/FunnelStepParser.js';
 
 /**
  * @typedef {Object} RecordMessageInput
@@ -84,6 +89,20 @@ export class RecordMessage {
 
       if (lead.status === LeadStatus.NEW) {
         lead.status = LeadStatus.CONTACTED;
+      }
+
+      // Parse funnel step from [STEP_X] labels in LLM response
+      const funnelStep = parseFunnelStep(text);
+      if (funnelStep) {
+        lead.advanceFunnelStep(funnelStep);
+      }
+
+      // Handle special tags
+      if (isNotInterested(text)) {
+        lead.status = LeadStatus.IGNORED;
+        lead.isIgnored = true;
+      } else if (needsManualIntervention(text)) {
+        lead.status = LeadStatus.MANUAL;
       }
     } else {
       lead.totalMessagesReceived++;

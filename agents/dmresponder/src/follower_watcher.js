@@ -178,18 +178,22 @@ export async function runFollowerWatcher(options = {}) {
         let alreadyKnownCount = 0;
 
         for (const follower of uniqueFollowers) {
-            const existingLead = await getLeadWithContext(follower.username);
-            const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
-            
-            if (existingLead && skipStatuses.includes(existingLead.status)) {
+            const existingLead = await getLeadWithContext(follower.username, account.id);
+
+            // Skip if lead exists AND (has messages OR has a "processed" status)
+            const skipStatuses = ['contacted', 'replied', 'qualified', 'converted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'ignored', 'failed'];
+            const hasMessages = existingLead && (existingLead.total_messages_sent > 0 || existingLead.total_messages_received > 0);
+            const hasSkipStatus = existingLead && skipStatuses.includes(existingLead.status);
+
+            if (hasMessages || hasSkipStatus) {
                 alreadyKnownCount++;
             } else {
                 leadsToProceed.push(follower);
             }
         }
 
-        console.log(`      - Already known in DB: ${alreadyKnownCount}`);
-        console.log(`      - New followers discovered: ${leadsToProceed.length}`);
+        console.log(`      - Already known/contacted in DB: ${alreadyKnownCount}`);
+        console.log(`      - New followers to process: ${leadsToProceed.length}`);
         
         const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
         console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
