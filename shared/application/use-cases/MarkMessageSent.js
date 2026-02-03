@@ -6,7 +6,8 @@
  */
 
 import { LeadStatus } from '../../domain/value-objects/LeadStatus.js';
-import { MessageType } from '../../domain/entities/Message.js';
+import { Message, MessageRole, MessageType } from '../../domain/entities/Message.js';
+import { calculateStep } from '../../domain/value-objects/ConversationStep.js';
 
 /**
  * @typedef {Object} MarkSentInput
@@ -68,7 +69,6 @@ export class MarkMessageSent {
       }
 
       // Sync conversation step
-      const { calculateStep } = await import('../../domain/value-objects/ConversationStep.js');
       lead.conversationStep = calculateStep(
         lead.totalMessagesSent,
         lead.totalMessagesReceived
@@ -79,7 +79,6 @@ export class MarkMessageSent {
 
       // Record message in conversation
       if (messageText && this.conversationRepository) {
-        const { Message, MessageRole } = await import('../../domain/entities/Message.js');
         const message = new Message({
           leadId: lead.id,
           role: MessageRole.ASSISTANT,

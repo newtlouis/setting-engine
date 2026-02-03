@@ -6,7 +6,6 @@
  */
 
 import { LeadQualifier } from '../../domain/services/LeadQualifier.js';
-import { EngagementScorer } from '../../domain/services/EngagementScorer.js';
 import { LeadStatus } from '../../domain/value-objects/LeadStatus.js';
 import { Warmth } from '../../domain/value-objects/Warmth.js';
 

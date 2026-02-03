@@ -6,6 +6,7 @@
  */
 
 import { Message, MessageRole, MessageType } from '../../domain/entities/Message.js';
+import { Lead } from '../../domain/entities/Lead.js';
 import { LeadStatus } from '../../domain/value-objects/LeadStatus.js';
 import { calculateStep } from '../../domain/value-objects/ConversationStep.js';
 
@@ -54,7 +55,6 @@ export class RecordMessage {
     const isNewLead = !lead;
 
     if (!lead) {
-      const { Lead } = await import('../../domain/entities/Lead.js');
       lead = Lead.create(username, accountId, 'dm');
       lead = await this.leadRepository.save(lead);
     }
