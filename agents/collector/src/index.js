@@ -229,19 +229,3 @@ export async function runCollector(config) {
     await session.close();
   }
 }
-
-/**
- * Wait for user to press Enter
- */
-function waitForEnter() {
-  return new Promise((resolve) => {
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    rl.question('', () => {
-      rl.close();
-      resolve();
-    });
-  });
-}

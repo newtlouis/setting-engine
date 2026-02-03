@@ -25,7 +25,8 @@ import {
   updateLeadProfile
 } from './src/database.js';
 import { scrapeProfileData } from './src/profile_scraper.js';
-import { delay, detectChallenge, autoLoginInstagram } from './src/utils.js';
+import { delay, detectChallenge } from './src/utils.js';
+import { autoLoginInstagram } from '../../shared/browser/index.js';
 import { CONFIG } from './src/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
