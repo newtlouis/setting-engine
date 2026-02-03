@@ -25,7 +25,7 @@ import {
   getOrCreateAccount,
   fullUpsertLead
 } from './db_integration.js';
-import { addToOutreachQueue, getQueueCount } from '../../collector/src/database.js';
+import { getContainer } from '../../../shared/container.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
@@ -124,7 +124,8 @@ async function scanForEngagement(page, options = {}) {
 
 export async function runEngagementWatcher(options = {}) {
     await initDB();
-    
+    const container = await getContainer();
+
     const profile = options.profile || process.env.IG_PROFILE;
     if (!profile) {
         throw new Error('Profile name is required. Use --profile <name>.');
@@ -393,15 +394,15 @@ export async function runEngagementWatcher(options = {}) {
 
                     // --prepare-only mode: Store in queue, don't open tab
                     if (options.prepareOnly) {
-                        const queueResult = addToOutreachQueue({
+                        const queueResult = await container.repositories.outreachQueue.add({
                             username,
-                            profile_url: `https://www.instagram.com/${username}/`,
-                            dm_url: dmResult.dmUrl,
-                            prepared_message: finalMessage,
-                            first_name: aiFirstName,
+                            profileUrl: `https://www.instagram.com/${username}/`,
+                            dmUrl: dmResult.dmUrl,
+                            preparedMessage: finalMessage,
+                            firstName: aiFirstName,
                             source: 'engagement',
-                            resource_file: resourceToUpload || null,
-                            resource_url: ctaMatch?.url || null
+                            resourceFile: resourceToUpload || null,
+                            resourceUrl: ctaMatch?.url || null
                         });
                         
                         if (queueResult) {
@@ -478,7 +479,8 @@ export async function runEngagementWatcher(options = {}) {
         if (preparedCount > 0) {
             if (options.prepareOnly) {
                 console.log(`\n✨ Queued ${preparedCount} leads for later sending.`);
-                console.log(`   Total pending in queue: ${getQueueCount()}`);
+                const queueStats = await container.repositories.outreachQueue.getStats();
+                console.log(`   Total pending in queue: ${queueStats.pending}`);
             } else {
                 console.log(`\n✨ Prepared ${preparedCount} engagement outreach messages for review.`);
                 await waitForUserToFinish();

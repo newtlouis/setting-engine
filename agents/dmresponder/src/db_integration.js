@@ -45,66 +45,70 @@ export async function initDB() {
 
 /**
  * Get lead by username with full context
- * 
+ *
  * @param {string} username - Instagram username
  * @returns {Promise<Object|null>} Lead with context
  */
 export async function getLeadWithContext(username, accountId = null) {
   await initDB();
-  if (!db) return null;
-  
-  const lead = dbFunctions.getLeadByUsername(username, accountId);
-  if (!lead) return null;
-  
-  // Get comments for context
-  const comments = dbFunctions.getCommentsForLead(lead.id);
-  
-  // Build lead context object (compatible with existing leadContext format)
-  // Build lead context object (compatible with existing leadContext format)
-  const context = {
-    username: lead.username,
-    profile_url: lead.profile_url,
-    // full_name removed
-    
-    // Profile data
-    followers_count: 0, // removed from DB
-    bio: lead.bio || '[Bio not scraped]',
-    is_verified: false,
-    is_business: false,
-    is_private: false,
-    
-    // Engagement
-    engagement_level: lead.warmth, // Mapping warmth to engagement_level for compatibility
-    engagement_score: lead.engagement_score,
-    total_comments: lead.total_comments,
-    
-    // Qualification
-    warmth: lead.warmth || 'cold',
-    pain_points: lead.pain_points ? JSON.parse(lead.pain_points) : [],
-    
-    // Conversation state
-    conversation_stage: lead.conversation_stage,
-    conversation_step: lead.conversation_step || 0,
-    status: lead.status,
-    is_ignored: !!lead.is_ignored,
-    total_messages_sent: lead.total_messages_sent,
-    total_messages_received: lead.total_messages_received,
-    
-    // Original comments for reference
-    original_comments: comments.map(c => ({
-      text: c.comment_text,
-      date: c.comment_date,
-      post_url: c.post_url
-    }))
-  };
-  
-  // Extract pain points from comments if not already set
-  if (context.pain_points.length === 0) {
-    const extractedPains = extractPainPointsFromComments(comments);
-    context.pain_points = extractedPains;
+  if (!container) return null;
+
+  try {
+    // Use repository to get lead
+    const lead = await container.repositories.lead.findByUsername(username, accountId);
+    if (!lead) return null;
+
+    // Get comments for context (still using legacy for now)
+    const comments = dbFunctions?.getCommentsForLead ? dbFunctions.getCommentsForLead(lead.id) : [];
+
+    // Build lead context object (compatible with existing leadContext format)
+    const context = {
+      username: lead.username,
+      profile_url: lead.profileUrl,
+
+      // Profile data
+      followers_count: 0,
+      bio: lead.bio || '[Bio not scraped]',
+      is_verified: false,
+      is_business: false,
+      is_private: false,
+
+      // Engagement
+      engagement_level: lead.warmth,
+      engagement_score: lead.engagementScore,
+      total_comments: lead.totalComments,
+
+      // Qualification
+      warmth: lead.warmth || 'cold',
+      pain_points: lead.painPoints || [],
+
+      // Conversation state
+      conversation_stage: lead.conversationStage,
+      conversation_step: lead.conversationStep || 0,
+      status: lead.status,
+      is_ignored: lead.isIgnored,
+      total_messages_sent: lead.totalMessagesSent,
+      total_messages_received: lead.totalMessagesReceived,
+
+      // Original comments for reference
+      original_comments: comments.map(c => ({
+        text: c.comment_text,
+        date: c.comment_date,
+        post_url: c.post_url
+      }))
+    };
+
+    // Extract pain points from comments if not already set
+    if (context.pain_points.length === 0) {
+      const extractedPains = extractPainPointsFromComments(comments);
+      context.pain_points = extractedPains;
+    }
+
+    return context;
+  } catch (error) {
+    console.error('Error getting lead context:', error.message);
+    return null;
   }
-  
-  return context;
 }
 
 /**
@@ -254,33 +258,37 @@ export async function getActiveConversations(accountId = null) {
 
 /**
  * Get conversation summary for display
- * 
+ *
  * @param {string} username - Instagram username
  * @param {number} accountId - Optional account ID for filtering
  * @returns {Promise<Object>} Conversation summary
  */
 export async function getConversationSummary(username, accountId = null) {
   await initDB();
-  if (!db) return null;
-  
-  const lead = dbFunctions.getLeadByUsername(username, accountId);
-  if (!lead) return null;
-  
-  const messages = await getConversationHistory(username);
-  const context = await getLeadWithContext(username);
-  
-  return {
-    username: lead.username,
-    // full_name removed
-    status: lead.status,
-    stage: lead.conversation_stage,
-    message_count: messages.length,
-    last_message: messages.length > 0 ? messages[messages.length - 1] : null,
-    engagement_level: lead.warmth, // mapped
-    warmth: lead.warmth,
-    pain_points: context?.pain_points || [],
-    bio_excerpt: null // bio removed
-  };
+  if (!container) return null;
+
+  try {
+    const lead = await container.repositories.lead.findByUsername(username, accountId);
+    if (!lead) return null;
+
+    const messages = await getConversationHistory(username, accountId);
+    const context = await getLeadWithContext(username, accountId);
+
+    return {
+      username: lead.username,
+      status: lead.status,
+      stage: lead.conversationStage,
+      message_count: messages.length,
+      last_message: messages.length > 0 ? messages[messages.length - 1] : null,
+      engagement_level: lead.warmth,
+      warmth: lead.warmth,
+      pain_points: context?.pain_points || [],
+      bio_excerpt: null
+    };
+  } catch (error) {
+    console.error('Error getting conversation summary:', error.message);
+    return null;
+  }
 }
 
 export async function getTrackedDmThreads(filters = {}) {
@@ -303,8 +311,16 @@ export async function fullUpsertLead(username, accountId, data) {
 
 export async function getOrCreateAccount(name) {
   await initDB();
-  if (!dbFunctions?.getOrCreateAccount) return null;
-  return dbFunctions.getOrCreateAccount(name);
+  if (!container) return null;
+
+  try {
+    // Use repository
+    const account = await container.repositories.account.getOrCreate(name);
+    return account ? account.toJSON() : null;
+  } catch (error) {
+    console.error('Error getting/creating account:', error.message);
+    return null;
+  }
 }
 
 export function parseThreadMetadata(rawMetadata) {

@@ -1,14 +1,15 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadProfileConfig } from '../../../shared/utils/configLoader.js'; // Verify path
-import { 
-  initBrowser, 
+import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { getContainer } from '../../../shared/container.js';
+import {
+  initBrowser,
   openDMAndScrape,
   typeInOpenTab,
   registerOpenTab,
-  waitForUserToFinish, 
+  waitForUserToFinish,
   closeBrowser,
-  getOpenMessageTabs 
+  getOpenMessageTabs
 } from './scraper.js';
 import {
   initDB,
@@ -68,8 +69,10 @@ export async function runFollowupWatcher(options = {}) {
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
     console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
 
-    const dbFunctions = await initDB();
-    const db = await dbFunctions.getDatabase();
+    // Initialize via container
+    const container = await getContainer();
+    const db = container.getDb();
+    const dbFunctions = await initDB(); // Still needed for getFollowupCountForStep
     const account = await getOrCreateAccount(profile);
     const accountId = account.id;
 
