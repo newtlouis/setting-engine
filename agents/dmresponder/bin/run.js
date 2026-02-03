@@ -61,10 +61,10 @@ program
         process.exit(1);
       }
 
-      // Resolve Account ID
-      const { getOrCreateAccount, initDatabase } = await import('../../collector/src/database.js');
-      await initDatabase();
-      const account = getOrCreateAccount(options.profile);
+      // Resolve Account ID using container
+      const { getContainer } = await import('../../../shared/container.js');
+      const container = await getContainer();
+      const account = await container.repositories.account.getOrCreate(options.profile);
       const accountId = account.id;
       console.log(`👤 Profile: ${options.profile} (Account ID: ${accountId})`);
       process.env.IG_PROFILE = options.profile;

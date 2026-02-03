@@ -13,7 +13,6 @@ import { fileURLToPath } from 'url';
 // Import from Collector agent
 import { discoverFromHashtags, discoverFromProfiles } from '../../collector/src/discover.js';
 import { scrapePostComments } from '../../collector/src/scrape_post.js';
-import { delay as collectorDelay } from '../../collector/src/utils.js';
 
 // Import from Outreach agent
 import { 
@@ -35,6 +34,7 @@ import { generateFirstMessage, validateMessage } from '../../outreach/src/templa
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 import { getBrowserDataDir } from '../../../shared/paths.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
+import { delay } from '../../../shared/browser/index.js';
 
 // Database
 const __filename = fileURLToPath(import.meta.url);
@@ -52,14 +52,6 @@ async function loadDatabase() {
   db = await dbModule.getDatabase();
   dbFunctions = dbModule;
   return dbFunctions;
-}
-
-/**
- * Helper delay function
- */
-function delay(min, max = null) {
-  const ms = max ? Math.floor(Math.random() * (max - min + 1)) + min : min;
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
