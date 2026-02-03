@@ -60,11 +60,8 @@ export class Lead {
     this.totalMessagesSent = Number(data.total_messages_sent || data.totalMessagesSent || 0);
     this.totalMessagesReceived = Number(data.total_messages_received || data.totalMessagesReceived || 0);
 
-    // Conversation tracking (two distinct concepts):
-    // - conversationStep (INT 0-8): Auto-calculated from message counts (outreach sequence position)
-    // - conversationStage (TEXT): Sales funnel stage for AI context (qualification, closing, etc.)
+    // Conversation tracking - auto-calculated from message counts
     this.conversationStep = parseStep(data.conversation_step || data.conversationStep);
-    this.conversationStage = data.conversation_stage || data.conversationStage || null;
     this.lastFollowupTemplateId = data.last_followup_template_id || data.lastFollowupTemplateId || null;
     this.lastContactAt = data.last_contact_at || data.lastContactAt || null;
 
@@ -244,7 +241,6 @@ export class Lead {
       total_messages_sent: this.totalMessagesSent,
       total_messages_received: this.totalMessagesReceived,
       conversation_step: this.conversationStep,
-      conversation_stage: this.conversationStage,
       last_followup_template_id: this.lastFollowupTemplateId,
       last_contact_at: this.lastContactAt,
       lead_source: this.leadSource,
@@ -279,7 +275,6 @@ export class Lead {
       totalMessagesSent: this.totalMessagesSent,
       totalMessagesReceived: this.totalMessagesReceived,
       conversationStep: this.conversationStep,
-      conversationStage: this.conversationStage,
       lastFollowupTemplateId: this.lastFollowupTemplateId,
       lastContactAt: this.lastContactAt,
       leadSource: this.leadSource,

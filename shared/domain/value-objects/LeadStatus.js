@@ -11,19 +11,23 @@ export const LeadStatus = Object.freeze({
   REPLIED: 'replied',
   QUALIFIED: 'qualified',
   CONVERTED: 'converted',
-  IGNORED: 'ignored'
+  IGNORED: 'ignored',
+  FAILED: 'failed',    // DM failed (account not found, blocked, etc.)
+  MANUAL: 'manual'     // Needs manual intervention
 });
 
 /**
  * Valid status transitions (state machine)
  */
 const VALID_TRANSITIONS = {
-  [LeadStatus.NEW]: [LeadStatus.CONTACTED, LeadStatus.IGNORED],
-  [LeadStatus.CONTACTED]: [LeadStatus.REPLIED, LeadStatus.IGNORED],
-  [LeadStatus.REPLIED]: [LeadStatus.QUALIFIED, LeadStatus.IGNORED],
-  [LeadStatus.QUALIFIED]: [LeadStatus.CONVERTED, LeadStatus.IGNORED],
+  [LeadStatus.NEW]: [LeadStatus.CONTACTED, LeadStatus.IGNORED, LeadStatus.FAILED],
+  [LeadStatus.CONTACTED]: [LeadStatus.REPLIED, LeadStatus.IGNORED, LeadStatus.FAILED, LeadStatus.MANUAL],
+  [LeadStatus.REPLIED]: [LeadStatus.QUALIFIED, LeadStatus.IGNORED, LeadStatus.MANUAL],
+  [LeadStatus.QUALIFIED]: [LeadStatus.CONVERTED, LeadStatus.IGNORED, LeadStatus.MANUAL],
   [LeadStatus.CONVERTED]: [],
-  [LeadStatus.IGNORED]: []
+  [LeadStatus.IGNORED]: [],
+  [LeadStatus.FAILED]: [LeadStatus.NEW],    // Can retry failed leads
+  [LeadStatus.MANUAL]: [LeadStatus.CONTACTED, LeadStatus.REPLIED, LeadStatus.QUALIFIED, LeadStatus.IGNORED]
 };
 
 /**

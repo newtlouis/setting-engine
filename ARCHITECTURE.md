@@ -285,12 +285,39 @@ Agents ──────► Application Layer ──────► Domain Laye
 
 ## Workflow des Conversations
 
-### Deux concepts distincts
+### Schéma simplifié (v2)
 
 | Champ | Type | Calcul | Usage |
 |-------|------|--------|-------|
-| `conversation_step` | INTEGER (0-8) | **Automatique** via `calculateStep()` | Position dans la séquence d'outreach |
-| `conversation_stage` | TEXT | **Manuel** ou via AI | Étape du funnel de vente (qualification, closing) |
+| `status` | ENUM | Semi-auto | Cycle de vie du lead (new → contacted → replied → qualified → converted) |
+| `conversation_step` | INTEGER (0-8) | **Auto** | Position dans la séquence d'outreach |
+| `warmth` | ENUM | **Auto** | Niveau d'engagement (cold/warm/hot) |
+| `booking_status` | TEXT | Manuel | État de la réservation (pending/confirmed/completed) |
+
+### LeadStatus (machine à états)
+
+```
+new ──────► contacted ──────► replied ──────► qualified ──────► converted
+  │              │                │                │
+  ▼              ▼                ▼                ▼
+ignored        ignored          ignored          ignored
+  │              │
+  ▼              ▼
+failed ◄───── failed
+  │              │
+  ▼              ▼
+manual ◄───── manual
+```
+
+**Statuts:**
+- `new` - Lead identifié, pas encore contacté
+- `contacted` - Premier DM envoyé
+- `replied` - Lead a répondu
+- `qualified` - Intéressé et qualifié
+- `converted` - Booking confirmé
+- `ignored` - Exclu manuellement
+- `failed` - Erreur technique (compte bloqué, introuvable)
+- `manual` - Nécessite intervention manuelle
 
 ### Progression automatique des steps
 

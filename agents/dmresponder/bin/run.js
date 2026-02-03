@@ -150,7 +150,6 @@ program
       // Save to database if requested
       if (options.save && currentUsername) {
         await addMessage(currentUsername, 'assistant', response.next_message, response.message_type, accountId);
-        await updateConversationStage(currentUsername, response.conversation_stage);
         console.log(`Response saved to database for @${currentUsername}\n`);
       }
 
@@ -190,7 +189,7 @@ async function handleDatabaseMode(options, accountId) {
   
   console.log(`Lead: @${username}`);
   console.log(`  Status: ${leadContext.status}`);
-  console.log(`  Stage: ${leadContext.conversation_stage || 'initial'}`);
+  console.log(`  Step: ${leadContext.conversation_step || 0}`);
   console.log(`  Engagement: ${leadContext.warmth} (Score: ${leadContext.engagement_score})`);
   // Bio removed
   if (leadContext.pain_points.length > 0) {
@@ -297,7 +296,7 @@ async function handleListMode(accountId) {
     const summary = await getConversationSummary(lead.username);
     
     console.log(`@${lead.username}`);
-    console.log(`  Status: ${lead.status} | Stage: ${lead.conversation_stage || 'initial'}`);
+    console.log(`  Status: ${lead.status} | Step: ${lead.conversation_step || 0}`);
     console.log(`  Messages: ${summary.message_count} | Last: ${lead.last_message_at || 'N/A'}`);
     if (summary.last_message) {
       const lastText = summary.last_message.text.substring(0, 60);
@@ -319,7 +318,7 @@ function displayResponse(response, leadContext) {
   console.log(response.next_message);
   console.log('\n' + '='.repeat(60));
   
-  console.log(`\nStage: ${response.conversation_stage}`);
+  console.log(`\nType: ${response.message_type}`);
   console.log(`Type: ${response.message_type}`);
   console.log(`\nReasoning:\n${response.reasoning}\n`);
 

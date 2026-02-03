@@ -1,6 +1,5 @@
 {
   "next_message": "I hear you. That pattern of starting strong and then falling off is so common—and it's not about something being wrong with you. Can I ask you something: on a scale of 1-10, how important is it for you to solve this in the next few months?",
-  "conversation_stage": "qualification",
   "message_type": "qualification",
   "reasoning": "User has expressed pain and frustration with past failures. Moving to qualification to understand timeline and commitment level.",
   "alternative_approaches": [

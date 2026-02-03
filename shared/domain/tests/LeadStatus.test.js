@@ -20,6 +20,8 @@ describe('LeadStatus enum', () => {
     assert.strictEqual(LeadStatus.QUALIFIED, 'qualified');
     assert.strictEqual(LeadStatus.CONVERTED, 'converted');
     assert.strictEqual(LeadStatus.IGNORED, 'ignored');
+    assert.strictEqual(LeadStatus.FAILED, 'failed');
+    assert.strictEqual(LeadStatus.MANUAL, 'manual');
   });
 
   test('should be frozen (immutable)', () => {
@@ -35,6 +37,8 @@ describe('isValidStatus', () => {
     assert.strictEqual(isValidStatus('qualified'), true);
     assert.strictEqual(isValidStatus('converted'), true);
     assert.strictEqual(isValidStatus('ignored'), true);
+    assert.strictEqual(isValidStatus('failed'), true);
+    assert.strictEqual(isValidStatus('manual'), true);
   });
 
   test('should return false for invalid statuses', () => {
@@ -80,7 +84,7 @@ describe('canTransitionTo', () => {
 describe('getNextStatuses', () => {
   test('should return valid next statuses for NEW', () => {
     const next = getNextStatuses(LeadStatus.NEW);
-    assert.deepStrictEqual(next, [LeadStatus.CONTACTED, LeadStatus.IGNORED]);
+    assert.deepStrictEqual(next, [LeadStatus.CONTACTED, LeadStatus.IGNORED, LeadStatus.FAILED]);
   });
 
   test('should return empty array for CONVERTED', () => {

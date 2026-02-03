@@ -74,8 +74,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       total_messages_received INTEGER DEFAULT 0,
       lead_source TEXT,
       lead_type TEXT DEFAULT 'cold',
-      booking_status TEXT, -- pending, completed
-      conversation_stage TEXT,
+      booking_status TEXT, -- pending, confirmed, completed
       is_ignored INTEGER DEFAULT 0,
       pain_points TEXT,  -- JSON array
       conversation_step INTEGER DEFAULT 0,

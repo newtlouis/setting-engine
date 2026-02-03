@@ -132,7 +132,6 @@ export function createSqliteLeadRepository({ getDb }) {
             total_messages_sent = @total_messages_sent,
             total_messages_received = @total_messages_received,
             conversation_step = @conversation_step,
-            conversation_stage = @conversation_stage,
             last_followup_template_id = @last_followup_template_id,
             last_contact_at = @last_contact_at,
             lead_source = @lead_source,
@@ -152,14 +151,14 @@ export function createSqliteLeadRepository({ getDb }) {
             username, account_id, full_name, first_name, bio, email,
             profile_url, dm_url, status, warmth, is_ignored,
             engagement_score, total_comments, total_messages_sent,
-            total_messages_received, conversation_step, conversation_stage,
+            total_messages_received, conversation_step,
             last_followup_template_id, last_contact_at, lead_source,
             lead_type, booking_status, pain_points, notes
           ) VALUES (
             @username, @account_id, @full_name, @first_name, @bio, @email,
             @profile_url, @dm_url, @status, @warmth, @is_ignored,
             @engagement_score, @total_comments, @total_messages_sent,
-            @total_messages_received, @conversation_step, @conversation_stage,
+            @total_messages_received, @conversation_step,
             @last_followup_template_id, @last_contact_at, @lead_source,
             @lead_type, @booking_status, @pain_points, @notes
           )

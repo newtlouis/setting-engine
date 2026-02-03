@@ -83,7 +83,6 @@ export async function getLeadWithContext(username, accountId = null) {
       pain_points: lead.painPoints || [],
 
       // Conversation state
-      conversation_stage: lead.conversationStage,
       conversation_step: lead.conversationStep || 0,
       status: lead.status,
       is_ignored: lead.isIgnored,
@@ -220,15 +219,9 @@ export async function addMessage(username, role, message, messageType = null, ac
  * @param {string} stage - New conversation stage
  */
 export async function updateConversationStage(username, stage) {
-  await initDB();
-  if (!db) return;
-  
-  db.prepare(`
-    UPDATE leads SET 
-      conversation_stage = ?,
-      updated_at = datetime('now')
-    WHERE username = ?
-  `).run(stage, username);
+  // DEPRECATED: conversation_stage field removed
+  // Use status and booking_status instead
+  console.warn('updateConversationStage is deprecated - use status/booking_status instead');
 }
 
 /**
@@ -241,12 +234,12 @@ export async function getActiveConversations(accountId = null) {
   if (!db) return [];
   
   const leads = db.prepare(`
-    SELECT l.*, 
+    SELECT l.*,
            (SELECT COUNT(*) FROM conversations c WHERE c.lead_id = l.id) as message_count,
            (SELECT MAX(sent_at) FROM conversations c WHERE c.lead_id = l.id) as last_message_at
     FROM leads l
     WHERE l.status IN ('contacted', 'replied', 'qualified')
-      AND l.conversation_stage NOT IN ('closed_won', 'closed_lost')
+      AND (l.booking_status IS NULL OR l.booking_status != 'completed')
       AND l.total_messages_sent > 0
       AND l.is_ignored = 0
       ${accountId ? 'AND l.account_id = ' + accountId : ''}
