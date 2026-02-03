@@ -425,10 +425,10 @@ export async function runOutreach(options = {}) {
                      
                      // Check if this is an existing conversation (already has messages)
                      if (result.existingConversation) {
-                         console.log(`   💬 Marking @${result.username} as CONVERSATION (${result.messageCount} existing messages)`);
+                         console.log(`   💬 Marking @${result.username} as ALREADY_KNOWN (${result.messageCount} existing messages)`);
                          db.prepare(`
                            UPDATE leads SET 
-                             status = 'conversation',
+                             status = 'already_known',
                              updated_at = datetime('now')
                            WHERE username = ?
                          `).run(result.username);

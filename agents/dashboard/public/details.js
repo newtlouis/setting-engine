@@ -182,7 +182,7 @@ async function selectLead(username) {
         } else if (lead.booking_status === 'pending') {
              statusSelect.value = 'scheduling';
         } else {
-             if (['new','outreach','conversation','failed', 'not_interested'].includes(lead.status)) {
+             if (['new','outreach','conversation','failed', 'not_interested', 'already_known'].includes(lead.status)) {
                  statusSelect.value = lead.status;
              } else {
                  statusSelect.value = 'conversation'; 
@@ -190,6 +190,9 @@ async function selectLead(username) {
         }
         
         document.getElementById('fieldStep').value = lead.conversation_step || 0;
+        
+        // Populate is_ignored
+        document.getElementById('fieldIsIgnored').checked = (lead.is_ignored === 1);
         
         document.getElementById('fieldProfileUrl').value = lead.profile_url || '';
         document.getElementById('linkProfile').href = lead.profile_url || `https://instagram.com/${lead.username}`;
@@ -294,11 +297,13 @@ btnSaveStatus.addEventListener('click', async () => {
     if (!currentLead) return;
     
     const newStatus = document.getElementById('fieldStatus').value;
+    const isIgnored = document.getElementById('fieldIsIgnored').checked ? 1 : 0;
     const firstName = document.getElementById('fieldFirstName').value.trim();
     const lastName = document.getElementById('fieldLastName').value.trim();
     
     const updates = {
-       full_name: `${firstName} ${lastName}`.trim()
+       full_name: `${firstName} ${lastName}`.trim(),
+       is_ignored: isIgnored
     };
     
     // Status Logic Mapping
@@ -339,6 +344,43 @@ btnSaveStatus.addEventListener('click', async () => {
     } catch (err) {
         console.error(err);
         alert('Network error while saving.');
+    }
+});
+
+// RE-QUEUE LOGIC
+document.getElementById('btnForceRequeue').addEventListener('click', async () => {
+    if (!currentLead) return;
+    
+    if (!confirm(`Êtes-vous sûr de vouloir remettre @${currentLead.username} dans la file d'attente ?\nCela réinitialisera son statut à 'queued' et préparera un nouveau message.`)) {
+        return;
+    }
+
+    try {
+        const btn = document.getElementById('btnForceRequeue');
+        const originalText = btn.textContent;
+        btn.textContent = 'Processing...';
+        btn.disabled = true;
+
+        const res = await fetch(`/api/leads/${currentLead.username}/requeue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (res.ok) {
+            alert(`✅ Lead @${currentLead.username} a été remis dans la file d'attente.`);
+            selectLead(currentLead.username); // Refresh UI
+        } else {
+            const data = await res.json();
+            alert(`❌ Erreur: ${data.error}`);
+        }
+        
+        btn.textContent = originalText;
+        btn.disabled = false;
+
+    } catch (err) {
+        console.error(err);
+        alert('Erreur réseau lors du re-queue.');
+        document.getElementById('btnForceRequeue').disabled = false;
     }
 });
 

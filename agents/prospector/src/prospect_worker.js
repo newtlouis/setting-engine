@@ -68,6 +68,10 @@ function delay(min, max = null) {
  * @returns {{ type: 'hashtag' | 'profile', value: string }}
  */
 function parseSource(source) {
+  if (!source || typeof source !== 'string') {
+    return { type: 'unknown', value: 'none' };
+  }
+  
   if (source.startsWith('#')) {
     return { type: 'hashtag', value: source.slice(1) };
   } else if (source.startsWith('@')) {
@@ -89,7 +93,8 @@ export async function runProspector(options = {}) {
     maxLeadsPerPost = 10,
     totalLimit = 20,
     dryRun = false,
-    skipQualification = false
+    skipQualification = false,
+    prepareOnly = false
   } = options;
 
   if (!profile) throw new Error('Profile is required');
@@ -101,9 +106,12 @@ export async function runProspector(options = {}) {
   // Load profile config for qualification and messaging
   const profileConfig = await loadProfileConfig(profile);
   console.log(`🧠 Loaded profile config: ${profileConfig?.niche || 'default'}`);
+  console.log(`📦 Prepare Only: ${prepareOnly}`);
 
-  const sourceInfo = parseSource(source);
-  console.log(`📍 Source: ${sourceInfo.type} "${sourceInfo.value}"`);
+  if (source) {
+    const sourceInfo = parseSource(source);
+    console.log(`📍 Source (CLI): ${sourceInfo.type} "${sourceInfo.value}"`);
+  }
 
   // Stats
   let stats = {
@@ -123,9 +131,9 @@ export async function runProspector(options = {}) {
     
     // We can't actually scrape without a browser, so just show what would happen
     console.log(`Would loop until ${totalLimit} successful contacts are made:`);
-    console.log(`   1. Find batch of ${maxPosts} posts from ${sourceInfo.type} "${sourceInfo.value}"`);
+    console.log(`   1. Find batch of ${maxPosts} posts from rotated sources`);
     console.log(`   2. Process comment leads (max ${maxLeadsPerPost} per post)`);
-    console.log(`   3. If limit not reached, find NEXT batch of ${maxPosts} posts`);
+    console.log(`   3. If limit not reached, move to NEXT source and find batch of ${maxPosts} posts`);
     console.log(`   4. Repeat...`);
     return stats;
   }
@@ -242,9 +250,11 @@ export async function runProspector(options = {}) {
              if (uniqueUsernames.has(username)) continue;
              uniqueUsernames.add(username);
 
-             // Skip if already in database as contacted
+             // Skip if already in database in active or completed stage
              const existingLead = dbFunctions.getLeadByUsername(username, accountId);
-             if (existingLead && existingLead.status !== 'new') {
+             const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
+             
+             if (existingLead && skipStatuses.includes(existingLead.status)) {
                console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
                stats.leadsSkipped++;
                continue;
@@ -307,75 +317,101 @@ export async function runProspector(options = {}) {
              } catch (e) {
                   console.error(`   ⚠️ Name extraction failed: ${e.message}`);
              }
-             
-             // If AI fails (returns null), we force "there" which triggers "Hello"
-             const nameToUse = aiFirstName || 'there';
-
-             const leadForTemplate = {
-               username,
-               full_name: profileData.fullName,
-               bio: profileData.bio,
-               warmth: 'cold',
-               comments: [comment]
-             };
-             
-             const messageResult = generateFirstMessage(leadForTemplate, [comment], {
-               niche: profileConfig?.niche || 'personal development',
-               isSimple: true,
-               profileConfig,
-               forceFirstName: nameToUse
-             });
-
-             const validation = validateMessage(messageResult.message);
-             if (!validation.valid) {
-               console.log(`   ⚠️  Invalid message: ${validation.issues.join(', ')}`);
-               stats.leadsFailed++;
-               continue;
-             }
-
-             console.log(`   💬 Message: "${messageResult.message.substring(0, 60)}..."`);
-
-             // STEP 3f: Send message (opens new tab, types, keeps open)
-             const sendResult = await sendDMToUserInNewTab(username, messageResult.message, {
-               targetUrl: `https://www.instagram.com/${username}/`,
-               profileData
-             });
-
-             // Keep focusing the working page (scraper) so the user can see progress
-             if (workingPage) {
-               await workingPage.bringToFront().catch(() => {});
-             }
-
-              if (sendResult.success && sendResult.tabKeptOpen) {
-                console.log(`   ✅ Message typed! Tab kept open for review.`);
-                stats.leadsContacted++;
-
-                // Save to database
-                saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl);
-                
-                // Record conversation
-                const lead = dbFunctions.getLeadByUsername(username, accountId);
-                if (lead) {
-                  dbFunctions.addConversationMessage(lead.id, 'assistant', messageResult.message, 'outreach');
-                }
-
-              } else if (sendResult.skipped) {
-                if (sendResult.existingConversation) {
-                  console.log(`   ⏭️  @${username}: Conversation existante détectée - lead ignoré.`);
-                  saveLeadToDb(username, comment, accountId, 'conversation', 'existing_messages', profileData, sendResult.dmUrl);
-                } else if (sendResult.isCompetitor) {
-                   // This should have been caught by qualifyLead, but safety check
-                  console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
-                  saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData);
-                } else {
-                  console.log(`   ⏭️  @${username}: Lead ignoré (${sendResult.error || 'raison inconnue'})`);
-                  saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData);
-                }
-                stats.leadsSkipped++;
+                          // Final Message preparation
+              let finalMessage = "";
+              if (aiFirstName) {
+                // NEW PATTERN: Just "[Name] ?"
+                finalMessage = `${aiFirstName} ?`;
               } else {
-                console.log(`   ❌ Failed to send: ${sendResult.error}`);
+                const nameToUse = 'there';
+                const leadForTemplate = {
+                  username,
+                  full_name: profileData.fullName,
+                  bio: profileData.bio,
+                  warmth: 'cold',
+                  comments: [comment]
+                };
+                
+                const messageResult = generateFirstMessage(leadForTemplate, [comment], {
+                  niche: profileConfig?.niche || 'personal development',
+                  isSimple: true,
+                  profileConfig,
+                  forceFirstName: nameToUse
+                });
+                finalMessage = messageResult.message;
+              }
+
+              const validation = validateMessage(finalMessage);
+              if (!validation.valid) {
+                console.log(`   ⚠️  Invalid message: ${validation.issues.join(', ')}`);
                 stats.leadsFailed++;
-                saveLeadToDb(username, comment, accountId, 'failed', sendResult.error);
+                continue;
+              }
+
+              console.log(`   💬 Message: "${finalMessage.substring(0, 60)}..."`);
+
+              // STEP 3f: Send message (opens new tab, types, keeps open)
+              if (prepareOnly) {
+                  // Queue mode: store lead + message for later
+                   const queueResult = dbFunctions.addToOutreachQueue({
+                       username,
+                       profile_url: `https://www.instagram.com/${username}/`,
+                       dm_url: null,
+                       prepared_message: finalMessage,
+                       first_name: aiFirstName,
+                       source: 'prospect'
+                   });
+                  
+                  if (queueResult) {
+                      console.log(`   📦 Queued @${username} for later sending.`);
+                      saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName);
+                      stats.leadsContacted++;
+                      console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
+                  } else {
+                      console.log(`   ⚠️ Already in queue: @${username}`);
+                  }
+              } else {
+                   // Normal mode: Open tab for review
+                   const sendResult = await sendDMToUserInNewTab(username, finalMessage, {
+                     targetUrl: `https://www.instagram.com/${username}/`,
+                     profileData
+                   });
+
+                  // Keep focusing the working page (scraper) so the user can see progress
+                  if (workingPage) {
+                    await workingPage.bringToFront().catch(() => {});
+                  }
+
+                   if (sendResult.success && sendResult.tabKeptOpen) {
+                     console.log(`   ✅ Message typed! Tab kept open for review.`);
+                     stats.leadsContacted++;
+
+                     // Save to database
+                     saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl, aiFirstName);
+                                          // Record conversation
+                      const lead = dbFunctions.getLeadByUsername(username, accountId);
+                      if (lead) {
+                        dbFunctions.addConversationMessage(lead.id, 'assistant', finalMessage, 'outreach');
+                      }
+
+                   } else if (sendResult.skipped) {
+                     if (sendResult.existingConversation) {
+                       console.log(`   ⏭️  @${username}: Conversation existante détectée - Marqué comme 'already_known'.`);
+                       saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl, aiFirstName);
+                     } else if (sendResult.isCompetitor) {
+                        // This should have been caught by qualifyLead, but safety check
+                       console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
+                       saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData, null, aiFirstName);
+                     } else {
+                       console.log(`   ⏭️  @${username}: Lead ignoré (${sendResult.error || 'raison inconnue'})`);
+                       saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData, null, aiFirstName);
+                     }
+                     stats.leadsSkipped++;
+                   } else {
+                     console.log(`   ❌ Failed to send: ${sendResult.error}`);
+                     stats.leadsFailed++;
+                     saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, null, null, aiFirstName);
+                   }
               }
 
              // Small delay between leads
@@ -418,9 +454,16 @@ export async function runProspector(options = {}) {
     console.log(`   Failed: ${stats.leadsFailed}`);
     console.log('');
     
-    await waitForUserToFinish();
-    await closeBrowser().catch(() => {});
-    dbFunctions.closeDatabase();
+    if (prepareOnly) {
+        console.log(`✨ Queued ${stats.leadsContacted} leads for later sending.`);
+        console.log(`   Total pending in queue: ${dbFunctions.getQueueCount()}`);
+        await closeBrowser().catch(() => {});
+        dbFunctions.closeDatabase();
+    } else {
+        await waitForUserToFinish();
+        await closeBrowser().catch(() => {});
+        dbFunctions.closeDatabase();
+    }
   } else {
     console.log('\n📭 No messages to review.');
     await closeBrowser().catch(() => {});
@@ -433,7 +476,7 @@ export async function runProspector(options = {}) {
 /**
  * Helper to save lead to database
  */
-function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null) {
+function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null) {
   try {
     // Insert or update lead
     const lead = dbFunctions.getLeadByUsername(username, accountId);
@@ -441,8 +484,8 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
     if (!lead) {
       // Create new lead
       db.prepare(`
-        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, first_name, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         username,
         accountId,
@@ -452,7 +495,8 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
         profileData?.bio || null,
         dmUrl || null,
         comment.post_url || 'prospect',
-        failReason || null
+        firstName || null,
+        failReason ? `Failed: ${failReason}` : null
       );
       
       // Also save the comment

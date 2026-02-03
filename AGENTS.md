@@ -281,6 +281,27 @@ try {
 - **Follow-up Agent (New)**: Re-engages leads who stopped replying after 48h.
 - **AI Name Extraction**: Uses LLM to find real names in bios for better personalization.
 
+### 4. Orchestration Scripts (New)
+
+**Purpose**: Tie multiple agents together for a semi-automated daily workflow.
+
+- **`harvest.js`**: Orchestrates Phase 1 (Lead Discovery). Runs Follower Watcher, Engagement Watcher, and Prospector in priority order until a lead target is reached.
+- **`send_queued.js`**: Orchestrates Phase 2 (Automatic outreach). Pulls leads from `outreach_queue` and sends DMs in a fresh session.
+
+---
+
+## Database Schema (SQLite)
+
+The system uses a shared SQLite database (`leads.db`) with the following key tables:
+
+### `leads`
+Main table for prospect information.
+- `username`, `full_name`, `first_name`, `bio`, `profile_url`, `status`, `lead_source`, etc.
+
+### `outreach_queue`
+Queue for prepared outreach messages.
+- `username`, `prepared_message`, `first_name`, `status` (pending/sent/failed), `source`.
+
 ---
 
 ## Integration Guide

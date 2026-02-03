@@ -15,7 +15,8 @@ import {
   closeBrowser,
   scrapePostLikers,
   scrapePostComments,
-  openDMAndScrape
+  openDMAndScrape,
+  uploadFileInDM
 } from './scraper.js';
 import {
   initDB,
@@ -24,6 +25,7 @@ import {
   getOrCreateAccount,
   fullUpsertLead
 } from './db_integration.js';
+import { addToOutreachQueue, getQueueCount } from '../../collector/src/database.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
@@ -132,6 +134,7 @@ export async function runEngagementWatcher(options = {}) {
     console.log(`   DM RESPONDER - ENGAGEMENT WATCHER`);
     console.log(`========================================`);
     console.log(`   Profile: ${profile}`);
+    console.log(`   Prepare Only: ${!!options.prepareOnly}`);
     
     let browser = null;
     let page = null;
@@ -178,7 +181,15 @@ export async function runEngagementWatcher(options = {}) {
         });
 
         // 3. Process each post
+        const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
+        console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
+        
         for (const post of engagedPosts.slice(0, CONFIG.MAX_POSTS_PER_SESSION)) {
+            if (preparedCount >= TARGET_MESSAGE_COUNT) {
+                console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}). Stopping post analysis.`);
+                break;
+            }
+
             console.log(`\n🚀 Analyzing Post: ${post.url}`);
             const typeStr = post.types.map(t => t.toUpperCase()).join(' & ');
             console.log(`   Intent: Scrape ${typeStr}`);
@@ -204,19 +215,42 @@ export async function runEngagementWatcher(options = {}) {
             // Deduplicate
             const uniqueLeads = Array.from(new Set(potentialLeads.map(l => l.username)))
                 .map(username => potentialLeads.find(l => l.username === username));
-                
-            console.log(`   💎 Total unique users to process: ${Math.min(uniqueLeads.length, CONFIG.MAX_LEADS_PER_POST)}`);
+            
+            console.log(`   💎 Analysis of ${uniqueLeads.length} unique profiles found...`);
+            
+            const leadsToProceed = [];
+            let alreadyKnownCount = 0;
 
-            for (const lead of uniqueLeads.slice(0, CONFIG.MAX_LEADS_PER_POST)) {
-                const username = lead.username;
+            for (const lead of uniqueLeads) {
+                const existingLead = await getLeadWithContext(lead.username);
+                const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
                 
-                // 4. Check if already in DB (Avoid redundant scraping/evaluation)
-                const existingLead = await getLeadWithContext(username);
-                if (existingLead) {
-                    console.log(`   ⏭️ @${username} already in database (status: ${existingLead.status}). Skipping.`);
-                    continue;
+                if (existingLead && skipStatuses.includes(existingLead.status)) {
+                    alreadyKnownCount++;
+                } else {
+                    leadsToProceed.push(lead);
                 }
-                
+            }
+
+            console.log(`      - Already known in DB: ${alreadyKnownCount}`);
+            console.log(`      - New leads discovered: ${leadsToProceed.length}`);
+            
+            if (leadsToProceed.length === 0) {
+                 console.log(`      - Action: No new leads to process for this post.`);
+                 continue;
+            }
+            
+            console.log(`      - Action: Processing leads until target (${TARGET_MESSAGE_COUNT}) is reached (Current: ${preparedCount})`);
+
+            // No slicing here - we process until we hit the global target
+            for (const lead of leadsToProceed) {
+                // Check Global Target
+                 if (preparedCount >= TARGET_MESSAGE_COUNT) {
+                    console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}) during filtering. Stopping.`);
+                    break;
+                }
+
+                const username = lead.username;
                 console.log(`\n   --- Checking: @${username} (${lead.source}) ---`);
                 
                 // 5. Profile Check
@@ -261,37 +295,74 @@ export async function runEngagementWatcher(options = {}) {
                     aiFirstName = await extractNameWithAI(username, metadata.fullName);
                 } catch (e) {}
 
-                let messageTemplate = lead.source === 'post_comment' 
-                    ? profileConfig.outreach?.comment_outreach_template 
-                    : profileConfig.outreach?.like_outreach_template;
+                // --- CTA Keyword Detection ---
+                let ctaMatch = null;
+                let resourceToUpload = null;
                 
-                // Fallback to follower template if specific ones don't exist
-                if (!messageTemplate) messageTemplate = profileConfig.outreach?.follower_template;
-                
-                // Final safety fallback to avoid empty or ultra-short messages
-                if (!messageTemplate || messageTemplate.length < 10) {
-                    messageTemplate = "Hello {{firstName}} ! Merci pour ton interaction sur mon dernier post 🌸";
+                if (lead.source === 'post_comment' && lead.text && profileConfig.outreach?.cta_resources) {
+                    const commentText = lead.text.toLowerCase().trim();
+                    const ctaKeywords = Object.keys(profileConfig.outreach.cta_resources);
+                    
+                    for (const keyword of ctaKeywords) {
+                        // Match if comment IS the keyword (with some tolerance for emojis/spaces)
+                        const cleanedComment = commentText.replace(/[^\w\sàâäéèêëïîôùûüÿçœæ]/gi, '').trim();
+                        if (cleanedComment === keyword.toLowerCase() || commentText === keyword.toLowerCase()) {
+                            ctaMatch = profileConfig.outreach.cta_resources[keyword];
+                            console.log(`   🎁 CTA Keyword detected: "${keyword}" -> Will deliver resource.`);
+                            break;
+                        }
+                    }
+                    
+                    if (ctaMatch && ctaMatch.file) {
+                        // Build absolute path to resource file
+                        const resourcesDir = path.join(process.cwd(), 'config', 'profiles', profile, 'resources');
+                        resourceToUpload = path.join(resourcesDir, ctaMatch.file);
+                    }
                 }
-
-                let finalMessage = messageTemplate;
                 
-                // Handle {{firstName}} placeholder
-                if (aiFirstName) {
-                    finalMessage = finalMessage.replace(/{{firstName}}/g, aiFirstName);
+                // --- Select Message Template ---
+                let messageTemplate;
+                
+                if (ctaMatch && ctaMatch.outreach_template) {
+                    // Use CTA-specific template
+                    messageTemplate = ctaMatch.outreach_template;
+                } else if (lead.source === 'post_comment') {
+                    messageTemplate = profileConfig.outreach?.comment_outreach_template;
                 } else {
+                    messageTemplate = profileConfig.outreach?.like_outreach_template;
+                }
+                
+                let finalMessage = "";
+                
+                if (aiFirstName) {
+                    // NEW PATTERN: Just "[Name] ?"
+                    finalMessage = `${aiFirstName} ?`;
+                } else {
+                    // Handle {{firstName}} placeholder
+                    if (!messageTemplate || messageTemplate.length < 10) {
+                        messageTemplate = "Hello ! Merci pour ton interaction sur mon dernier post 🌸";
+                    }
                     // Remove {{firstName}} and clean up formatting
-                    // Handles "Hello {{firstName}}" -> "Hello", "Coucou {{firstName}}" -> "Coucou"
-                    finalMessage = finalMessage.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
+                    finalMessage = messageTemplate.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
                     // If it started with "Hello !" (now that name is gone), make sure it's capitalized correctly
                     if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
                 }
                 
                 // Final cleanup: remove double spaces and trim
                 finalMessage = finalMessage.replace(/\s+/g, ' ').trim();
+                
+                // --- CTA Delivery (URL & Message Addon) ---
+                if (ctaMatch) {
+                    let addon = "";
+                    if (ctaMatch.message_addon) addon += `\n\n${ctaMatch.message_addon}`;
+                    if (ctaMatch.url) addon += ctaMatch.message_addon ? `\n${ctaMatch.url}` : `\n\n${ctaMatch.url}`;
+                    finalMessage += addon;
+                }
 
                 if (options.dryRun) {
                     console.log(`   🚧 DRY RUN: Would contact @${username} with: "${finalMessage}"`);
-                    continue;
+                    if (resourceToUpload) console.log(`   🚧 DRY RUN: Would upload resource: ${resourceToUpload}`);
+                    continue; // In dry run we don't increment preparedCount for real, or we could if we wanted to simulate the limit
                 }
 
                 // 8. Outreach
@@ -300,31 +371,94 @@ export async function runEngagementWatcher(options = {}) {
                     profile_url: `https://www.instagram.com/${username}/`
                 });
                 
+                if (!dmResult.success) {
+                    console.log(`   ❌ Failed to open DM: ${dmResult.error}`);
+                    
+                    // Handle blocked/deleted profiles
+                    if (dmResult.error?.includes('Profile unavailable') || dmResult.error?.includes('page introuvable')) {
+                        console.log(`📡 Lead @${username} seems to have blocked Melanie or deleted their profile. Marking as not_interested.`);
+                        await fullUpsertLead(username, account.id, {
+                            status: 'not_interested',
+                            notes: "Profile unavailable (likely blocked/deleted)."
+                        });
+                    }
+                    if (dmResult.tab) await dmResult.tab.close().catch(() => {});
+                    continue;
+                }
+
                 if (dmResult.success && dmResult.scrapedMessages.length === 0) {
-                    console.log(`\n   💬 SENDING ENGAGEMENT OUTREACH:`);
+                    console.log(`\n   💬 PREPARING ENGAGEMENT OUTREACH:`);
                     console.log(`   Profile: https://www.instagram.com/${username}/`);
                     console.log(`   Message: "${finalMessage}"\n`);
 
-                    await typeInOpenTab(dmResult.tab, finalMessage);
-                    registerOpenTab(username, dmResult.tab, finalMessage);
-                    
-                    // 9. Sync DB
-                    await fullUpsertLead(username, account.id, {
-                        status: 'outreach',
-                        full_name: metadata.fullName,
-                        bio: metadata.bio,
-                        lead_source: lead.source,
-                        dm_url: dmResult.dmUrl,
-                        conversation_step: lead.source === 'post_comment' ? 2 : 1
-                    });
-                    await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
-                    preparedCount++;
+                    // --prepare-only mode: Store in queue, don't open tab
+                    if (options.prepareOnly) {
+                        const queueResult = addToOutreachQueue({
+                            username,
+                            profile_url: `https://www.instagram.com/${username}/`,
+                            dm_url: dmResult.dmUrl,
+                            prepared_message: finalMessage,
+                            first_name: aiFirstName,
+                            source: 'engagement',
+                            resource_file: resourceToUpload || null,
+                            resource_url: ctaMatch?.url || null
+                        });
+                        
+                        if (queueResult) {
+                            console.log(`   📦 Queued @${username} for later sending.`);
+                            await fullUpsertLead(username, account.id, {
+                                status: 'queued',
+                                full_name: metadata.fullName,
+                                bio: metadata.bio,
+                                first_name: aiFirstName,
+                                lead_source: lead.source,
+                                dm_url: dmResult.dmUrl,
+                                notes: ctaMatch ? `CTA resource queued: ${ctaMatch.file}` : null
+                            });
+                            preparedCount++;
+                            console.log(`   ✅ Queued. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
+                        } else {
+                            console.log(`   ⚠️ Already in queue: @${username}`);
+                        }
+                        if (dmResult.tab) await dmResult.tab.close().catch(() => {});
+                    } else {
+                        // Normal mode: Open tab for review
+                        await typeInOpenTab(dmResult.tab, finalMessage);
+                        
+                        // --- CTA Resource Upload ---
+                        if (resourceToUpload) {
+                            console.log(`   📎 Uploading CTA resource...`);
+                            const uploadResult = await uploadFileInDM(dmResult.tab, resourceToUpload);
+                            if (uploadResult.success) {
+                                console.log(`   ✅ Resource uploaded successfully.`);
+                            } else {
+                                console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
+                            }
+                        }
+                        
+                        registerOpenTab(username, dmResult.tab, finalMessage);
+                        
+                        // 9. Sync DB
+                        await fullUpsertLead(username, account.id, {
+                            status: 'outreach',
+                            full_name: metadata.fullName,
+                            bio: metadata.bio,
+                            lead_source: lead.source,
+                            dm_url: dmResult.dmUrl,
+                            conversation_step: 2,
+                            notes: ctaMatch ? `CTA resource delivered: ${ctaMatch.file}` : null
+                        });
+                        await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
+                        preparedCount++;
+                        console.log(`   ✅ Message prepared. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
+                    }
+
                 } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
                     console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
                     
                     // Register as known contact with context
                     await fullUpsertLead(username, account.id, {
-                        status: 'known_contact',
+                        status: 'already_known',
                         full_name: metadata.fullName,
                         bio: metadata.bio,
                         lead_source: lead.source,
@@ -342,8 +476,13 @@ export async function runEngagementWatcher(options = {}) {
         }
         
         if (preparedCount > 0) {
-            console.log(`\n✨ Prepared ${preparedCount} engagement outreach messages for review.`);
-            await waitForUserToFinish();
+            if (options.prepareOnly) {
+                console.log(`\n✨ Queued ${preparedCount} leads for later sending.`);
+                console.log(`   Total pending in queue: ${getQueueCount()}`);
+            } else {
+                console.log(`\n✨ Prepared ${preparedCount} engagement outreach messages for review.`);
+                await waitForUserToFinish();
+            }
         } else {
             console.log('\nNo new outreach messages prepared.');
         }

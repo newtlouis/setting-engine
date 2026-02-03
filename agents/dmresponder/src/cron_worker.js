@@ -251,8 +251,25 @@ async function processThread(thread, options) {
       shouldGenerate = false;
       skipReason = "No conversation history found (DB empty, scrape 0)";
     } else if (lastMsg.role === 'user') {
-      // Last message is from user - Always reply
+      // Last message is from user - Always reply UNLESS it's a 'not_interested' lead without a question
       shouldGenerate = true;
+      
+      if (['not_interested', 'already_known'].includes(leadContext?.status)) {
+         const text = (lastMsg.text || '').trim();
+         const hasQuestionMark = text.includes('?');
+         const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu'];
+         const startsWithQuestion = questionStarters.some(s => text.toLowerCase().startsWith(s));
+         
+         const closingWords = ['merci', 'thanks', 'ok', 'd\'accord', 'ca marche', 'ça marche', 'bonne soirée', 'bonne journée', 'super', 'cool'];
+         const isClosing = closingWords.some(w => text.toLowerCase().includes(w)) && text.length < 30 && !hasQuestionMark;
+
+         const isQuestion = (hasQuestionMark || startsWithQuestion) && !isClosing;
+         
+         if (!isQuestion) {
+             shouldGenerate = false;
+             skipReason = `Lead is '${leadContext.status}' and message is NOT a clear question ("${text}")`;
+         }
+      }
     } else if (lastMsg.role === 'assistant') {
       // Last message from me - Wait for them to reply
       // The user requested to NOT auto-follow-up here.
@@ -314,6 +331,12 @@ async function processThread(thread, options) {
       console.log(`   ⛔ NOT INTERESTED tag detected!`);
       finalMessage = finalMessage.replace('[NOT_INTERESTED]', '').trim();
       newStatus = 'not_interested';
+    }
+
+    if (finalMessage.includes('[MANUAL]')) {
+      console.log(`   🎤 MANUAL tag detected!`);
+      finalMessage = finalMessage.replace('[MANUAL]', '').trim();
+      newStatus = 'manual';
     }
 
     if (finalMessage.includes('[ALERT_BOOKING]')) {

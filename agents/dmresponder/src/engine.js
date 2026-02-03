@@ -8,9 +8,6 @@ import { SYSTEM_PROMPT } from './prompts.js';
 import { validateConversation } from './utils.js';
 
 // Load environment variables from .env file
-dotenv.config();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 /**
@@ -24,7 +21,7 @@ export async function generateResponse({ conversationHistory, leadContext = null
   // Validate input
   validateConversation(conversationHistory);
 
-  if (!OPENAI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set in the environment variables.');
   }
 
@@ -60,7 +57,7 @@ export async function generateResponse({ conversationHistory, leadContext = null
  * Generates a specific revival message when the last interaction was not a question.
  */
 export async function generateRevivalMessage(conversationHistory, leadContext) {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required');
+  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required');
 
   const systemPrompt = `
     You are an Instagram outreach expert. 
@@ -91,7 +88,7 @@ export async function generateRevivalMessage(conversationHistory, leadContext) {
  */
 async function getLlmResponse(conversationHistory, leadContext, profileConfig = null) {
   const headers = {
-    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
     'Content-Type': 'application/json',
   };
 
@@ -114,16 +111,55 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       systemPrompt = profileConfig.dm_responder.system_prompt;
   }
 
+  // Inject Calendly Availability if in booking stage (Step 5+)
+  const currentStep = leadContext?.conversation_step || 0;
+  if (currentStep >= 5) {
+      try {
+          const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
+          const profileName = profileConfig?.profile_name || 'default';
+          const { primary, backup } = await fetchAvailability(profileName);
+          
+          if (primary && primary.length > 0) {
+              const formatSlot = (s) => {
+                  const d = new Date(s.start_time);
+                  return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+              };
+
+              const primaryText = primary.map(formatSlot).join(', ');
+              const backupText = backup.map(formatSlot).join(', ');
+              
+              contextDescription += `\n\nDISPONIBILITÉS CALENDLY RÉELLES :\n`;
+              contextDescription += `- PROPOSITION PRIMAIRE (À proposer d'abord) : ${primaryText}\n`;
+              if (backupText) {
+                  contextDescription += `- PROPOSITION DE SECOURS (Si elle refuse les premiers) : ${backupText}\n`;
+              }
+              contextDescription += `\nINSTRUCTIONS DE TRANSITION :\n`;
+              contextDescription += `- Si le lead a accepté le principe de l'appel mais n'a pas encore choisi de créneau -> Tu es à [STEP_6]. Propose les créneaux PRIMAIRES.\n`;
+              contextDescription += `- Si le lead a validé un créneau mais n'a pas encore donné son EMAIL/TÉLÉPHONE -> Tu es à [STEP_7]. Demande ses coordonnées.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> Le rdv va être booké. Ton message doit être la confirmation chaleureuse [STEP_8].\n`;
+          }
+      } catch (e) {
+          console.error("[Engine] Failed to fetch Calendly availability:", e.message);
+      }
+  }
+
   // Force JSON output instruction
   systemPrompt += `
   
   IMPORTANT: Ton output DOIT être un JSON valide, sans markdown, au format suivant :
   {
       "message": "Le texte du message à envoyer",
-      "step_used": 3 
+      "step_used": "6",
+      "booking_intent": {
+          "slot": "2026-02-05T14:00:00Z",
+          "email": "lead@mail.com",
+          "phone": "06..."
+      }
   }
-  "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4 ou 5). Si tu es hors script, mets null.
+  "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4, 5, 6, 7, 8 ou 9).
+  "booking_intent" ne doit être rempli QUE si tu as TOUTES les informations (créneau choisi, email, téléphone) pour valider le RDV. Sinon, mets null.
   `;
+
 
   // The messages payload starts with the system prompt + context
   const messages = [

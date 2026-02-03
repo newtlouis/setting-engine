@@ -72,6 +72,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       pain_points TEXT,  -- JSON array
       conversation_step INTEGER DEFAULT 0,
       notes TEXT,
+      first_name TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(username, account_id)
@@ -130,6 +131,24 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       FOREIGN KEY (lead_id) REFERENCES leads(id)
     );
     
+    -- Test Scenarios table: saved conversation scenarios for testing
+    CREATE TABLE IF NOT EXISTS test_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      messages TEXT NOT NULL,  -- JSON array of {role, text}
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    
+    -- Test Scenario Results table: results from replaying scenarios
+    CREATE TABLE IF NOT EXISTS test_scenario_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scenario_id INTEGER NOT NULL,
+      messages TEXT NOT NULL,  -- JSON array with AI responses
+      tested_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (scenario_id) REFERENCES test_scenarios(id) ON DELETE CASCADE
+    );
+    
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
@@ -138,8 +157,9 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_comments_lead_id ON comments(lead_id);
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
-    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(account_id);
+    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(post_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_test_scenario_results_scenario_id ON test_scenario_results(scenario_id);
   `);
   
   // 2. SELF-HEALING MIGRATIONS (Add columns if missing in existing DB)
@@ -203,10 +223,41 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       );
     `);
 
+    // Create Outreach Queue Table (for harvest/send system)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS outreach_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        profile_url TEXT,
+        dm_url TEXT,
+        prepared_message TEXT NOT NULL,
+        first_name TEXT,
+        source TEXT,  -- 'follower', 'engagement', 'prospect'
+        resource_file TEXT,  -- Optional file path for CTA
+        resource_url TEXT,   -- Optional URL for CTA
+        status TEXT DEFAULT 'pending',  -- 'pending', 'sent', 'failed'
+        created_at TEXT DEFAULT (datetime('now')),
+        sent_at TEXT,
+        error TEXT
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_outreach_queue_status ON outreach_queue(status);`);
+
     // Migration: Add last_followup_template_id to leads
     if (!leadsColumns.some(col => col.name === 'last_followup_template_id')) {
       console.log('🔄 Migrating: Adding last_followup_template_id to leads table...');
       db.exec(`ALTER TABLE leads ADD COLUMN last_followup_template_id INTEGER REFERENCES followup_templates(id)`);
+    }
+
+    if (!leadsColumns.some(col => col.name === 'first_name')) {
+      console.log('🔄 Migrating: Adding first_name to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN first_name TEXT`);
+    }
+
+    const queueColumns = db.prepare("PRAGMA table_info(outreach_queue)").all();
+    if (!queueColumns.some(col => col.name === 'first_name')) {
+      console.log('🔄 Migrating: Adding first_name to outreach_queue table...');
+      db.exec(`ALTER TABLE outreach_queue ADD COLUMN first_name TEXT`);
     }
 
     // Seed default templates if empty
@@ -860,12 +911,13 @@ export function updateLeadDmStatus(username, status, dmUrl = null) {
  */
 export function updateDmThreadStatus(username, status, updates = {}) {
   const notes = updates.last_error || updates.notes || null;
-  const lastChecked = updates.last_checked_at || null;
+  const conversationStep = updates.conversation_step;
   
   const stmt = db.prepare(`
     UPDATE leads SET
       status = @status,
       notes = COALESCE(@notes, notes),
+      conversation_step = COALESCE(@conversation_step, conversation_step),
       updated_at = datetime('now')
     WHERE username = @username
   `);
@@ -873,7 +925,8 @@ export function updateDmThreadStatus(username, status, updates = {}) {
   return stmt.run({
     username,
     status,
-    notes
+    notes,
+    conversation_step: conversationStep !== undefined ? conversationStep : null
   });
 }
 
@@ -1140,4 +1193,242 @@ export function updateLeadLastFollowup(username, templateId) {
       updated_at = datetime('now')
     WHERE username = ?
   `).run(templateId, username);
+}
+
+/**
+ * Get count of follow-ups sent for a specific conversation step
+ * 
+ * @param {string} username - Instagram username
+ * @param {number} step - Step number (2, 3, 4...)
+ * @returns {number} Count of follow-ups sent at this step
+ */
+export function getFollowupCountForStep(username, step) {
+  // Get lead ID
+  const lead = getLeadByUsername(username);
+  if (!lead) return 0;
+  
+  const result = db.prepare(`
+    SELECT COUNT(*) as count 
+    FROM conversations 
+    WHERE lead_id = ? 
+      AND role = 'assistant'
+      AND message_type LIKE ?
+  `).get(lead.id, `followup_step${step}%`);
+  
+  return result ? result.count : 0;
+}
+
+// ============================================
+// TEST SCENARIOS OPERATIONS
+// ============================================
+
+/**
+ * Create a new test scenario
+ * @param {string} name - Scenario name
+ * @param {Array} messages - Array of {role, text}
+ * @returns {Object} Created scenario
+ */
+export function createScenario(name, messages) {
+  const stmt = db.prepare(`
+    INSERT INTO test_scenarios (name, messages)
+    VALUES (?, ?)
+    RETURNING *
+  `);
+  return stmt.get(name, JSON.stringify(messages));
+}
+
+/**
+ * Get all test scenarios
+ * @returns {Array} All scenarios
+ */
+export function getScenarios() {
+  const scenarios = db.prepare(`
+    SELECT * FROM test_scenarios
+    ORDER BY created_at DESC
+  `).all();
+  
+  return scenarios.map(s => ({
+    ...s,
+    messages: JSON.parse(s.messages)
+  }));
+}
+
+/**
+ * Get a scenario by ID
+ * @param {number} id - Scenario ID
+ * @returns {Object|null} Scenario
+ */
+export function getScenarioById(id) {
+  const scenario = db.prepare(`
+    SELECT * FROM test_scenarios WHERE id = ?
+  `).get(id);
+  
+  if (!scenario) return null;
+  
+  return {
+    ...scenario,
+    messages: JSON.parse(scenario.messages)
+  };
+}
+
+/**
+ * Delete a scenario
+ * @param {number} id - Scenario ID
+ */
+export function deleteScenario(id) {
+  return db.prepare('DELETE FROM test_scenarios WHERE id = ?').run(id);
+}
+
+/**
+ * Update a scenario's messages
+ * @param {number} id - Scenario ID
+ * @param {Array} messages - New message list
+ */
+export function updateScenario(id, messages) {
+  return db.prepare(`
+    UPDATE test_scenarios 
+    SET messages = ?, created_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JSON.stringify(messages), id);
+}
+
+/**
+ * Save scenario test result
+ * @param {number} scenarioId - Scenario ID
+ * @param {Array} messages - Complete conversation with AI responses
+ */
+export function saveScenarioResult(scenarioId, messages) {
+  const stmt = db.prepare(`
+    INSERT INTO test_scenario_results (scenario_id, messages)
+    VALUES (?, ?)
+    RETURNING *
+  `);
+  return stmt.get(scenarioId, JSON.stringify(messages));
+}
+
+/**
+ * Get latest results for a scenario
+ * @param {number} scenarioId - Scenario ID
+ * @param {number} limit - Number of results to return
+ * @returns {Array} Results
+ */
+export function getScenarioResults(scenarioId, limit = 5) {
+  const results = db.prepare(`
+    SELECT * FROM test_scenario_results
+    WHERE scenario_id = ?
+    ORDER BY tested_at DESC
+    LIMIT ?
+  `).all(scenarioId, limit);
+  
+  return results.map(r => ({
+    ...r,
+    messages: JSON.parse(r.messages)
+  }));
+}
+
+// ============================================
+// OUTREACH QUEUE OPERATIONS
+// ============================================
+
+/**
+ * Add a lead to the outreach queue
+ * @param {Object} lead - Lead data with username, profile_url, dm_url, prepared_message, source, resource_file, resource_url
+ * @returns {Object} Inserted row or null if duplicate
+ */
+export function addToOutreachQueue(lead) {
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO outreach_queue (
+        username, profile_url, dm_url, prepared_message, 
+        first_name, source, resource_file, resource_url
+      ) VALUES (
+        @username, @profile_url, @dm_url, @prepared_message, 
+        @first_name, @source, @resource_file, @resource_url
+      )
+      ON CONFLICT(username) DO UPDATE SET
+        status = 'pending',
+        prepared_message = @prepared_message,
+        first_name = COALESCE(@first_name, first_name),
+        source = @source,
+        resource_file = COALESCE(@resource_file, resource_file),
+        resource_url = COALESCE(@resource_url, resource_url),
+        error = NULL,
+        sent_at = NULL,
+        created_at = datetime('now')
+      WHERE status = 'failed'
+    `);
+    const info = stmt.run({
+      username: lead.username,
+      profile_url: lead.profile_url || null,
+      dm_url: lead.dm_url || null,
+      prepared_message: lead.prepared_message,
+      first_name: lead.first_name || null,
+      source: lead.source || null,
+      resource_file: lead.resource_file || null,
+      resource_url: lead.resource_url || null
+    });
+    return info.changes > 0 ? { id: info.lastInsertRowid, ...lead } : null;
+  } catch (err) {
+    console.error('❌ Error adding to outreach queue:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Get queued leads (pending status, oldest first)
+ * @param {number} limit - Max number to fetch
+ * @returns {Array} List of queued leads
+ */
+export function getQueuedLeads(limit = 5) {
+  return db.prepare(`
+    SELECT * FROM outreach_queue
+    WHERE status = 'pending'
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+/**
+ * Mark a queued lead as sent
+ * @param {string} username
+ */
+export function markQueuedLeadSent(username) {
+  return db.prepare(`
+    UPDATE outreach_queue
+    SET status = 'sent', sent_at = datetime('now')
+    WHERE username = ?
+  `).run(username);
+}
+
+/**
+ * Mark a queued lead as failed
+ * @param {string} username
+ * @param {string} error - Error message
+ */
+export function markQueuedLeadFailed(username, error) {
+  return db.prepare(`
+    UPDATE outreach_queue
+    SET status = 'failed', error = ?
+    WHERE username = ?
+  `).run(error, username);
+}
+
+/**
+ * Get count of pending leads in queue
+ * @returns {number}
+ */
+export function getQueueCount() {
+  const result = db.prepare(`SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending'`).get();
+  return result ? result.count : 0;
+}
+
+/**
+ * Clear old entries from queue (e.g., sent/failed older than X days)
+ * @param {number} days - Age threshold
+ */
+export function cleanupOutreachQueue(days = 7) {
+  return db.prepare(`
+    DELETE FROM outreach_queue
+    WHERE status IN ('sent', 'failed') AND created_at < datetime('now', '-' || ? || ' days')
+  `).run(days);
 }

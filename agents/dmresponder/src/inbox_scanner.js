@@ -79,7 +79,7 @@ async function scrollSidebarOnce(page) {
       const style = window.getComputedStyle(container);
       if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
         if (container.querySelector('img[alt*="profile" i]')) {
-          container.scrollTop += 500;
+          container.scrollTop += 300;
           return true;
         }
       }
@@ -92,7 +92,7 @@ async function scrollSidebarOnce(page) {
       while (parent) {
         const style = window.getComputedStyle(parent);
         if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-          parent.scrollTop += 500;
+          parent.scrollTop += 300;
           return true;
         }
         parent = parent.parentElement;
@@ -340,9 +340,11 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          const validStatuses = ['conversation', 'outreach', 'contacted'];
-          if (!validStatuses.includes(leadContext.status)) {
-            console.log(`   ⏭️ Status '${leadContext.status}' invalid, skipping.`);
+          // Expanded valid statuses to include not_interested/already_known for "Question Only" check
+          const validStatuses = ['conversation', 'outreach', 'contacted', 'replied', 'qualified', 'not_interested', 'already_known'];
+          
+          if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored) {
+            console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}', ignored: ${leadContext.is_ignored}) skipped.`);
             skippedCount++;
             continue;
           }
@@ -355,22 +357,70 @@ export async function runInboxScanner(options = {}) {
           const newMessages = findNewMessages(scrapedMessages, existingHistory);
           
           let updatedHistory = [...existingHistory];
+          let hasVoiceNote = false;
+
           if (newMessages.length > 0) {
             console.log(`   💾 Saving ${newMessages.length} new message(s)`);
             for (const msg of newMessages) {
               await addMessage(username, msg.role, msg.text);
               updatedHistory.push(msg);
+              if (msg.role === 'user' && msg.type === 'voice_note') {
+                hasVoiceNote = true;
+              }
             }
           }
           
-          // 5. Check if response needed
+          // 5. Check if manual response needed (Voice Note)
+          if (hasVoiceNote) {
+            console.log(`   🎤 VOICE NOTE DETECTED! Setting status to 'manual'.`);
+            await setDmThreadStatus(username, 'manual', { 
+              last_checked_at: new Date().toISOString(),
+              notes: "Vocal reçu - nécessite une réponse manuelle."
+            });
+            processedResults.push({
+               username,
+               name: conv.name,
+               message: "[VOCAL REÇU - RÉPONSE MANUELLE REQUISE]",
+               url: conversationUrl,
+               isManual: true
+            });
+            continue; // Skip AI response generation
+          }
+
+          // 6. Check if response needed
           const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
           if (!lastMsg || lastMsg.role !== 'user') {
             console.log(`   ⏳ Last message was not from user.`);
             continue;
           }
-          
-          // 6. Generate Response
+
+          // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' / 'ALREADY KNOWN' ---
+          if (['not_interested', 'already_known'].includes(leadContext.status)) {
+             const text = (lastMsg.text || '').trim();
+             
+             // Stricter check:
+             // 1. Must contain a question mark
+             // 2. OR be a common question starter (Est-ce que, Pourquoi, Comment, ...)
+             // 3. AND must NOT be a common closing/thanking message
+             const hasQuestionMark = text.includes('?');
+             const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu'];
+             const startsWithQuestion = questionStarters.some(s => text.toLowerCase().startsWith(s));
+             
+             const closingWords = ['merci', 'thanks', 'ok', 'd\'accord', 'ca marche', 'ça marche', 'bonne soirée', 'bonne journée', 'super', 'cool'];
+             const isClosing = closingWords.some(w => text.toLowerCase().includes(w)) && text.length < 30 && !hasQuestionMark;
+
+             const isQuestion = (hasQuestionMark || startsWithQuestion) && !isClosing;
+             
+             if (!isQuestion) {
+                 console.log(`   🛑 Status is '${leadContext.status}' and message is NOT a clear question ("${text}"). Keeping status as is and IGNORING.`);
+                 // We do NOT respond. We treat it as "read and handled".
+                 continue;
+             } else {
+                 console.log(`   ✅ Status is '${leadContext.status}' BUT user asked a question ("${text}"). Generating response.`);
+             }
+          }
+
+          // 7. Generate Response (renumbered)
           console.log(`   🤖 Generating response...`);
           const response = await generateResponse({
             conversationHistory: updatedHistory,
@@ -383,6 +433,39 @@ export async function runInboxScanner(options = {}) {
             console.log(`   ⚠️ No message generated.`);
             continue;
           }
+
+          // --- LOGIC: CALENDLY BOOKING ---
+          if (response.booking_intent && response.booking_intent.email && (response.booking_intent.phone || response.booking_intent.email)) {
+              console.log(`   📅 BOOKING INTENT DETECTED:`, response.booking_intent);
+              try {
+                  const { createBooking } = await import('../../../shared/utils/calendly.js');
+                  const bookingResult = await createBooking(profile, {
+                      startTime: response.booking_intent.slot,
+                      email: response.booking_intent.email,
+                      name: leadContext.fullName || username,
+                      phone: response.booking_intent.phone
+                  });
+                  
+                  if (bookingResult.success) {
+                      console.log(`   ✅ Booking success: ${bookingResult.message}`);
+                      
+                      // Format the slot for the confirmation message
+                      const slotDate = new Date(response.booking_intent.slot);
+                      const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+                      const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                      
+                      const template = profileConfig.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}}";
+                      const confirmationMsg = template
+                          .replace('{{day}}', day)
+                          .replace('{{hour}}', hour);
+                      
+                      console.log(`   📝 Using confirmation template: "${confirmationMsg}"`);
+                      finalMessage = confirmationMsg;
+                  }
+              } catch (e) {
+                  console.error(`   ❌ Booking failed:`, e.message);
+              }
+          }
           
           const profileUrl = `https://www.instagram.com/${username}/`;
           console.log(`\n   💬 SENDING RESPONSE:`);
@@ -393,6 +476,15 @@ export async function runInboxScanner(options = {}) {
           let finalMessage = message;
           let newStatus = 'conversation';
           let bookingStatus = null;
+          let detectedStep = response.step_used || null;
+
+          // Extract [STEP_X] label
+          const stepMatch = finalMessage.match(/^\[STEP_([\d.]+)\]/i);
+          if (stepMatch) {
+            detectedStep = stepMatch[1];
+            console.log(`   📍 STEP DETECTED: ${detectedStep}`);
+            finalMessage = finalMessage.replace(/^\[STEP_[\d.]+\]\s*/i, '').trim();
+          }
 
           if (finalMessage.includes('[NOT_INTERESTED]')) {
             console.log(`   ⛔ NOT INTERESTED tag detected!`);
@@ -406,12 +498,19 @@ export async function runInboxScanner(options = {}) {
             newStatus = 'scheduling';
             bookingStatus = 'pending';
           }
+
+          if (finalMessage.includes('[MANUAL]')) {
+            console.log(`   🎤 MANUAL tag detected!`);
+            finalMessage = finalMessage.replace('[MANUAL]', '').trim();
+            newStatus = 'manual';
+          }
           
           // 8. STORE RESULT
           await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
           await setDmThreadStatus(username, newStatus, { 
             last_checked_at: new Date().toISOString(),
-            booking_status: bookingStatus
+            booking_status: bookingStatus,
+            conversation_step: detectedStep
           });
           
           processedResults.push({
@@ -466,16 +565,23 @@ export async function runInboxScanner(options = {}) {
               const newPage = await browserContext.newPage();
               await newPage.goto(result.url, { waitUntil: 'domcontentloaded' });
               
-              // Re-type the message
+              // Re-type the message (only if not manual/voice note)
               await delay(1000);
-              const typeRes = await typeInOpenTab(newPage, result.message);
               
-              if (typeRes.success) {
-                  console.log(`     ✅ Typed response for ${result.username}`);
-                  // Register for the final wait loop
-                  registerOpenTab(result.username, newPage, result.message);
+              if (result.isManual) {
+                  console.log(`     ℹ️  Manual/Voice Note: Tab opened, but skipping typing.`);
+                  // Still register it so it waits for user to close
+                  registerOpenTab(result.username, newPage, ""); 
               } else {
-                  console.log(`     ❌ Failed to type for ${result.username}`);
+                  const typeRes = await typeInOpenTab(newPage, result.message);
+                  
+                  if (typeRes.success) {
+                      console.log(`     ✅ Typed response for ${result.username}`);
+                      // Register for the final wait loop
+                      registerOpenTab(result.username, newPage, result.message);
+                  } else {
+                      console.log(`     ❌ Failed to type for ${result.username}`);
+                  }
               }
           } catch (err) {
               console.error(`     ❌ Error opening tab for ${result.username}: ${err.message}`);

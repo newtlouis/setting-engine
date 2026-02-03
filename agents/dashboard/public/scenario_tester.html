@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Scenario Tester | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Dashboard</a>
+                <a href="/lead_details.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
+                    Details</a>
+                <a href="/scenario_tester.html"
+                    style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Chatbox testeur</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Compte:</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <select id="accountSelect">
+                        <option value="">Tous les comptes</option>
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <div class="scenario-tester-layout">
+            <!-- Left Panel: Chat Interface -->
+            <div class="panel left-panel">
+                <div class="panel-header">
+                    <h2>🧪 Test Conversation</h2>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="conversationType" class="conversation-type-select"
+                            onchange="onConversationTypeChange()">
+                            <option value="">-- Type --</option>
+                            <option value="cold" selected>❄️ À Froid</option>
+                            <option value="follower">👤 Abonné</option>
+                            <option value="like">❤️ Like</option>
+                            <option value="comment">💬 Commentaire</option>
+                        </select>
+                        <button onclick="clearConversation()" class="btn-action">Clear</button>
+                    </div>
+                </div>
+
+                <div class="chat-container" id="chatContainer">
+                    <div class="chat-welcome">
+                        <p>🤖 Testez vos scénarios de conversation avec l'IA</p>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                            Sélectionnez un type de conversation ci-dessus pour commencer
+                        </p>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <input type="text" id="messageInput" class="chat-input"
+                        placeholder="Tapez votre message (en tant que prospect)..." onkeypress="handleKeyPress(event)">
+                    <button onclick="sendMessage()" class="btn-send">Envoyer</button>
+                </div>
+
+                <div class="chat-actions">
+                    <button onclick="showSaveDialog()" class="btn-primary" id="saveBtn" disabled>
+                        💾 Sauvegarder ce scénario
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Saved Scenarios -->
+            <div class="panel right-panel">
+                <div class="panel-header">
+                    <h2>📚 Scénarios Sauvegardés</h2>
+                    <button onclick="replayAllScenarios()" class="btn-action" id="replayAllBtn">▶️ Rejouer Tout</button>
+                </div>
+
+                <div class="scenarios-list" id="scenariosList">
+                    <div class="loading-scenarios">Chargement...</div>
+                </div>
+
+                <!-- Replay Results Section (hidden by default) -->
+                <div id="replayResults" style="display: none; margin-top: 20px;">
+                    <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">📊 Résultats du
+                        Replay</h3>
+                    <div id="replayResultsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Scenario Dialog -->
+    <div class="modal-overlay" id="saveDialog">
+        <div class="modal-content">
+            <div class="modal-title">💾 Sauvegarder le scénario</div>
+            <div class="modal-text">
+                <input type="text" id="scenarioName" class="modal-input"
+                    placeholder="Nom du scénario (ex: Client hésitant)">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal btn-cancel" onclick="closeSaveDialog()">Annuler</button>
+                <button class="btn-modal btn-confirm" onclick="saveScenario()">Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="scenario_tester.js"></script>
+</body>
+
+</html>

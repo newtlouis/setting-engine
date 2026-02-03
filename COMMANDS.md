@@ -17,10 +17,18 @@ Depuis la racine du projet (`/instagram-lead-engine`), vous pouvez lancer les ag
 | **Open Session** | `npm run open:session <profile>` | Ouvre Instagram manuellement pour un profil spécifique. |
 | **DM Responder** | `npm run reply` | Lance l'assistant de réponse (Statut: `conversation`). |
 | **Admin BDD** | `npm run db:admin` | Ouvre l'interface d'administration de la base de données (SQLite Web). |
+| **Harvest (Phase 1)** | `npm run harvest -- [options]` | ⭐ **Nouveau**. Récolte des leads (Abonnés -> Engagement -> Prospector) et les met en file d'attente. |
+| **Send Queue (Phase 2)** | `npm run send-queued -- [options]` | ⭐ **Nouveau**. Envoie automatiquement les messages préparés depuis la file d'attente. Ajoutez `--manual` pour réviser avant envoi. |
+| **Relance Automatique** | `npm run followup -- [options]` | ⭐ **Nouveau**. Relance les prospects n'ayant pas répondu après X jours. |
 
 ---
 
 ## 🎭 Gestion Multi-Comptes (Nouveau)
+
+### Options communes pour `send-queued`
+- `--limit <n>` : Nombre maximum de messages à traiter (défaut: 5).
+- `--profile <nom>` : Profil à utiliser.
+- `--manual` (ou `-m`) : **Mode Manuel**. Ouvre les conversations et tape les messages sans les envoyer.
 
 Le système supporte désormais l'utilisation de plusieurs comptes Instagram en parallèle sans conflit de cookies/session.
 Utilisez l'option `--profile <nom>` sur **tous les agents** (Collector, Outreach, DM Responder).
@@ -263,14 +271,46 @@ npm run respond:engagement -- --profile melanie --dry-run
 
 ---
 
-### 5. Administration Base de Données
+### 5. Lead Queue System (Two-Phase Outreach) ⭐ NOUVEAU
+*Alias racine : `npm run harvest --` et `npm run send-queued --`*
+
+Ce système découple la **recherche de leads** de l'**envoi des messages**. C'est le mode recommandé pour une utilisation quotidienne automatisée (cron).
+
+#### Phase 1 : Harvest (Récolte)
+Remplit la file d'attente (`outreach_queue`) en suivant un ordre de priorité : Nouveaux Abonnés ➔ Engagement ➔ Prospector (Hashtags/Concurrents).
+
+```bash
+# Récolter 30 leads pour le profil melanie
+npm run harvest -- --target 30 --profile melanie
+```
+
+- `--target <n>` : Objectif de nouveaux leads à mettre en file d'attente (défaut: 30).
+- `--profile <nom>` : Profil à utiliser.
+
+#### Phase 2 : Send Queued (Envoi)
+Prend les leads en attente dans la file et envoie les messages automatiquement un par un.
+
+```bash
+# Envoyer les 5 prochains messages de la file
+npm run send-queued -- --limit 5 --profile melanie
+```
+
+- `--limit <n>` : Nombre de messages à envoyer dans cette session (défaut: 5).
+- `--profile <nom>` : Profil à utiliser.
+
+> [!TIP]
+> **Pattern Interrupt** : Si un prénom est détecté par l'IA, le système envoie automatiquement un message direct `[Prénom] ?`. Sinon, il utilise le message de bienvenue par défaut.
+
+---
+
+### 6. Administration Base de Données
 Outil puissant pour voir et modifier les données brutes.
 
 ```bash
 npm run db:admin
 ```
 - Ouvre une interface web sur `http://localhost:8081`.
-- Vous pouvez exécuter des requêtes SQL, supprimer des lignes, ou exporter des données.
+- Vous pouvez exécuter des requêtes SQL, supprimer des lignes, ou consulter la table `outreach_queue`.
 
 ---
 

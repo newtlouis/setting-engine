@@ -155,6 +155,7 @@
             <nav style="margin-left: 32px; display: flex; gap: 20px;">
                 <a href="/" class="nav-link">Dashboard</a>
                 <a href="/lead_details.html" class="nav-link active">Lead Details</a>
+                <a href="/scenario_tester.html" class="nav-link">Chatbox testeur</a>
             </nav>
 
             <div class="account-selector" style="margin-left: auto;">
@@ -218,11 +219,29 @@
                                 <option value="conversation">Conversation</option>
                                 <option value="scheduling">Confirm Booking (Scheduling)</option>
                                 <option value="closed_won">Booked (Won)</option>
+                                <option value="already_known">Already Known (Skip AI)</option>
                                 <option value="not_interested">Not Interested</option>
                                 <option value="failed">Failed / Ignored</option>
                             </select>
                             <button id="btnSaveStatus" class="btn-filter active"
                                 style="background: var(--success); color: white; border: none;">Save</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+                        <label class="form-label" style="margin-bottom: 8px; font-weight: 600;">Actions Manuelles</label>
+                        
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <input type="checkbox" id="fieldIsIgnored" style="margin-right: 8px;">
+                            <label for="fieldIsIgnored" style="font-size: 13px; color: var(--text-primary);">Ignorer ce lead (Pause)</label>
+                        </div>
+
+                        <button id="btnForceRequeue" class="btn-filter center" 
+                                style="background: var(--warning); color: black; border: none; width: 100%; justify-content: center;">
+                            Put back to Queue (Force-Retry)
+                        </button>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; text-align: center;">
+                            Remet le lead en 'queued' pour une nouvelle tentative d'envoi.
                         </div>
                     </div>
 
@@ -315,6 +334,7 @@
                     <option value="new">New</option>
                     <option value="outreach">Contacted</option>
                     <option value="conversation">Conversation</option>
+                    <option value="already_known">Already Known</option>
                     <option value="not_interested">Not Interested</option>
                 </select>
             </div>

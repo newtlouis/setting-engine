@@ -4,9 +4,34 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { getDatabase } from '../collector/src/database.js';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment variables from multiple locations
+const possibleEnvPaths = [
+    path.join(__dirname, '..', 'dmresponder', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), 'agents', 'dmresponder', '.env')
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+    const result = dotenv.config({ path: envPath });
+    if (!result.error) {
+        console.log('✅ Loaded .env from:', envPath);
+        if (process.env.OPENAI_API_KEY) {
+            envLoaded = true;
+            break;
+        }
+    }
+}
+
+if (!envLoaded) {
+    console.warn('⚠️  Could not find a valid .env file with OPENAI_API_KEY');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -78,12 +103,14 @@ app.get('/api/stats', (req, res) => {
         const totalContacted = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const replied = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE total_messages_sent > 0 AND total_messages_received > 0 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const booked = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE booking_status = 'completed' AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
+        const manual = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status = 'manual' AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
         const conversation = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE status IN ('conversation') AND (booking_status IS NULL OR booking_status = '') AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c;
 
         const stats = {
             total_contacted: totalContacted,
             reply_rate: totalContacted > 0 ? ((replied / totalContacted) * 100).toFixed(1) : 0,
             conversation: conversation,
+            manual: manual,
             booked: booked,
             booking_rate: totalContacted > 0 ? ((booked / totalContacted) * 100).toFixed(1) : 0,
             step_breakdown: {
@@ -112,11 +139,17 @@ app.get('/api/leads', (req, res) => {
                    engagement_score, 
                    status, warmth, booking_status,
                    lead_source, lead_type, bio, account_id, conversation_step,
+                   is_ignored, updated_at,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
-            WHERE is_ignored = 0
+            WHERE 1=1
         `;
         const params = [];
+
+        // If NOT searching, exclude ignored by default
+        if (!search) {
+            sql += ' AND is_ignored = 0';
+        }
         
         // Account filter
         if (account_id) {
@@ -139,6 +172,8 @@ app.get('/api/leads', (req, res) => {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
                  sql += " AND booking_status = 'completed'";
+            } else if (status === 'manual') {
+                 sql += " AND status = 'manual'";
             } else if (status === 'not_interested') {
                  sql += " AND status = 'not_interested'";
             } else if (status === 'failed') {
@@ -154,7 +189,7 @@ app.get('/api/leads', (req, res) => {
              params.push(`%${search}%`, `%${search}%`);
         }
 
-        sql += ` ORDER BY engagement_score DESC LIMIT ? OFFSET ?`;
+        sql += ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
         params.push(parseInt(limit), parseInt(offset));
 
         const leads = db.prepare(sql).all(...params);
@@ -341,6 +376,298 @@ app.post('/api/leads/:username/status', (req, res) => {
         }
         res.json({ success: true, username });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/leads/:username/requeue - Force add to outreach queue
+app.post('/api/leads/:username/requeue', async (req, res) => {
+    try {
+        const { username } = req.params;
+        
+        // 1. Get lead data
+        const lead = db.prepare('SELECT * FROM leads WHERE username = ?').get(username);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+        // 2. Import queue function dynamically
+        const { addToOutreachQueue } = await import('../collector/src/database.js');
+        
+        // 3. Prepare queue item
+        const queueItem = {
+            username: lead.username,
+            profile_url: lead.profile_url,
+            dm_url: lead.dm_url,
+            prepared_message: "Message manuel à rédiger...", // Default placeholder
+            first_name: lead.full_name ? lead.full_name.split(' ')[0] : null,
+            source: 'manual_requeue'
+        };
+
+        // 4. Add to queue (upsert logic handles reset)
+        addToOutreachQueue(queueItem);
+
+        // 5. Update main lead status
+        db.prepare("UPDATE leads SET status = 'queued', is_ignored = 0, booking_status = NULL, updated_at = datetime('now') WHERE username = ?")
+          .run(username);
+
+        res.json({ success: true, message: `Lead @${username} re-queued successfully` });
+    } catch (err) {
+        console.error('Requeue error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================================
+// SCENARIO TESTING API
+// ============================================
+
+// Import scenario functions
+import { 
+    createScenario, 
+    getScenarios, 
+    getScenarioById, 
+    deleteScenario, 
+    saveScenarioResult,
+    getScenarioResults,
+    updateScenario 
+} from '../collector/src/database.js';
+
+// Import AI engine
+import { generateResponse } from '../dmresponder/src/engine.js';
+import { loadProfileConfig } from '../../shared/utils/configLoader.js';
+
+// POST /api/test-scenarios - Create/save a scenario
+app.post('/api/test-scenarios', (req, res) => {
+    try {
+        const { name, messages } = req.body;
+        
+        if (!name || !messages || !Array.isArray(messages)) {
+            return res.status(400).json({ error: 'Invalid request: name and messages array required' });
+        }
+        
+        const scenario = createScenario(name, messages);
+        res.json(scenario);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/test-scenarios - List all scenarios
+app.get('/api/test-scenarios', (req, res) => {
+    try {
+        const scenarios = getScenarios();
+        res.json(scenarios);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/test-scenarios/:id - Get scenario details
+app.get('/api/test-scenarios/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const scenario = getScenarioById(parseInt(id));
+        
+        if (!scenario) {
+            return res.status(404).json({ error: 'Scenario not found' });
+        }
+        
+        res.json(scenario);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/test-scenarios/:id - Delete a scenario
+app.delete('/api/test-scenarios/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        deleteScenario(parseInt(id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/test - Test a single message (returns AI response)
+app.post('/api/test-scenarios/test', async (req, res) => {
+    try {
+        const { conversationHistory, profile } = req.body;
+        
+        if (!conversationHistory || !Array.isArray(conversationHistory)) {
+            return res.status(400).json({ error: 'Invalid request: conversationHistory array required' });
+        }
+
+        if (!process.env.OPENAI_API_KEY) {
+            const dmresponderEnvPath = path.join(__dirname, '..', 'dmresponder', '.env');
+            dotenv.config({ path: dmresponderEnvPath });
+        }
+        
+        // Load profile config (default to melanie)
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        // Generate AI response
+        const response = await generateResponse({
+            conversationHistory,
+            leadContext: null,
+            profileConfig
+        });
+        
+        res.json({
+            message: response.next_message || response.message,
+            step_used: response.step_used
+        });
+    } catch (err) {
+        console.error('Test error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/:id/replay - Replay a saved scenario
+app.post('/api/test-scenarios/:id/replay', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { profile } = req.body;
+        
+        const scenario = getScenarioById(parseInt(id));
+        if (!scenario) {
+            return res.status(404).json({ error: 'Scenario not found' });
+        }
+        
+        // Load profile config
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        // Replay the scenario
+        const fullConversation = [];
+        const originalMessages = scenario.messages;
+
+        // 1. Handle potential first assistant message (template)
+        if (originalMessages.length > 0 && originalMessages[0].role === 'assistant') {
+            fullConversation.push(originalMessages[0]);
+        }
+
+        // 2. Iterate through user messages and generate fresh responses
+        for (const msg of originalMessages.filter(m => m.role === 'user')) {
+            fullConversation.push(msg);
+            
+            // Generate fresh AI response
+            const response = await generateResponse({
+                conversationHistory: fullConversation,
+                leadContext: null,
+                profileConfig
+            });
+            
+            fullConversation.push({
+                role: 'assistant',
+                text: response.next_message || response.message,
+                step_used: response.step_used
+            });
+        }
+        
+        // Save result and overwrite existing scenario messages
+        saveScenarioResult(parseInt(id), fullConversation);
+        updateScenario(parseInt(id), fullConversation);
+        
+        res.json({
+            scenario_id: id,
+            messages: fullConversation
+        });
+    } catch (err) {
+        console.error('Replay error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/test-scenarios/replay-all - Replay all scenarios
+app.post('/api/test-scenarios/replay-all', async (req, res) => {
+    try {
+        const { profile } = req.body;
+        const scenarios = getScenarios();
+        
+        if (scenarios.length === 0) {
+            return res.json({ results: [] });
+        }
+        
+        // Load profile config
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        const results = [];
+        
+        for (const scenario of scenarios) {
+            try {
+                // Replay each scenario
+                const fullConversation = [];
+                const originalMessages = scenario.messages;
+
+                // 1. Handle potential first assistant message (template)
+                if (originalMessages.length > 0 && originalMessages[0].role === 'assistant') {
+                    fullConversation.push(originalMessages[0]);
+                }
+
+                // 2. Iterate through user messages and generate fresh responses
+                for (const msg of originalMessages.filter(m => m.role === 'user')) {
+                    fullConversation.push(msg);
+                    
+                    const response = await generateResponse({
+                        conversationHistory: fullConversation,
+                        leadContext: null,
+                        profileConfig
+                    });
+                    
+                    fullConversation.push({
+                        role: 'assistant',
+                        text: response.next_message || response.message,
+                        step_used: response.step_used
+                    });
+                }
+                
+                // Save result and overwrite existing scenario messages
+                saveScenarioResult(scenario.id, fullConversation);
+                updateScenario(scenario.id, fullConversation);
+                
+                results.push({
+                    scenario_id: scenario.id,
+                    scenario_name: scenario.name,
+                    messages: fullConversation,
+                    success: true
+                });
+            } catch (err) {
+                results.push({
+                    scenario_id: scenario.id,
+                    scenario_name: scenario.name,
+                    error: err.message,
+                    success: false
+                });
+            }
+        }
+        
+        res.json({ results });
+    } catch (err) {
+        console.error('Replay all error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/outreach-templates - Get outreach templates for scenario testing
+app.get('/api/outreach-templates', async (req, res) => {
+    try {
+        const { profile } = req.query;
+        const profileName = profile || 'melanie';
+        const profileConfig = await loadProfileConfig(profileName);
+        
+        if (!profileConfig || !profileConfig.outreach) {
+            return res.status(404).json({ error: 'Profile config not found' });
+        }
+        
+        res.json({
+            follower: profileConfig.outreach.follower_template || '',
+            like: profileConfig.outreach.like_outreach_template || '',
+            comment: profileConfig.outreach.comment_outreach_template || ''
+        });
+    } catch (err) {
+        console.error('Template error:', err);
         res.status(500).json({ error: err.message });
     }
 });
