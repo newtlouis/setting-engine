@@ -280,3 +280,51 @@ Agents ──────► Application Layer ──────► Domain Laye
 ```
 
 **Règle clé:** Les flèches pointent vers le centre (Domain). Le Domain ne dépend de rien d'externe.
+
+---
+
+## Workflow des Conversations
+
+### Deux concepts distincts
+
+| Champ | Type | Calcul | Usage |
+|-------|------|--------|-------|
+| `conversation_step` | INTEGER (0-8) | **Automatique** via `calculateStep()` | Position dans la séquence d'outreach |
+| `conversation_stage` | TEXT | **Manuel** ou via AI | Étape du funnel de vente (qualification, closing) |
+
+### Progression automatique des steps
+
+```
+Messages envoyés (sans réponse) → conversation_step
+─────────────────────────────────────────────────
+0 messages                      → 0 (NO_CONTACT)
+1 message                       → 1 (FIRST_MESSAGE)
+2 messages                      → 4 (FOLLOW_UP_1)
+3 messages                      → 5 (FOLLOW_UP_2)
+4 messages                      → 6 (FOLLOW_UP_3)
+5 messages                      → 7 (FOLLOW_UP_4)
+6+ messages                     → 8 (FOLLOW_UP_5)
+
+Dès qu'une réponse est reçue:
+1 réponse                       → 2 (FIRST_REPLY)
+2+ réponses                     → 3 (ONGOING)
+```
+
+### Fonctions utilitaires
+
+```javascript
+import {
+  calculateStep,      // Calcule le step depuis sent/received counts
+  needsFollowUp,      // True pour steps 1, 4, 5, 6, 7
+  isAwaitingReply,    // True pour steps 1, 4, 5, 6, 7, 8
+  isFollowUpExhausted,// True uniquement pour step 8
+  isActiveConversation // True pour steps >= 2
+} from './shared/domain/value-objects/ConversationStep.js';
+```
+
+### Synchronisation automatique
+
+Le step est recalculé automatiquement dans:
+- `Lead._syncConversationStep()` - Appelé par `markContacted()` et `markReplied()`
+- `RecordMessage` use case - À chaque message enregistré
+- `MarkMessageSent` use case - À chaque envoi confirmé

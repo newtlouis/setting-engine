@@ -60,7 +60,9 @@ export class Lead {
     this.totalMessagesSent = Number(data.total_messages_sent || data.totalMessagesSent || 0);
     this.totalMessagesReceived = Number(data.total_messages_received || data.totalMessagesReceived || 0);
 
-    // Conversation
+    // Conversation tracking (two distinct concepts):
+    // - conversationStep (INT 0-8): Auto-calculated from message counts (outreach sequence position)
+    // - conversationStage (TEXT): Sales funnel stage for AI context (qualification, closing, etc.)
     this.conversationStep = parseStep(data.conversation_step || data.conversationStep);
     this.conversationStage = data.conversation_stage || data.conversationStage || null;
     this.lastFollowupTemplateId = data.last_followup_template_id || data.lastFollowupTemplateId || null;

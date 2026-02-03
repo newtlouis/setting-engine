@@ -26,10 +26,11 @@ const __dirname = path.dirname(__filename);
 
 /**
  * Finds threads that need a follow-up.
- * Criteria: 
- * - Status is 'conversation'
+ * Criteria:
+ * - Status is 'contacted' (sent message, awaiting reply)
  * - Last message was from 'assistant'
  * - Last message was sent > X hours ago
+ * - conversation_step indicates follow-ups not exhausted
  */
 async function getStaleThreads(db, accountId, hours = 24) {
     const cutoffDate = new Date(Date.now() - (hours * 60 * 60 * 1000)).toISOString();
@@ -37,17 +38,18 @@ async function getStaleThreads(db, accountId, hours = 24) {
     // Query finding leads where the most recent message is from 'assistant' and older than cutoff
     const sql = `
         WITH LastMessages AS (
-            SELECT lead_id, role, sent_at, 
+            SELECT lead_id, role, sent_at,
                    ROW_NUMBER() OVER(PARTITION BY lead_id ORDER BY sent_at DESC) as rn
             FROM conversations
         )
-        SELECT l.*, 
+        SELECT l.*,
                lm.sent_at as last_msg_at,
                lm.role as last_role
         FROM leads l
         JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
         WHERE l.account_id = ?
-          AND l.status = 'conversation'
+          AND l.status = 'contacted'
+          AND l.conversation_step < 8
           AND l.booking_status IS NOT 'completed'
           AND l.is_ignored = 0
           AND lm.role = 'assistant'

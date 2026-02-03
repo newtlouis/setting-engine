@@ -43,24 +43,68 @@ export function isValidStep(step) {
 
 /**
  * Calculate step from message counts
+ *
+ * Logic:
+ * - If lead replied multiple times → ONGOING (3)
+ * - If lead replied once → FIRST_REPLY (2)
+ * - If we sent messages but no reply:
+ *   - 1 message sent → FIRST_MESSAGE (1)
+ *   - 2 messages sent → FOLLOW_UP_1 (4)
+ *   - 3 messages sent → FOLLOW_UP_2 (5)
+ *   - 4 messages sent → FOLLOW_UP_3 (6)
+ *   - 5 messages sent → FOLLOW_UP_4 (7)
+ *   - 6+ messages sent → FOLLOW_UP_5 (8)
+ * - If no contact → NO_CONTACT (0)
+ *
  * @param {number} sentCount
  * @param {number} receivedCount
  * @returns {number}
  */
 export function calculateStep(sentCount, receivedCount) {
+  // Lead has replied - active conversation
   if (receivedCount > 1) return ConversationStep.ONGOING;
   if (receivedCount === 1) return ConversationStep.FIRST_REPLY;
-  if (sentCount > 0) return ConversationStep.FIRST_MESSAGE;
+
+  // No reply yet - calculate based on messages sent
+  if (sentCount >= 6) return ConversationStep.FOLLOW_UP_5;
+  if (sentCount === 5) return ConversationStep.FOLLOW_UP_4;
+  if (sentCount === 4) return ConversationStep.FOLLOW_UP_3;
+  if (sentCount === 3) return ConversationStep.FOLLOW_UP_2;
+  if (sentCount === 2) return ConversationStep.FOLLOW_UP_1;
+  if (sentCount === 1) return ConversationStep.FIRST_MESSAGE;
+
   return ConversationStep.NO_CONTACT;
 }
 
 /**
  * Check if lead needs follow-up (sent message but no reply)
+ * Returns true for steps where we're waiting for a reply and haven't
+ * exhausted all follow-ups yet (steps 1, 4, 5, 6, 7)
  * @param {number} step
  * @returns {boolean}
  */
 export function needsFollowUp(step) {
-  return step === ConversationStep.FIRST_MESSAGE;
+  return step === ConversationStep.FIRST_MESSAGE ||
+         (step >= ConversationStep.FOLLOW_UP_1 && step < ConversationStep.FOLLOW_UP_5);
+}
+
+/**
+ * Check if lead is awaiting reply (any step where no reply received)
+ * @param {number} step
+ * @returns {boolean}
+ */
+export function isAwaitingReply(step) {
+  return step === ConversationStep.FIRST_MESSAGE ||
+         (step >= ConversationStep.FOLLOW_UP_1 && step <= ConversationStep.FOLLOW_UP_5);
+}
+
+/**
+ * Check if all follow-ups have been exhausted
+ * @param {number} step
+ * @returns {boolean}
+ */
+export function isFollowUpExhausted(step) {
+  return step === ConversationStep.FOLLOW_UP_5;
 }
 
 /**
