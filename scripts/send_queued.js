@@ -11,16 +11,10 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { 
-  getDatabase, 
-  getQueuedLeads, 
-  markQueuedLeadSent, 
-  markQueuedLeadFailed,
-  getQueueCount 
-} from '../agents/collector/src/database.js';
-import { 
-  initBrowser, 
-  closeBrowser, 
+import { getContainer } from '../shared/container.js';
+import {
+  initBrowser,
+  closeBrowser,
   sendDM,
   uploadFileInDM,
   goToProfileAndOpenDM,
@@ -31,7 +25,6 @@ import {
   goToDirectDM
 } from '../agents/dmresponder/src/scraper.js';
 import { fullUpsertLead, addMessage } from '../agents/dmresponder/src/db_integration.js';
-import { getOrCreateAccount } from '../agents/collector/src/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,20 +64,20 @@ async function main() {
   console.log(`   Mode: ${manual ? 'MANUAL REVIEW (Type but don\'t send)' : 'AUTOMATIC SEND'}`);
   console.log('========================================\n');
 
-  // Initialize DB
-  const dbPath = path.join(__dirname, '..', 'agents', 'collector', 'permanent-data', 'leads.db');
-  await getDatabase(dbPath);
+  // Initialize container
+  const container = await getContainer();
+  const outreachQueue = container.repositories.outreachQueue;
 
-  const pendingCount = getQueueCount();
-  console.log(`📊 Queue status: ${pendingCount} pending leads`);
+  const stats = await outreachQueue.getStats();
+  console.log(`📊 Queue status: ${stats.pending} pending leads`);
 
-  if (pendingCount === 0) {
+  if (stats.pending === 0) {
     console.log('✅ Queue is empty. Nothing to send.');
     return;
   }
 
   // Get leads to process
-  const leadsToSend = getQueuedLeads(limit);
+  const leadsToSend = await outreachQueue.getPending(limit);
   console.log(`📩 Fetched ${leadsToSend.length} leads to process\n`);
 
   if (leadsToSend.length === 0) {
@@ -94,13 +87,13 @@ async function main() {
 
   // Initialize browser
   console.log('🌐 Initializing browser...');
-  const browserResult = await initBrowser({ 
+  const browserResult = await initBrowser({
     profile,
-    headless: false 
+    headless: false
   });
   const page = browserResult.page;
 
-  const account = getOrCreateAccount(profile);
+  const account = await container.repositories.account.getOrCreate(profile);
   let sentCount = 0;
   let failedCount = 0;
 
@@ -108,26 +101,26 @@ async function main() {
     for (const lead of leadsToSend) {
       console.log(`\n--- Processing: @${lead.username} ---`);
       console.log(`   Source: ${lead.source}`);
-      console.log(`   Message: "${lead.prepared_message.substring(0, 50)}..."`);
+      console.log(`   Message: "${lead.preparedMessage.substring(0, 50)}..."`);
 
       try {
         // Determine page to use (Current or New Tab for manual)
         const currentPage = manual ? await createNewTab() : page;
         
         // Navigate to profile and open DM
-        const profileUrl = lead.profile_url || `https://www.instagram.com/${lead.username}/`;
+        const profileUrl = lead.profileUrl || `https://www.instagram.com/${lead.username}/`;
         
         // Use Direct DM URL if available for speed
         let openResult;
-        if (lead.dm_url && lead.dm_url.includes('/t/')) {
-            openResult = await goToDirectDM(currentPage, lead.dm_url);
+        if (lead.dmUrl && lead.dmUrl.includes('/t/')) {
+            openResult = await goToDirectDM(currentPage, lead.dmUrl);
         } else {
             openResult = await goToProfileAndOpenDM(currentPage, profileUrl);
         }
         
         if (!openResult.success) {
             console.log(`   ❌ Failed to open DM: ${openResult.error}`);
-            markQueuedLeadFailed(lead.username, openResult.error);
+            await outreachQueue.markFailed(lead.username, openResult.error);
             failedCount++;
             if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
@@ -136,42 +129,42 @@ async function main() {
         // Send or Type DM
         let dmResult;
         if (manual) {
-            dmResult = await typeInOpenTab(currentPage, lead.prepared_message);
+            dmResult = await typeInOpenTab(currentPage, lead.preparedMessage);
             // Register tab for manual review
-            registerOpenTab(lead.username, currentPage, lead.prepared_message);
+            registerOpenTab(lead.username, currentPage, lead.preparedMessage);
         } else {
-            dmResult = await sendDM(currentPage, lead.username, lead.prepared_message);
+            dmResult = await sendDM(currentPage, lead.username, lead.preparedMessage);
         }
 
         if (dmResult.success) {
           console.log(manual ? `   ✅ Message typed for review!` : `   ✅ Message sent successfully!`);
 
           // Handle resource upload if present (even in manual mode it's helpful to pre-upload)
-          if (lead.resource_file) {
-            console.log(`   📎 Uploading resource: ${lead.resource_file}`);
-            const uploadResult = await uploadFileInDM(currentPage, lead.resource_file);
+          if (lead.resourceFile) {
+            console.log(`   📎 Uploading resource: ${lead.resourceFile}`);
+            const uploadResult = await uploadFileInDM(currentPage, lead.resourceFile);
             if (!uploadResult.success) {
               console.log(`   ⚠️ Resource upload failed: ${uploadResult.error}`);
             }
           }
 
           // Mark as sent in queue
-          markQueuedLeadSent(lead.username);
+          await outreachQueue.markSent(lead.username);
 
           // Update lead status in main leads table
           await fullUpsertLead(lead.username, account.id, {
             status: 'contacted',
-            dm_url: dmResult.dmUrl || lead.dm_url,
+            dm_url: dmResult.dmUrl || lead.dmUrl,
             conversation_step: 1
           });
 
           // Record in conversation history
-          await addMessage(lead.username, 'assistant', lead.prepared_message, lead.source, account.id);
+          await addMessage(lead.username, 'assistant', lead.preparedMessage, lead.source, account.id);
 
           sentCount++;
         } else {
           console.log(`   ❌ Failed to send: ${dmResult.error}`);
-          markQueuedLeadFailed(lead.username, dmResult.error);
+          await outreachQueue.markFailed(lead.username, dmResult.error);
           
           // Sync failure to main leads table
           await fullUpsertLead(lead.username, account.id, {
@@ -187,7 +180,7 @@ async function main() {
 
       } catch (err) {
         console.error(`   ❌ Error processing @${lead.username}: ${err.message}`);
-        markQueuedLeadFailed(lead.username, err.message);
+        await outreachQueue.markFailed(lead.username, err.message);
         failedCount++;
       }
     }
@@ -200,12 +193,13 @@ async function main() {
     await closeBrowser().catch(() => {});
   }
 
+  const finalStats = await outreachQueue.getStats();
   console.log('\n========================================');
   console.log('   SEND COMPLETE');
   console.log('========================================');
   console.log(`   Sent: ${sentCount}`);
   console.log(`   Failed: ${failedCount}`);
-  console.log(`   Remaining in queue: ${getQueueCount()}`);
+  console.log(`   Remaining in queue: ${finalStats.pending}`);
   console.log('========================================\n');
 }
 

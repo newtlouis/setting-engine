@@ -86,6 +86,8 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
         firstName: row.first_name,
         source: row.source,
         status: row.status,
+        resourceFile: row.resource_file,
+        resourceUrl: row.resource_url,
         createdAt: row.created_at
       }));
     },

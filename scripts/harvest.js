@@ -13,7 +13,7 @@
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { getDatabase, getQueueCount } from '../agents/collector/src/database.js';
+import { getContainer } from '../shared/container.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,11 +76,16 @@ async function main() {
   console.log(`   Priority: Followers → Engagement → Prospector`);
   console.log('========================================\n');
 
-  // Initialize DB to check queue count
-  const dbPath = path.join(__dirname, '..', 'agents', 'collector', 'permanent-data', 'leads.db');
-  await getDatabase(dbPath);
+  // Initialize container for queue access
+  const container = await getContainer();
 
-  let initialCount = getQueueCount();
+  // Helper to get pending queue count
+  const getQueueCount = async () => {
+    const stats = await container.repositories.outreachQueue.getStats();
+    return stats.pending;
+  };
+
+  let initialCount = await getQueueCount();
   let currentCount = initialCount;
   console.log(`📊 Current queue: ${currentCount} pending leads`);
 
@@ -93,7 +98,7 @@ async function main() {
     console.error(`⚠️ Followers phase error: ${err.message}`);
   }
 
-  currentCount = getQueueCount();
+  currentCount = await getQueueCount();
   let newLeads = currentCount - initialCount;
   console.log(`\n📊 Followers added: ${newLeads} leads (Total queue: ${currentCount})`);
 
@@ -111,7 +116,7 @@ async function main() {
     console.error(`⚠️ Engagement phase error: ${err.message}`);
   }
 
-  currentCount = getQueueCount();
+  currentCount = await getQueueCount();
   console.log(`\n📊 After Engagement: ${currentCount} total pending leads`);
 
   if (currentCount >= target) {
@@ -128,7 +133,7 @@ async function main() {
     console.error(`⚠️ Prospector phase error: ${err.message}`);
   }
 
-  currentCount = getQueueCount();
+  currentCount = await getQueueCount();
   console.log(`\n📊 After Prospector: ${currentCount} total pending leads`);
 
   return finish(currentCount);

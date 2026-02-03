@@ -1,10 +1,8 @@
-
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Database from 'better-sqlite3';
-import { getDatabase } from '../collector/src/database.js';
 import dotenv from 'dotenv';
+import { getContainer } from '../../shared/container.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,11 +41,13 @@ const DB_PATH = path.join(__dirname, '..', 'collector', 'permanent-data', 'leads
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Initialize DB safely
+// Initialize container and get DB
 let db;
+let container;
 try {
-    db = await getDatabase(DB_PATH);
-    console.log('✅ Connected to SQLite via shared module.');
+    container = await getContainer();
+    db = container.getDb();
+    console.log('✅ Connected to SQLite via container.');
 } catch (err) {
     console.error('❌ Database initialization failed:', err.message);
 }
@@ -384,28 +384,25 @@ app.post('/api/leads/:username/status', (req, res) => {
 app.post('/api/leads/:username/requeue', async (req, res) => {
     try {
         const { username } = req.params;
-        
+
         // 1. Get lead data
         const lead = db.prepare('SELECT * FROM leads WHERE username = ?').get(username);
         if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-        // 2. Import queue function dynamically
-        const { addToOutreachQueue } = await import('../collector/src/database.js');
-        
-        // 3. Prepare queue item
+        // 2. Prepare queue item (camelCase for repository)
         const queueItem = {
             username: lead.username,
-            profile_url: lead.profile_url,
-            dm_url: lead.dm_url,
-            prepared_message: "Message manuel à rédiger...", // Default placeholder
-            first_name: lead.full_name ? lead.full_name.split(' ')[0] : null,
+            profileUrl: lead.profile_url,
+            dmUrl: lead.dm_url,
+            preparedMessage: "Message manuel à rédiger...", // Default placeholder
+            firstName: lead.full_name ? lead.full_name.split(' ')[0] : null,
             source: 'manual_requeue'
         };
 
-        // 4. Add to queue (upsert logic handles reset)
-        addToOutreachQueue(queueItem);
+        // 3. Add to queue via repository
+        await container.repositories.outreachQueue.add(queueItem);
 
-        // 5. Update main lead status
+        // 4. Update main lead status
         db.prepare("UPDATE leads SET status = 'queued', is_ignored = 0, booking_status = NULL, updated_at = datetime('now') WHERE username = ?")
           .run(username);
 
