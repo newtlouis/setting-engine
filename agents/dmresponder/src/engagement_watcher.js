@@ -35,7 +35,13 @@ import path from 'path';
 const CONFIG = {
   NOTIFICATION_SELECTORS: {
     LIKE_TEXT: ['liked your', 'aimé votre', 'aimé votre reel', 'aimé votre publication', 'aimé votre photo', 'liked your reel', 'liked your photo'],
-    COMMENT_TEXT: ['commented on', 'commenté sur', 'a commenté', 'commenté :', 'commented:']
+    COMMENT_TEXT: ['commented on', 'commenté sur', 'a commenté', 'commenté :', 'commented:'],
+    IGNORE_TEXT: [
+        'à répondu à votre commentaire', 
+        'replied to your comment',
+        'à aimé votre commentaire',
+        'liked your comment'
+    ]
   },
   MAX_POSTS_PER_SESSION: 8,
   MAX_LEADS_PER_POST: 25
@@ -77,8 +83,15 @@ async function scanForEngagement(page, options = {}) {
 
         for (const item of allItems) {
             const text = item.innerText || '';
-            const isLike = selectors.LIKE_TEXT.some(t => text.toLowerCase().includes(t));
-            const isComment = selectors.COMMENT_TEXT.some(t => text.toLowerCase().includes(t));
+            const lowerText = text.toLowerCase();
+            
+            // Check ignore list first
+            if (selectors.IGNORE_TEXT && selectors.IGNORE_TEXT.some(t => lowerText.includes(t))) {
+                continue;
+            }
+
+            const isLike = selectors.LIKE_TEXT.some(t => lowerText.includes(t));
+            const isComment = selectors.COMMENT_TEXT.some(t => lowerText.includes(t));
             
             if (isLike || isComment) {
                 // Section filtering
