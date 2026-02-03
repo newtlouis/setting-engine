@@ -228,6 +228,23 @@
                         </div>
                     </div>
 
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+                        <label class="form-label" style="margin-bottom: 8px; font-weight: 600;">Actions Manuelles</label>
+                        
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <input type="checkbox" id="fieldIsIgnored" style="margin-right: 8px;">
+                            <label for="fieldIsIgnored" style="font-size: 13px; color: var(--text-primary);">Ignorer ce lead (Pause)</label>
+                        </div>
+
+                        <button id="btnForceRequeue" class="btn-filter center" 
+                                style="background: var(--warning); color: black; border: none; width: 100%; justify-content: center;">
+                            Put back to Queue (Force-Retry)
+                        </button>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; text-align: center;">
+                            Remet le lead en 'queued' pour une nouvelle tentative d'envoi.
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label class="form-label">Étape du Workflow (1-6)</label>
                         <div style="display: flex; gap: 8px;">

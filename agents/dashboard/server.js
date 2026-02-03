@@ -380,6 +380,42 @@ app.post('/api/leads/:username/status', (req, res) => {
     }
 });
 
+// POST /api/leads/:username/requeue - Force add to outreach queue
+app.post('/api/leads/:username/requeue', async (req, res) => {
+    try {
+        const { username } = req.params;
+        
+        // 1. Get lead data
+        const lead = db.prepare('SELECT * FROM leads WHERE username = ?').get(username);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+        // 2. Import queue function dynamically
+        const { addToOutreachQueue } = await import('../collector/src/database.js');
+        
+        // 3. Prepare queue item
+        const queueItem = {
+            username: lead.username,
+            profile_url: lead.profile_url,
+            dm_url: lead.dm_url,
+            prepared_message: "Message manuel à rédiger...", // Default placeholder
+            first_name: lead.full_name ? lead.full_name.split(' ')[0] : null,
+            source: 'manual_requeue'
+        };
+
+        // 4. Add to queue (upsert logic handles reset)
+        addToOutreachQueue(queueItem);
+
+        // 5. Update main lead status
+        db.prepare("UPDATE leads SET status = 'queued', is_ignored = 0, booking_status = NULL, updated_at = datetime('now') WHERE username = ?")
+          .run(username);
+
+        res.json({ success: true, message: `Lead @${username} re-queued successfully` });
+    } catch (err) {
+        console.error('Requeue error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============================================
 // SCENARIO TESTING API
 // ============================================
