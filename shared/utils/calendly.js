@@ -79,10 +79,48 @@ export async function fetchAvailability(profileName) {
         });
 
         // The response contains 'collection' of available times
-        return (slotsResponse.data.collection || []).slice(0, 10).map(slot => ({
+        const allSlots = (slotsResponse.data.collection || []).map(slot => ({
             start_time: slot.start_time,
             status: "available"
         }));
+
+        if (allSlots.length === 0) return { primary: [], backup: [] };
+
+        // --- Logic: Group by Day and Sort by latest time ---
+        const slotsByDay = {}; // { '2026-02-04': [slot1, slot2], ... }
+        
+        allSlots.forEach(slot => {
+            const dateStr = slot.start_time.split('T')[0];
+            if (!slotsByDay[dateStr]) slotsByDay[dateStr] = [];
+            slotsByDay[dateStr].push(slot);
+        });
+
+        const sortedDays = Object.keys(slotsByDay).sort(); // Sorted by date asc
+        
+        // Pick primary: One latest slot from each of the first 2 days
+        const primary = [];
+        for (let i = 0; i < Math.min(2, sortedDays.length); i++) {
+            const day = sortedDays[i];
+            const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time)); // Latest first
+            primary.push(sortedTimes[0]);
+        }
+
+        // Pick backup: Up to 3 more slots from remaining availability
+        const backup = [];
+        const usedIds = new Set(primary.map(s => s.start_time));
+        
+        // Loop through days again to fill backup
+        for (const day of sortedDays) {
+            const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
+            for (const slot of sortedTimes) {
+                if (!usedIds.has(slot.start_time) && backup.length < 3) {
+                    backup.push(slot);
+                    usedIds.add(slot.start_time);
+                }
+            }
+        }
+
+        return { primary, backup };
 
     } catch (error) {
         console.error(`[Calendly] Error fetching availability for ${profileName}:`, error.response?.data || error.message);

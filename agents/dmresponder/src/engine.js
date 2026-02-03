@@ -117,16 +117,23 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       try {
           const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
           const profileName = profileConfig?.profile_name || 'default';
-          const slots = await fetchAvailability(profileName);
+          const { primary, backup } = await fetchAvailability(profileName);
           
-          if (slots.length > 0) {
-              const slotsText = slots.map(s => {
+          if (primary && primary.length > 0) {
+              const formatSlot = (s) => {
                   const d = new Date(s.start_time);
                   return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-              }).join(', ');
+              };
+
+              const primaryText = primary.map(formatSlot).join(', ');
+              const backupText = backup.map(formatSlot).join(', ');
               
-              contextDescription += `\n\nDISPONIBILITÉS CALENDLY RÉELLES (Propose-les si le lead veut un appel) :\n- ${slotsText}\n`;
-              contextDescription += `\nINSTRUCTION : Si le lead accepte l'appel, propose un ou deux de ces créneaux. Une fois qu'il a choisi, demande-lui son EMAIL et son TÉLÉPHONE pour confirmer le RDV.\n`;
+              contextDescription += `\n\nDISPONIBILITÉS CALENDLY RÉELLES :\n`;
+              contextDescription += `- PROPOSITION PRIMAIRE (À proposer d'abord) : ${primaryText}\n`;
+              if (backupText) {
+                  contextDescription += `- PROPOSITION DE SECOURS (Si elle refuse les premiers) : ${backupText}\n`;
+              }
+              contextDescription += `\nINSTRUCTION : Si le lead accepte l'appel, propose d'abord les deux créneaux "PRIMAIRE". S'il dit qu'il ne peut pas ces jours-là, propose alors les 3 créneaux "DE SECOURS". Une fois qu'il a choisi, demande-lui son EMAIL et son TÉLÉPHONE pour confirmer le RDV.\n`;
           }
       } catch (e) {
           console.error("[Engine] Failed to fetch Calendly availability:", e.message);
