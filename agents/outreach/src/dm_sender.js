@@ -1,14 +1,14 @@
 /**
  * Instagram DM Sender Module
- * 
+ *
  * Handles sending DMs via Playwright with proper rate limiting and safety features.
- * 
+ *
  * WORKFLOW:
  * - Opens one "working" tab to check profiles
  * - For each contactable profile: opens a NEW tab, types message, keeps tab open
  * - Skipped profiles: just changes URL in working tab
  * - At the end: browser stays open so user can review and send messages manually
- * 
+ *
  * CRITICAL SAFETY NOTES:
  * - This module requires manual login (no automated login)
  * - Rate limits are enforced to avoid account restrictions
@@ -16,73 +16,24 @@
  * - Default mode is PREVIEW (no actual sending)
  */
 
-import { chromium } from 'playwright';
 import { CONFIG } from './config.js';
 import { qualifyLead } from './qualify_lead.js';
 import { extractFirstName } from './templates.js';
-import { getCredentialsForProfile } from '../../../shared/credentials.js';
-import { createInterface } from 'readline';
-import { cleanupBrowserLocks, getBrowserDataDir } from '../../../shared/paths.js';
-import { getStealthContextOptions, applyStealthToPage, humanDelay, TIMING } from '../../../shared/stealth.js';
-import { verifyProfilePage, verifyHomePage, checkForChallenge } from '../../../shared/pageVerification.js';
-import { gotoWithRetry } from '../../collector/src/utils.js';
+import { getBrowserDataDir } from '../../../shared/paths.js';
+import { applyStealthToPage } from '../../../shared/stealth.js';
+import { verifyProfilePage, checkForChallenge } from '../../../shared/pageVerification.js';
+import { BrowserService, delay, typeHumanLike, gotoWithRetry } from '../../../shared/browser/index.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
 let workingPage = null;  // Reusable tab for checking profiles
 let messageTabs = [];    // Tabs with typed messages (kept open)
-
-/**
- * Wait for a random delay between min and max
- */
-/**
- * Wait for a random delay between min and max
- */
-function delay(min, max) {
-  const ms = Math.floor(Math.random() * (max - min + 1)) + min;
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Type text with human-like variations
- * - Variable speeds
- * - Pauses on punctuation/spaces
- * - Occasional micro-pauses
- */
-async function typeHumanLike(page, text) {
-  // Use for...of to correctly iterate over Unicode code points (preserving emojis)
-  for (const char of text) {
-    
-    // Base delay: faster for common letters, slower for symbols
-    let charDelay = 30 + Math.random() * 50;
-    
-    // Longer pauses for punctuation
-    if (['.', '!', '?', '\n'].includes(char)) {
-      charDelay += Math.random() * 400 + 200; 
-    } else if ([',', ';', ':'].includes(char)) {
-      charDelay += Math.random() * 200 + 100;
-    } else if (char === ' ') {
-      charDelay += Math.random() * 50 + 20;
-    }
-    
-    // Occasional "thinking" pause (1% chance)
-    if (Math.random() < 0.01) {
-      charDelay += Math.random() * 1000 + 500;
-    }
-    
-    await page.keyboard.type(char);
-    await delay(charDelay * 0.8, charDelay * 1.2);
-  }
-}
-
-/**
- * Check if page shows any challenge or rate limit
- */
+let browserSession = null; // BrowserService session reference
 
 /**
  * Initialize browser with existing session
- * Requires manual login on first run
- * 
+ * Uses BrowserService for centralized browser management
+ *
  * @param {Object} options
  * @returns {Promise<{browser, context, page}>}
  */
@@ -91,168 +42,31 @@ export async function initBrowser(options = {}) {
     userDataDir = './browser-data',
     headless = CONFIG.HEADLESS
   } = options;
-  
+
   // Extract profile name from userDataDir if possible
   const profileMatch = userDataDir.match(/browser-data-(.+)$/);
   const profile = profileMatch ? profileMatch[1] : 'default';
-  
-  console.log('\n=== Initializing Browser ===');
-  console.log(`   User data: ${userDataDir}`);
-  console.log(`   Headless: ${headless}`);
-  
-  // 🧹 Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
-  cleanupBrowserLocks(profile);
-  
+
   const timeout = CONFIG.PAGE_TIMEOUT || 90000;
-  
-  const stealthOptions = getStealthContextOptions(userDataDir, {
+
+  // Use BrowserService for initialization
+  browserSession = await BrowserService.initSession({
+    profile,
     headless,
-    slowMo: CONFIG.SLOW_MO,
     timeout,
-    args: ['--start-maximized']
+    slowMo: CONFIG.SLOW_MO,
+    autoLogin: true
   });
-  
-  browserContext = await chromium.launchPersistentContext(userDataDir, stealthOptions);
-  
+
+  // Get references for module-level state
+  browserContext = browserSession.getContext();
+  workingPage = browserSession.getWorkingPage();
+
   // Reset tab tracking
   messageTabs = [];
-  
-  // Create working page (for checking profiles)
-  workingPage = await browserContext.newPage();
-  workingPage.setDefaultTimeout(timeout);
-  
-  // Apply stealth init script
-  await applyStealthToPage(workingPage);
-  
-  // Navigate to Instagram to check login status
-  console.log(`   Loading Instagram (timeout: ${timeout/1000}s)...`);
-  try {
-    await gotoWithRetry(workingPage, 'https://www.instagram.com/', { 
-      waitUntil: 'domcontentloaded',
-      timeout: timeout
-    });
-  } catch (error) {
-    console.log(`   ⚠️ Initial navigation error (non-fatal): ${error.message}`);
-  }
-  await delay(2000, 3000);
 
-  // Check for challenge after loading home
-  await checkForChallenge(workingPage);
-  
-  // Check if logged in
-  const isLoggedIn = await workingPage.evaluate(() => {
-    // Check for elements that only appear when logged in
-    return !!(
-      document.querySelector('svg[aria-label="Home"]') ||
-      document.querySelector('a[href="/direct/inbox/"]') ||
-      document.querySelector('[aria-label="New post"]')
-    );
-  });
-  
-  if (!isLoggedIn) {
-    const { username, password } = getCredentialsForProfile(profile);
-    
-    if (!username || !password) {
-      console.log('\n   ⚠️  MANUAL LOGIN REQUIRED');
-      console.log('   (Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login)');
-      console.log('   Please log in to Instagram in the browser window.');
-      console.log('   Press Enter in this terminal when done...');
-      
-      await new Promise(resolve => {
-        process.stdin.once('data', resolve);
-      });
-    } else {
-      console.log('   Logging in automatically...');
-      
-      // --- COOKIE POPUP HANDLING ---
-      try {
-        console.log('   Checking for cookie consent popup...');
-        const cookieSelectors = [
-          'button:has-text("Allow all cookies")',
-          'button:has-text("Autoriser tous les cookies")',
-          'button:has-text("Allow essential and optional cookies")',
-          'button:has-text("Uniquement les cookies essentiels")',
-          'button._a9--._ap36._asz1', 
-          'button._a9--._a9_0',
-          'div[role="dialog"] button:has-text("Allow")',
-          'div[role="dialog"] button:has-text("Autoriser")'
-        ];
-
-        let cookieHandled = false;
-        for (const selector of cookieSelectors) {
-          try {
-            const button = await workingPage.$(selector);
-            if (button && await button.isVisible()) {
-              console.log(`   Found cookie button: ${selector}`);
-              await button.click();
-              cookieHandled = true;
-              await delay(1000, 1500);
-              break;
-            }
-          } catch (e) {
-            // Ignore
-          }
-        }
-
-        if (!cookieHandled) {
-          // Fallback: JavaScript click
-          await workingPage.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('button'));
-            const target = buttons.find(b => 
-              b.innerText.includes('Allow all cookies') || 
-              b.innerText.includes('Autoriser tous les cookies') ||
-              b.innerText.includes('Decline optional cookies') ||
-              b.innerText.includes('Refuser')
-            );
-            if (target) target.click();
-          });
-          await delay(1000, 1500);
-        }
-      } catch (error) {
-        console.log('   Cookie popup check failed (or none present)');
-      }
-      // ----------------------------
-      
-      // Wait for login form
-      try {
-        await workingPage.waitForSelector('input[name="username"]', { timeout: 10000 });
-      } catch (e) {
-        console.log('   Login form not found, waiting longer...');
-        await delay(2000, 3000);
-      }
-      
-      // Type credentials
-      await workingPage.type('input[name="username"]', username, { delay: 50 + Math.random() * 100 });
-      await delay(500, 1000);
-      await workingPage.type('input[name="password"]', password, { delay: 50 + Math.random() * 100 });
-      await workingPage.click('button[type="submit"]');
-      
-      // Wait for login to complete
-      try {
-        await workingPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
-      } catch (e) {
-        console.log('   Login navigation slow, continuing...');
-      }
-      await delay(2000, 3000);
-      
-      // Handle "Save Login Info?" popup
-      try {
-        const notNowBtn = workingPage.locator('text=Not Now').or(workingPage.locator('button:has-text("Not Now")'));
-        await notNowBtn.click({ timeout: 5000 });
-        console.log('   Dismissed "Save Login" popup.');
-      } catch (e) {
-        // No popup
-      }
-      
-      console.log('   ✅ Login successful!');
-    }
-    
-    await workingPage.reload({ waitUntil: 'domcontentloaded' });
-    await delay(2000, 3000);
-  }
-  
   console.log('   Browser ready\n');
-  
+
   return { browser: browserContext, page: workingPage };
 }
 

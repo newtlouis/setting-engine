@@ -1,22 +1,19 @@
 /**
  * Collector Agent Main Controller
- * 
+ *
  * Orchestrates the discovery and scraping workflow for Instagram data collection.
  * Outputs data to CSV files for further processing.
  */
 
-import { chromium } from 'playwright';
 import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
 import { scrapePostComments } from './scrape_post.js';
-import { ensureOutputDir, writePosts, writeComments, delay, autoLoginInstagram, gotoWithRetry } from './utils.js';
+import { ensureOutputDir, writePosts, writeComments } from './utils.js';
 import { CONFIG } from './config.js';
-import { createInterface } from 'readline';
 import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
 import { initDatabase, getOrCreateAccount } from './database.js';
-import { getStealthContextOptions, applyStealthToPage } from '../../../shared/stealth.js';
-import { cleanupBrowserLocks } from '../../../shared/paths.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
+import { BrowserService, delay } from '../../../shared/browser/index.js';
 import path from 'path';
 
 /**
@@ -35,23 +32,6 @@ export async function runCollector(config) {
   console.log('🚀 Starting Instagram data collection...\n');
 
   const profile = process.env.IG_PROFILE || 'anonymous';
-  
-  // 🧹 Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
-  cleanupBrowserLocks(profile);
-
-  // Launch persistent context with stealth options
-  const options = getStealthContextOptions(CONFIG.USER_DATA_DIR, {
-    headless: config.headless,
-    slowMo: CONFIG.SLOW_MO,
-    diagnostic: config.diagnostic
-  });
-  
-  const context = await chromium.launchPersistentContext(CONFIG.USER_DATA_DIR, options);
-
-  const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
-  
-  // Apply stealth init script to hide automation markers
-  await applyStealthToPage(page);
 
   // Ensure output directory exists
   await ensureOutputDir(config.outputDir);
@@ -65,61 +45,24 @@ export async function runCollector(config) {
   const account = getOrCreateAccount(profileName);
   console.log(`📁 Account: ${account.name} (id: ${account.id})\n`);
 
+  // Initialize browser session with BrowserService
+  const session = await BrowserService.initSession({
+    profile,
+    headless: config.headless,
+    timeout: CONFIG.PAGE_TIMEOUT || 90000,
+    slowMo: CONFIG.SLOW_MO,
+    autoLogin: true,
+    diagnostic: config.diagnostic
+  });
+
+  const context = session.getContext();
+  const page = session.getWorkingPage();
+
   let allPosts = [];
   let allComments = [];
 
   try {
-    // Step 1: Login (Auto or Manual)
-    const hasCredentials = CONFIG.INSTAGRAM_USERNAME && CONFIG.INSTAGRAM_PASSWORD;
-    
-    if (hasCredentials) {
-      // Auto-login with credentials from .env
-      const loginSuccess = await autoLoginInstagram(page, CONFIG.INSTAGRAM_USERNAME, CONFIG.INSTAGRAM_PASSWORD);
-      
-      if (!loginSuccess) {
-        console.log('\n⚠️  Auto-login failed. Falling back to manual login...\n');
-        
-        // Fallback to manual login
-        console.log('📱 Opening Instagram...');
-        await gotoWithRetry(page, 'https://www.instagram.com/', {
-          waitUntil: 'domcontentloaded',
-          timeout: 60000
-        });
-
-        console.log('\n⏸️  Please log in manually in the browser window.');
-        console.log('   Complete any 2FA or security checks.');
-        console.log('   Press ENTER here when you see your Instagram feed...\n');
-
-        await waitForEnter();
-
-        await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
-          throw new Error('Login verification failed. Please ensure you are logged in.');
-        });
-
-        console.log('✅ Login successful!\n');
-      }
-    } else {
-      // Manual login (no credentials provided)
-      console.log('📱 Opening Instagram...');
-      console.log('💡 Tip: Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD in .env for auto-login\n');
-      
-      await gotoWithRetry(page, 'https://www.instagram.com/accounts/login/', {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
-      });
-
-      console.log('⏸️  Please log in manually in the browser window.');
-      console.log('   Complete any 2FA or security checks.');
-      console.log('   Press ENTER here when you see your Instagram feed...\n');
-
-      await waitForEnter();
-
-      await page.waitForURL(/instagram\.com\/(reels\/)?(\?|$)/, { timeout: 10000 }).catch(() => {
-        throw new Error('Login verification failed. Please ensure you are logged in.');
-      });
-
-      console.log('✅ Login successful!\n');
-    }
+    // Login is now handled by BrowserService.initSession()
 
     // Load already-scraped posts tracking EARLY to filter duplicates during discovery
     const trackingFile = path.join(config.outputDir, '..', 'permanent-data', 'scraped_posts.json');
@@ -283,7 +226,7 @@ export async function runCollector(config) {
     console.error('\n❌ Error during collection:', error.message);
     throw error;
   } finally {
-    await context.close();
+    await session.close();
   }
 }
 
