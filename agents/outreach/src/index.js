@@ -15,28 +15,30 @@ import { CONFIG, OUTREACH_CRITERIA } from './config.js';
 import { getBrowserDataDir } from '../../../shared/paths.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
 import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
-// ExcelCRM removed
-
-
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { getContainer } from '../../../shared/container.js';
 
-// Import database from collector (shared)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Dynamic import for database (ESM compatibility)
+// Container instance (lazy-loaded)
+let container = null;
+
+// Legacy db references for backward compatibility
 let db = null;
 let dbFunctions = null;
-// getExcelTracker removed
-
 
 async function loadDatabase() {
-  if (dbFunctions) return dbFunctions;
-  
+  if (container) return dbFunctions;
+
+  // Initialize container (handles database + repositories)
+  container = await getContainer(CONFIG.DB_PATH);
+  db = container.getDb();
+
+  // Load legacy dbFunctions for backward compatibility
   const dbModule = await import(path.join(__dirname, '..', '..', 'collector', 'src', 'database.js'));
-  await dbModule.initDatabase(CONFIG.DB_PATH);
-  db = await dbModule.getDatabase();
   dbFunctions = dbModule;
+
   return dbFunctions;
 }
 
@@ -361,12 +363,26 @@ export async function runOutreach(options = {}) {
             maxPerSession: remaining, // Only try to fill the gap
             profileConfig, // Pass profile config for custom qualification prompt
             onConversationReady: async ({ username, dmUrl, message, typedAt }) => {
-                // Same metadata recording logic...
-                 try {
+                // Record message using use case
+                try {
                   await loadDatabase();
-                  const preview = (message || '').trim();
-                  const messagePreview = preview.length > 280 ? `${preview.slice(0, 277)}...` : preview;
+
+                  // Use MarkMessageSent use case (records message + updates lead)
+                  const markResult = await container.useCases.markMessageSent.execute({
+                    username,
+                    messageText: message,
+                    dmUrl,
+                    accountId
+                  });
+
+                  if (!markResult.success) {
+                    console.error(`Failed to record message for @${username}:`, markResult.error);
+                  }
+
+                  // Legacy: Also update dm_thread for backward compatibility
                   if (dbFunctions?.upsertDmThread) {
+                    const preview = (message || '').trim();
+                    const messagePreview = preview.length > 280 ? `${preview.slice(0, 277)}...` : preview;
                     dbFunctions.upsertDmThread({
                       username,
                       dm_url: dmUrl,
@@ -375,15 +391,6 @@ export async function runOutreach(options = {}) {
                       typed_at: typedAt || new Date().toISOString()
                     });
                   }
-
-                  // RECORD MESSAGE IN CONVERSATION HISTORY
-                  if (dbFunctions?.addConversationMessage) {
-                    const lead = dbFunctions.getLeadByUsername(username, accountId);
-                    if (lead) {
-                      dbFunctions.addConversationMessage(lead.id, 'assistant', message, 'outreach');
-                    }
-                  }
-                  // Excel tracking removed
 
                 } catch (error) {
                   console.error(`Failed to record conversation metadata for @${username}:`, error.message);

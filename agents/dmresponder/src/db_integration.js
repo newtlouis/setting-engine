@@ -9,6 +9,7 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getContainer } from '../../../shared/container.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,17 +20,21 @@ const DB_MODULE_PATH = path.join(__dirname, '..', '..', 'collector', 'src', 'dat
 
 let db = null;
 let dbFunctions = null;
+let container = null;
 
 /**
  * Initialize database connection
  */
 export async function initDB() {
   if (dbFunctions) return dbFunctions;
-  
+
   try {
+    // Initialize container (handles database + repositories + use cases)
+    container = await getContainer(DB_PATH);
+    db = container.getDb();
+
+    // Load legacy dbFunctions for backward compatibility
     const dbModule = await import(DB_MODULE_PATH);
-    await dbModule.initDatabase(DB_PATH);
-    db = await dbModule.getDatabase();
     dbFunctions = dbModule;
     return dbFunctions;
   } catch (error) {
@@ -135,31 +140,37 @@ function extractPainPointsFromComments(comments) {
 
 /**
  * Get conversation history for a lead
- * 
+ *
  * @param {string} username - Instagram username
+ * @param {number} accountId - Optional account ID
  * @returns {Promise<Array>} Conversation history
  */
-export async function getConversationHistory(username) {
+export async function getConversationHistory(username, accountId = null) {
   await initDB();
-  if (!db) return [];
-  
-  const lead = dbFunctions.getLeadByUsername(username);
-  if (!lead) return [];
-  
-  const messages = dbFunctions.getConversation(lead.id);
-  
-  // Convert to format expected by engine
-  return messages.map(msg => ({
-    role: msg.role,
-    text: msg.message_text,
-    type: msg.message_type,
-    timestamp: msg.sent_at
-  }));
+  if (!db || !container) return [];
+
+  try {
+    // Use GetConversationHistory use case
+    const result = await container.useCases.getConversationHistory.execute(username, accountId);
+
+    if (!result) return [];
+
+    // Convert to format expected by engine
+    return result.messages.map(msg => ({
+      role: msg.role,
+      text: msg.text,
+      type: msg.type,
+      timestamp: msg.sentAt
+    }));
+  } catch (error) {
+    console.error('Error getting conversation history:', error.message);
+    return [];
+  }
 }
 
 /**
  * Add a message to the conversation (either from user or assistant)
- * 
+ *
  * @param {string} username - Instagram username
  * @param {string} role - 'user' or 'assistant'
  * @param {string} message - Message text
@@ -168,25 +179,29 @@ export async function getConversationHistory(username) {
  */
 export async function addMessage(username, role, message, messageType = null, accountId = null) {
   await initDB();
-  if (!db) return false;
-  
-  const lead = dbFunctions.getLeadByUsername(username, accountId);
-  if (!lead) {
-    console.error(`Lead not found: ${username}`);
-    return false;
-  }
-  
+  if (!db || !container) return false;
+
   try {
-    dbFunctions.addConversationMessage(lead.id, role, message, messageType);
-    
-    // Update lead status based on message flow
-    if (role === 'user') {
-      if (lead.status === 'contacted' || lead.status === 'outreach' || lead.status === 'not_interested') {
-        console.log(`   🔄 Lead @${username} status change: ${lead.status} -> conversation`);
-        dbFunctions.updateLeadStatus(username, 'conversation');
-      }
+    // Use RecordMessage use case
+    const direction = role === 'user' ? 'incoming' : 'outgoing';
+    const result = await container.useCases.recordMessage.execute({
+      username,
+      text: message,
+      direction,
+      type: messageType,
+      accountId
+    });
+
+    if (!result.message) {
+      console.error(`Failed to record message for @${username}`);
+      return false;
     }
-    
+
+    // Log status change if first reply
+    if (result.isFirstReply) {
+      console.log(`   🔄 Lead @${username} first reply recorded!`);
+    }
+
     return true;
   } catch (error) {
     console.error('Error adding message:', error.message);

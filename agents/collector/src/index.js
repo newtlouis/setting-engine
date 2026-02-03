@@ -9,11 +9,11 @@ import { discoverFromHashtags, discoverFromProfiles } from './discover.js';
 import { scrapePostComments } from './scrape_post.js';
 import { ensureOutputDir, writePosts, writeComments } from './utils.js';
 import { CONFIG } from './config.js';
-import { filterComments } from './spam_filter.js';
 import { loadScrapedPosts, saveScrapedPosts, filterAlreadyScraped } from './post_qualifier.js';
-import { initDatabase, getOrCreateAccount } from './database.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
 import { BrowserService, delay } from '../../../shared/browser/index.js';
+import { getContainer } from '../../../shared/container.js';
+import { SpamDetector } from '../../../shared/domain/index.js';
 import path from 'path';
 
 /**
@@ -36,13 +36,13 @@ export async function runCollector(config) {
   // Ensure output directory exists
   await ensureOutputDir(config.outputDir);
 
-  // Initialize database and get account
-  await initDatabase();
+  // Initialize container (database + repositories + use cases)
+  const container = await getContainer();
   const profileName = process.env.IG_PROFILE;
   if (!profileName) {
     throw new Error('IG_PROFILE environment variable missing. Ensure you passed --profile to the command.');
   }
-  const account = getOrCreateAccount(profileName);
+  const account = await container.repositories.account.getOrCreate(profileName);
   console.log(`📁 Account: ${account.name} (id: ${account.id})\n`);
 
   // Initialize browser session with BrowserService
@@ -192,10 +192,10 @@ export async function runCollector(config) {
       await saveScrapedPosts(trackingFile, alreadyScraped);
       console.log(`\n💾 Updated tracking file (${alreadyScraped.size} total posts tracked)`);
       
-      // Filter comments for spam and quality
+      // Filter comments for spam and quality using domain service
       if (allComments.length > 0) {
         console.log(`\n🔍 Analyzing ${allComments.length} comments for quality...`);
-        const { all: processedComments, filtered: qualityComments, stats } = filterComments(allComments);
+        const { all: processedComments, filtered: qualityComments, stats } = SpamDetector.filterComments(allComments);
         
         // Write ALL comments to CSV (with spam flags for transparency)
         await writeComments(processedComments, config.outputDir);
