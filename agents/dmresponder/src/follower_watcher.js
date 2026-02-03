@@ -178,7 +178,9 @@ export async function runFollowerWatcher(options = {}) {
 
         for (const follower of uniqueFollowers) {
             const existingLead = await getLeadWithContext(follower.username);
-            if (existingLead) {
+            const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
+            
+            if (existingLead && skipStatuses.includes(existingLead.status)) {
                 alreadyKnownCount++;
             } else {
                 leadsToProceed.push(follower);

@@ -397,13 +397,3 @@ Est-ce que le sujet de la dépendance affective te parle personnellement ou c'es
         }
     }
 }
-
-// --- Analyzing: Du bien-être à la beauté💆🏼‍♀️ ---
-//    👤 Username: @christelle.estheticienne34
-//    ⏭️ Lead @christelle.estheticienne34 (status: 'queued', ignored: false) skipped.
-
-// --- Analyzing: 🪓🥀𝑨𝒍𝒚𝒔𝒔𝒂🥀🪓 ---
-//    👤 Username: @alyza_horror
-//    ⏭️ Lead @alyza_horror (status: 'queued', ignored: false) skipped.
-
-// Pourquoi ces deux leads ont-ils été skipped? Normalement, elles n'auraient pas dû être ignorées et on aurait dû leur proposer un message. 

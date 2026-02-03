@@ -223,7 +223,9 @@ export async function runEngagementWatcher(options = {}) {
 
             for (const lead of uniqueLeads) {
                 const existingLead = await getLeadWithContext(lead.username);
-                if (existingLead) {
+                const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
+                
+                if (existingLead && skipStatuses.includes(existingLead.status)) {
                     alreadyKnownCount++;
                 } else {
                     leadsToProceed.push(lead);

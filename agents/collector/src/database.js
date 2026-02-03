@@ -1338,8 +1338,24 @@ export function getScenarioResults(scenarioId, limit = 5) {
 export function addToOutreachQueue(lead) {
   try {
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO outreach_queue (username, profile_url, dm_url, prepared_message, first_name, source, resource_file, resource_url)
-      VALUES (@username, @profile_url, @dm_url, @prepared_message, @first_name, @source, @resource_file, @resource_url)
+      INSERT INTO outreach_queue (
+        username, profile_url, dm_url, prepared_message, 
+        first_name, source, resource_file, resource_url
+      ) VALUES (
+        @username, @profile_url, @dm_url, @prepared_message, 
+        @first_name, @source, @resource_file, @resource_url
+      )
+      ON CONFLICT(username) DO UPDATE SET
+        status = 'pending',
+        prepared_message = @prepared_message,
+        first_name = COALESCE(@first_name, first_name),
+        source = @source,
+        resource_file = COALESCE(@resource_file, resource_file),
+        resource_url = COALESCE(@resource_url, resource_url),
+        error = NULL,
+        sent_at = NULL,
+        created_at = datetime('now')
+      WHERE status = 'failed'
     `);
     const info = stmt.run({
       username: lead.username,

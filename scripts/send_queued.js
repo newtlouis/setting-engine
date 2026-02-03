@@ -172,6 +172,13 @@ async function main() {
         } else {
           console.log(`   ❌ Failed to send: ${dmResult.error}`);
           markQueuedLeadFailed(lead.username, dmResult.error);
+          
+          // Sync failure to main leads table
+          await fullUpsertLead(lead.username, account.id, {
+            status: 'failed',
+            notes: `Outreach failed: ${dmResult.error}`
+          });
+
           failedCount++;
         }
 
