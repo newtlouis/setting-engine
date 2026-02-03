@@ -433,6 +433,28 @@ export async function runInboxScanner(options = {}) {
             console.log(`   ⚠️ No message generated.`);
             continue;
           }
+
+          // --- LOGIC: CALENDLY BOOKING ---
+          if (response.booking_intent && response.booking_intent.email && (response.booking_intent.phone || response.booking_intent.email)) {
+              console.log(`   📅 BOOKING INTENT DETECTED:`, response.booking_intent);
+              try {
+                  const { createBooking } = await import('../../../shared/utils/calendly.js');
+                  const bookingResult = await createBooking(profile, {
+                      startTime: response.booking_intent.slot,
+                      email: response.booking_intent.email,
+                      name: leadContext.fullName || username,
+                      phone: response.booking_intent.phone
+                  });
+                  
+                  if (bookingResult.success) {
+                      console.log(`   ✅ Booking success: ${bookingResult.message}`);
+                      // We don't modify the message here, we let the AI confirm in its next turn or this one if it's already generated.
+                      // Usually the AI generates the confirmation message as part of the turn.
+                  }
+              } catch (e) {
+                  console.error(`   ❌ Booking failed:`, e.message);
+              }
+          }
           
           const profileUrl = `https://www.instagram.com/${username}/`;
           console.log(`\n   💬 SENDING RESPONSE:`);

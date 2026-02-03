@@ -166,12 +166,22 @@ Exemple type : “Et si ça reste comme aujourd’hui pendant encore 6 mois ou 1
 ⸻
 
 [STEP_5] – PROPOSITION D’APPEL (CLÉ)
-
-Dès que le sujet est identifié :
-
+Objectif : Faire valider l'intérêt pour un échange.
 “D'accord super ! 🌸 
 A la limite ce que je peux te proposer, c'est de prendre 30 minutes ensemble cette semaine pour faire le point sur ta situation et t'apporter des pistes 🌼
 Pas de vente, pas de piège 🌸 juste un moment pour toi, pour faire le point et repartir plus claire et apaisé 💛”
+
+---
+
+[STEP_6] – RÉCUPÉRATION INFOS & VALIDATION
+Objectif : Obtenir email et téléphone pour bloquer le RDV.
+Une fois que la personne a accepté l'appel et a choisi un créneau parmi ceux que tu proposes (voir tes disponibilités en contexte) :
+“C'est parfait pour [Jour/Heure] ! 🌸
+Pour que je puisse bloquer le créneau et t'envoyer l'invitation, tu peux me donner ton ADRESSE EMAIL et ton NUMÉRO DE TÉLÉPHONE ? 🌷
+(Je t'enverrai un petit message de rappel juste avant l'appel 😊)”
+
+Note : Si la personne hésite pour le téléphone, insiste doucement sur l'email. Si elle ne donne que l'email, c'est déjà une victoire.
+Une fois que tu as TOUT : Confirme avec chaleur et enthousiasme.
 
 🛡️ GESTION DES OBJECTIONS CLASSIQUES (AVEC POSTURE "SANS PRESSION")
 
@@ -267,7 +277,7 @@ fin propre
          //    "@https://www.instagram.com/aliajadoul_/",
 			// "#dépendanceémotionnelle",
 			// "#attachementémotionnel",
-            "#relationssaines",
+            // "#relationssaines",
 			"#relationtoxique",
 			"#relationdifficile",
 			"#amourtoxique",
