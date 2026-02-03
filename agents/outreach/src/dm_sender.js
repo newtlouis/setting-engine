@@ -672,7 +672,11 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
       }
     }
     
-    // Track this tab
+    // Track this tab (using BrowserSession if available)
+    if (browserSession) {
+      browserSession.registerMessageTab(username, newTab, message, { dmUrl, timestamp: result.timestamp });
+    }
+    // Also keep local array for backward compatibility
     messageTabs.push({
       username,
       page: newTab,
@@ -943,6 +947,10 @@ export async function batchSendDMs(page, targets, options = {}) {
  * @returns {Array} Array of {username, page, message, timestamp}
  */
 export function getOpenMessageTabs() {
+  // Prefer BrowserSession if available
+  if (browserSession) {
+    return browserSession.getRegisteredTabs();
+  }
   return messageTabs;
 }
 
@@ -951,12 +959,18 @@ export function getOpenMessageTabs() {
  * Browser stays open until user presses Ctrl+C or closes it
  */
 export async function waitForUserToFinish() {
+  // Delegate to BrowserSession if available
+  if (browserSession) {
+    return browserSession.waitForUserToFinish();
+  }
+
+  // Fallback for backward compatibility
   if (messageTabs.length === 0) {
     console.log('\n   No message tabs open. Closing browser...');
     await closeBrowser().catch(() => {});
     return;
   }
-  
+
   console.log('\n=== REVIEW YOUR MESSAGES ===');
   console.log(`   ${messageTabs.length} tabs with messages ready:`);
   messageTabs.forEach((tab, i) => {
@@ -968,47 +982,34 @@ export async function waitForUserToFinish() {
   console.log('   3. Move to next tab');
   console.log('\n   When done, close the browser window manually or press Ctrl+C.');
   console.log('   (You can also press Enter here in the terminal to exit)');
-  
-  // Keep process alive handled by promise resolution
+
   return new Promise((resolve) => {
     let resolved = false;
 
     const cleanup = () => {
       if (resolved) return;
       resolved = true;
-      
-      // Clean up listeners
       process.stdin.removeListener('data', onData);
       process.removeListener('SIGINT', onSigInt);
       if (browserContext) {
         browserContext.removeListener('close', onBrowserClose);
       }
-      
       resolve();
     };
 
-    const onData = (data) => {
-      // Only resolve on Enter/New line
-      cleanup();
-    };
-
+    const onData = () => cleanup();
     const onSigInt = () => {
       console.log('\n   Received Ctrl+C. Finishing up...');
       cleanup();
     };
-
     const onBrowserClose = () => {
       console.log('\n   Browser window closed. Finishing up...');
       cleanup();
     };
 
-    // 1. Listen for Enter key
     process.stdin.once('data', onData);
-    
-    // 2. Handle Ctrl+C
     process.on('SIGINT', onSigInt);
 
-    // 3. Watch browser context closure
     if (browserContext) {
       browserContext.on('close', onBrowserClose);
     } else {

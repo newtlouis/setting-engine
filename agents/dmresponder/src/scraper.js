@@ -654,14 +654,19 @@ export async function processLeadInNewTab(lead, message) {
     result.success = true;
     result.tabKeptOpen = true;
     result.dmUrl = tab.url();
-    
+
+    // Track this tab (using BrowserSession if available)
+    if (browserSession) {
+      browserSession.registerMessageTab(username, tab, message, { dmUrl: result.dmUrl, timestamp: result.timestamp });
+    }
+    // Also keep local array for backward compatibility
     messageTabs.push({
       username,
       page: tab,
       message,
       timestamp: result.timestamp
     });
-    
+
     console.log(`      ✅ Message typed! Tab kept open.`);
     
     return result;
@@ -679,6 +684,10 @@ export async function processLeadInNewTab(lead, message) {
  * Get list of open message tabs
  */
 export function getOpenMessageTabs() {
+  // Prefer BrowserSession if available
+  if (browserSession) {
+    return browserSession.getRegisteredTabs();
+  }
   return messageTabs;
 }
 
@@ -686,6 +695,11 @@ export function getOpenMessageTabs() {
  * Register an open tab for tracking (used by cron_worker)
  */
 export function registerOpenTab(username, tab, message) {
+  // Register with BrowserSession if available
+  if (browserSession) {
+    browserSession.registerMessageTab(username, tab, message);
+  }
+  // Also keep local array for backward compatibility
   messageTabs.push({
     username,
     page: tab,
@@ -698,18 +712,24 @@ export function registerOpenTab(username, tab, message) {
  * Wait for user to finish reviewing messages
  */
 export async function waitForUserToFinish() {
+  // Delegate to BrowserSession if available
+  if (browserSession) {
+    return browserSession.waitForUserToFinish();
+  }
+
+  // Fallback for backward compatibility
   const tabs = getOpenMessageTabs();
-  
+
   if (tabs.length === 0) {
     console.log('\n   No tabs with messages. Nothing to review.');
     return;
   }
-  
+
   console.log('\n' + '='.repeat(50));
   console.log(`   📨 ${tabs.length} message(s) ready for review`);
   console.log('='.repeat(50));
   console.log('   Review each tab, send manually, then press Enter here to close browser.\n');
-  
+
   await new Promise(resolve => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     rl.question('   Press Enter when done...', () => {

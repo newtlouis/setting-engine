@@ -40,7 +40,8 @@ class BrowserSession {
     this.workingPage = workingPage;
     this.profile = profile;
     this.options = options;
-    this.messageTabs = [];
+    this.messageTabs = [];      // Raw pages for backward compat
+    this.registeredTabs = [];   // Tabs with metadata {username, page, message, timestamp}
     this._isLoggedIn = false;
   }
 
@@ -114,11 +115,108 @@ class BrowserSession {
   }
 
   /**
-   * Get all message tabs (tabs opened for DMs)
+   * Get all message tabs (tabs opened for DMs) - raw pages
    * @returns {Page[]}
    */
   getMessageTabs() {
     return this.messageTabs;
+  }
+
+  /**
+   * Register a message tab with metadata for tracking
+   * @param {string} username - Instagram username
+   * @param {Page} page - Playwright page
+   * @param {string} message - Message that was typed
+   * @param {Object} [extra] - Optional extra metadata (dmUrl, etc.)
+   */
+  registerMessageTab(username, page, message, extra = {}) {
+    this.registeredTabs.push({
+      username,
+      page,
+      message,
+      timestamp: new Date().toISOString(),
+      ...extra
+    });
+  }
+
+  /**
+   * Get all registered tabs with metadata
+   * @returns {Array<{username: string, page: Page, message: string, timestamp: string}>}
+   */
+  getRegisteredTabs() {
+    return this.registeredTabs;
+  }
+
+  /**
+   * Wait for user to finish reviewing messages and close browser
+   * Browser stays open until user presses Enter or closes it
+   * @returns {Promise<void>}
+   */
+  async waitForUserToFinish() {
+    const tabs = this.registeredTabs;
+
+    if (tabs.length === 0) {
+      console.log('\n   No message tabs open. Nothing to review.');
+      return;
+    }
+
+    console.log('\n' + '='.repeat(50));
+    console.log(`   📨 ${tabs.length} message(s) ready for review`);
+    console.log('='.repeat(50));
+    tabs.forEach((tab, i) => {
+      console.log(`   ${i + 1}. @${tab.username}`);
+    });
+    console.log('\n   For each tab:');
+    console.log('   1. Review the message');
+    console.log('   2. Press Enter to send (or edit first)');
+    console.log('   3. Move to next tab');
+    console.log('\n   When done, press Enter here or close the browser window.');
+
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const cleanup = () => {
+        if (resolved) return;
+        resolved = true;
+        process.stdin.removeListener('data', onData);
+        process.removeListener('SIGINT', onSigInt);
+        if (this.context) {
+          this.context.removeListener('close', onBrowserClose);
+        }
+        resolve();
+      };
+
+      const onData = () => cleanup();
+      const onSigInt = () => {
+        console.log('\n   Received Ctrl+C. Finishing up...');
+        cleanup();
+      };
+      const onBrowserClose = () => {
+        console.log('\n   Browser window closed. Finishing up...');
+        cleanup();
+      };
+
+      process.stdin.once('data', onData);
+      process.on('SIGINT', onSigInt);
+
+      if (this.context) {
+        this.context.on('close', onBrowserClose);
+      } else {
+        cleanup();
+      }
+    });
+  }
+
+  /**
+   * Close all registered message tabs
+   * @returns {Promise<void>}
+   */
+  async closeAllMessageTabs() {
+    for (const tab of this.registeredTabs) {
+      await tab.page.close().catch(() => {});
+    }
+    this.registeredTabs = [];
+    this.messageTabs = [];
   }
 
   /**
@@ -153,6 +251,7 @@ class BrowserSession {
       this.context = null;
       this.workingPage = null;
       this.messageTabs = [];
+      this.registeredTabs = [];
     }
   }
 }
