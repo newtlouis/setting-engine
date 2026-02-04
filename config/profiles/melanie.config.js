@@ -24,12 +24,12 @@ export default {
 
     prospector: {
         sources: [
-            "#dependanceaffective",                                                                                                                                
-            "#dépendanceaffective",                                                                                                                                
-            "#hypersensibilité",                                                                                                                                   
-            "@https://www.instagram.com/aliajadoul_/",                                                                                                             
-            "#dépendanceémotionnelle",                                                                                                                                   
-            "#attachementémotionnel",                                                                                                                                    
+            "#dependanceaffective",
+            "#dépendanceaffective",
+            "#hypersensibilité",
+            "@https://www.instagram.com/aliajadoul_/",
+            "#dépendanceémotionnelle",
+            "#attachementémotionnel",
             "#relationssaines",
             "#relationtoxique",
             "#relationdifficile",
@@ -105,9 +105,6 @@ Est-ce que le sujet de la dépendance affective te parle personnellement ou c'es
         }
 
         // NOTE: Follow-up templates are now in the database (followup_templates table)
-        // Manage them via the dashboard API:
-        // - GET /api/followup-templates?account_id=2
-        // - POST /api/followup-templates
-        // - PATCH /api/followup-templates/:id
+        // Manage them via the dashboard: http://localhost:3000/funnel_config.html
     }
 }

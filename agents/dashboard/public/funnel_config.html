@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Funnel Configuration | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Funnel Config Specific Styles */
+        .config-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            min-height: calc(100vh - 200px);
+        }
+
+        /* Sidebar */
+        .config-sidebar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 24px;
+        }
+
+        .sidebar-section h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin: 0 0 12px 0;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-input);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .nav-item-icon {
+            font-size: 16px;
+        }
+
+        /* Main Content */
+        .config-main {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .config-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .config-section.active {
+            display: block;
+        }
+
+        .section-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1c2128;
+        }
+
+        .section-header h2 {
+            font-size: 18px;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .section-content {
+            padding: 24px;
+        }
+
+        /* Stage Cards */
+        .stage-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .stage-header:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .stage-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stage-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .stage-title h3 {
+            font-size: 15px;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .stage-title span {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .stage-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .stage-body {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            display: none;
+        }
+
+        .stage-body.expanded {
+            display: block;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        .form-textarea {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 150px;
+            transition: all 0.2s;
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* Templates List */
+        .templates-list {
+            margin-top: 16px;
+        }
+
+        .template-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .template-order {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            background: var(--bg-input);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .template-content {
+            flex: 1;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .template-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        /* Persona Form */
+        .persona-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .persona-section .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Prompt Preview */
+        .prompt-preview {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .prompt-preview pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
+        .prompt-stats {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border-radius: 6px;
+        }
+
+        .prompt-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .prompt-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .prompt-stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #4a95e8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #34a13e;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-icon {
+            padding: 6px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }
+
+        .btn-icon:hover {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        .btn-icon.danger:hover {
+            color: var(--error);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin: 0 0 8px 0;
+            color: var(--text-primary);
+        }
+
+        .empty-state p {
+            margin: 0 0 24px 0;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .toast.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            border-color: var(--success);
+        }
+
+        .toast.error {
+            border-color: var(--error);
+        }
+
+        /* Loading */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Inline Edit */
+        .inline-edit {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .inline-edit input {
+            flex: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Dashboard</a>
+                <a href="/lead_details.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
+                    Details</a>
+                <a href="/scenario_tester.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Chatbox
+                    testeur</a>
+                <a href="/funnel_config.html"
+                    style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Config Funnel</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Compte:</label>
+                <select id="accountSelect" onchange="onAccountChange(this.value)">
+                    <option value="">Choisir un compte</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="config-layout">
+            <!-- Sidebar Navigation -->
+            <aside class="config-sidebar">
+                <div class="sidebar-section">
+                    <h3>Configuration</h3>
+                    <div class="nav-item active" onclick="showSection('stages')">
+                        <span class="nav-item-icon">📊</span>
+                        Etapes du Funnel
+                    </div>
+                    <div class="nav-item" onclick="showSection('templates')">
+                        <span class="nav-item-icon">📝</span>
+                        Templates de Relance
+                    </div>
+                    <div class="nav-item" onclick="showSection('persona')">
+                        <span class="nav-item-icon">🎭</span>
+                        Persona
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Preview</h3>
+                    <div class="nav-item" onclick="showSection('prompt')">
+                        <span class="nav-item-icon">👁️</span>
+                        Prompt Complet
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Stats</h3>
+                    <div class="nav-item" onclick="showSection('stats')">
+                        <span class="nav-item-icon">📈</span>
+                        Performance Templates
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="config-main">
+                <!-- Funnel Stages Section -->
+                <section id="section-stages" class="config-section active">
+                    <div class="section-header">
+                        <h2>Etapes du Funnel</h2>
+                        <button class="btn-secondary btn-small" onclick="addNewStage()">+ Ajouter une etape</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="stagesContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Follow-up Templates Section -->
+                <section id="section-templates" class="config-section">
+                    <div class="section-header">
+                        <h2>Templates de Relance</h2>
+                    </div>
+                    <div class="section-content">
+                        <div id="templatesContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Persona Section -->
+                <section id="section-persona" class="config-section">
+                    <div class="section-header">
+                        <h2>Configuration Persona</h2>
+                        <button class="btn-primary btn-small" onclick="savePersona()">Sauvegarder</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="personaContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Prompt Preview Section -->
+                <section id="section-prompt" class="config-section">
+                    <div class="section-header">
+                        <h2>Preview du Prompt Complet</h2>
+                        <button class="btn-secondary btn-small" onclick="refreshPromptPreview()">Rafraichir</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="promptContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Stats Section -->
+                <section id="section-stats" class="config-section">
+                    <div class="section-header">
+                        <h2>Performance des Templates</h2>
+                    </div>
+                    <div class="section-content">
+                        <div id="statsContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <span id="toastIcon"></span>
+        <span id="toastMessage"></span>
+    </div>
+
+    <script src="funnel_config.js"></script>
+</body>
+
+</html>
