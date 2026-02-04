@@ -23,7 +23,9 @@
     "db:admin": "python3 -m sqlite_web permanent-data/leads.db --port 8081 --no-browser",
     "dm-sync": "node bin/dm-sync.js",
     "dm-sync:stats": "node bin/dm-sync.js --stats",
-    "dm-sync:list": "node bin/dm-sync.js --list"
+    "dm-sync:list": "node bin/dm-sync.js --list",
+    "analyze": "node bin/analyze-conversations.js",
+    "analyze:list": "node bin/analyze-conversations.js --list"
   },
   "keywords": [
     "instagram",
@@ -42,6 +44,7 @@
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "openai": "^6.17.0",
     "playwright": "^1.57.0"
   },
   "engines": {
