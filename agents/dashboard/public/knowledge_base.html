@@ -378,27 +378,40 @@
 </head>
 
 <body>
-    <!-- Header -->
-    <header>
-        <div class="logo">
-            <span class="logo-icon">&#9670;</span>
-            <span>Instagram Lead Engine</span>
-        </div>
-        <nav>
-            <a href="index.html">Dashboard</a>
-            <a href="funnel_config.html">Funnel Config</a>
-            <a href="knowledge_base.html" class="active">Knowledge Base</a>
-            <a href="scenario_tester.html">Scenario Tester</a>
-        </nav>
-        <div class="account-selector">
-            <select id="accountSelect">
-                <option value="">Chargement...</option>
-            </select>
-        </div>
-    </header>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
 
-    <!-- Main Content -->
-    <main class="container">
+            <!-- Navigation -->
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Dashboard</a>
+                <a href="/lead_details.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
+                    Details</a>
+                <a href="/scenario_tester.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Chatbox
+                    testeur</a>
+                <a href="/funnel_config.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Config
+                    Funnel</a>
+                <a href="/knowledge_base.html"
+                    style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Knowledge
+                    Base</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Compte:</label>
+                <select id="accountSelect">
+                    <option value="">Chargement...</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
         <div class="page-header">
             <h1>Knowledge Base (RAG)</h1>
             <p class="page-subtitle">Enrichis les reponses IA avec des connaissances contextuelles</p>
@@ -490,7 +503,8 @@
                 </div>
             </div>
         </div>
-    </main>
+        </main>
+    </div>
 
     <!-- Create/Edit Modal -->
     <div class="modal-overlay" id="entryModal">
