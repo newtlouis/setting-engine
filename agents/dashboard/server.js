@@ -414,6 +414,288 @@ app.post('/api/leads/:username/requeue', async (req, res) => {
 });
 
 // ============================================
+// FUNNEL STAGES & TEMPLATES API
+// ============================================
+
+// GET /api/funnel-stages - List stages for an account
+app.get('/api/funnel-stages', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const stages = await container.repositories.funnel.getStagesForAccount(parseInt(account_id));
+        res.json(stages.map(s => s.toJSON()));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/funnel-stages - Create a new stage
+app.post('/api/funnel-stages', async (req, res) => {
+    try {
+        const { account_id, stage_order, stage_name, stage_label, description, max_followups, followup_delay_hours, auto_ignore_after_max } = req.body;
+
+        if (!account_id || !stage_order || !stage_name || !stage_label) {
+            return res.status(400).json({ error: 'account_id, stage_order, stage_name, and stage_label are required' });
+        }
+
+        const { FunnelStage } = await import('../../shared/domain/entities/FunnelStage.js');
+
+        const stage = FunnelStage.create(
+            parseInt(account_id),
+            parseInt(stage_order),
+            stage_name,
+            stage_label,
+            {
+                description,
+                maxFollowups: max_followups || 0,
+                followupDelayHours: followup_delay_hours || 24,
+                autoIgnoreAfterMax: auto_ignore_after_max || false
+            }
+        );
+
+        const saved = await container.repositories.funnel.saveStage(stage);
+        res.json(saved.toJSON());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/funnel-stages/:id - Update a stage
+app.patch('/api/funnel-stages/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+
+        // Get existing stage first
+        const existing = db.prepare('SELECT * FROM funnel_stages WHERE id = ?').get(parseInt(id));
+        if (!existing) {
+            return res.status(404).json({ error: 'Stage not found' });
+        }
+
+        // Build update query dynamically
+        const allowedFields = ['stage_order', 'stage_name', 'stage_label', 'description', 'max_followups', 'followup_delay_hours', 'auto_ignore_after_max', 'is_active'];
+        const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
+
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field]);
+
+        db.prepare(`UPDATE funnel_stages SET ${setClause}, updated_at = datetime('now') WHERE id = ?`)
+          .run(...values, parseInt(id));
+
+        // Return updated stage
+        const updated = db.prepare('SELECT * FROM funnel_stages WHERE id = ?').get(parseInt(id));
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/funnel-stages/:id - Delete a stage
+app.delete('/api/funnel-stages/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deleted = await container.repositories.funnel.deleteStage(parseInt(id));
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Stage not found' });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/funnel-stages/initialize/:accountId - Initialize default stages for an account
+app.post('/api/funnel-stages/initialize/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        // Check if account already has stages
+        const hasConfig = await container.repositories.funnel.hasFunnelConfig(parseInt(accountId));
+        if (hasConfig) {
+            return res.status(409).json({ error: 'Account already has funnel stages configured' });
+        }
+
+        const stages = await container.repositories.funnel.initializeDefaultStages(parseInt(accountId));
+        res.json({
+            success: true,
+            stages: stages.map(s => s.toJSON())
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/followup-templates - List templates (by stage_id or account_id)
+app.get('/api/followup-templates', async (req, res) => {
+    try {
+        const { stage_id, account_id } = req.query;
+
+        if (stage_id) {
+            const templates = await container.repositories.funnel.getTemplatesForStage(parseInt(stage_id));
+            res.json(templates.map(t => t.toJSON()));
+        } else if (account_id) {
+            const templates = await container.repositories.funnel.getTemplatesForAccount(parseInt(account_id));
+            res.json(templates);
+        } else {
+            return res.status(400).json({ error: 'stage_id or account_id is required' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/followup-templates - Create a new template
+app.post('/api/followup-templates', async (req, res) => {
+    try {
+        const { stage_id, account_id, template_order, template_text, template_name } = req.body;
+
+        if (!stage_id || !account_id || template_order === undefined || !template_text) {
+            return res.status(400).json({ error: 'stage_id, account_id, template_order, and template_text are required' });
+        }
+
+        const { FollowupTemplate } = await import('../../shared/domain/entities/FollowupTemplate.js');
+
+        const template = FollowupTemplate.create(
+            parseInt(stage_id),
+            parseInt(account_id),
+            parseInt(template_order),
+            template_text,
+            template_name || `Template ${template_order + 1}`
+        );
+
+        const saved = await container.repositories.funnel.saveTemplate(template);
+        res.json(saved.toJSON());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/followup-templates/:id - Update a template
+app.patch('/api/followup-templates/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+
+        // Get existing template first
+        const existing = db.prepare('SELECT * FROM followup_templates WHERE id = ?').get(parseInt(id));
+        if (!existing) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+
+        // Build update query dynamically
+        const allowedFields = ['template_order', 'template_text', 'template_name', 'is_active'];
+        const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
+
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field]);
+
+        db.prepare(`UPDATE followup_templates SET ${setClause}, updated_at = datetime('now') WHERE id = ?`)
+          .run(...values, parseInt(id));
+
+        // Return updated template
+        const updated = db.prepare('SELECT * FROM followup_templates WHERE id = ?').get(parseInt(id));
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/followup-templates/:id - Delete a template
+app.delete('/api/followup-templates/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deleted = await container.repositories.funnel.deleteTemplate(parseInt(id));
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/funnel-config/:accountId - Get full funnel config (stages + templates)
+app.get('/api/funnel-config/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const config = await container.repositories.funnel.getFullFunnelConfig(parseInt(accountId));
+        res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/funnel-stats/:accountId - Get template effectiveness statistics
+app.get('/api/funnel-stats/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        // Get all templates with stats
+        const templates = db.prepare(`
+            SELECT ft.*, fs.stage_name, fs.stage_order,
+                   CASE WHEN ft.usage_count > 0
+                        THEN ROUND(CAST(ft.success_count AS FLOAT) / ft.usage_count * 100, 1)
+                        ELSE 0
+                   END as success_rate
+            FROM followup_templates ft
+            JOIN funnel_stages fs ON ft.stage_id = fs.id
+            WHERE ft.account_id = ?
+            ORDER BY fs.stage_order, ft.template_order
+        `).all(parseInt(accountId));
+
+        // Get stage-level aggregates
+        const stageStats = db.prepare(`
+            SELECT fs.id, fs.stage_name, fs.stage_order,
+                   COUNT(ft.id) as template_count,
+                   SUM(ft.usage_count) as total_usage,
+                   SUM(ft.success_count) as total_success,
+                   CASE WHEN SUM(ft.usage_count) > 0
+                        THEN ROUND(CAST(SUM(ft.success_count) AS FLOAT) / SUM(ft.usage_count) * 100, 1)
+                        ELSE 0
+                   END as avg_success_rate
+            FROM funnel_stages fs
+            LEFT JOIN followup_templates ft ON fs.id = ft.stage_id
+            WHERE fs.account_id = ?
+            GROUP BY fs.id
+            ORDER BY fs.stage_order
+        `).all(parseInt(accountId));
+
+        // Get lead distribution per funnel step
+        const funnelDistribution = db.prepare(`
+            SELECT funnel_step, COUNT(*) as count
+            FROM leads
+            WHERE account_id = ? AND is_ignored = 0
+            GROUP BY funnel_step
+            ORDER BY funnel_step
+        `).all(parseInt(accountId));
+
+        res.json({
+            templates,
+            stageStats,
+            funnelDistribution
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================================
 // SCENARIO TESTING API
 // ============================================
 
