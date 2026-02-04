@@ -415,6 +415,40 @@ describe('Objection Handling', () => {
     assert.ok(isNotInterested(result.next_message), 'Should contain NOT_INTERESTED tag');
   });
 
+  test('Objection: "Pas spécialement" - Soft rejection should mark NOT_INTERESTED', async () => {
+    await setupAxiosMock(createMockLlmResponse(
+      '[STEP_2] [NOT_INTERESTED] Pas de souci, merci pour ta réponse ! 🌸 Si jamais le sujet te parle un jour, n\'hésite pas. Belle journée à toi ✨',
+      '2'
+    ));
+
+    const result = await generateResponse({
+      conversationHistory: [
+        { role: 'assistant', text: '[STEP_2] Coucou, j\'espère que tu vas bien 🌸 J\'ai vu que tu t\'intéressais à la dépendance affective. C\'est plutôt personnel ou par curiosité ?' },
+        { role: 'user', text: 'Hellow, oui nickel et toi ? Pas spécialement ahah, mais je connais le sujet ☺️' }
+      ],
+      leadContext: { username: 'pompote_sama', conversation_step: 2 }
+    });
+
+    assert.ok(isNotInterested(result.next_message), 'Should mark as NOT_INTERESTED for "Pas spécialement"');
+  });
+
+  test('Objection: "Non ça va moi" - Person not concerned should mark NOT_INTERESTED', async () => {
+    await setupAxiosMock(createMockLlmResponse(
+      '[STEP_2] [NOT_INTERESTED] Super si tout va bien pour toi ! 🌸 Merci pour ta réponse, belle journée ✨',
+      '2'
+    ));
+
+    const result = await generateResponse({
+      conversationHistory: [
+        { role: 'assistant', text: '[STEP_2] Ça résonne avec toi personnellement ?' },
+        { role: 'user', text: 'Ah non ça va moi, je suis bien dans ma vie' }
+      ],
+      leadContext: { username: 'test_user', conversation_step: 2 }
+    });
+
+    assert.ok(isNotInterested(result.next_message), 'Should mark as NOT_INTERESTED when person is not concerned');
+  });
+
   test('Objection: "Tu es une IA ?" - Should deny naturally', async () => {
     await setupAxiosMock(createMockLlmResponse(
       '[STEP_3] Non ^^ Je suis bien Mélanie ! Donc tu me disais que tu avais du mal en amour...',

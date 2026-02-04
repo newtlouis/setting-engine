@@ -170,6 +170,41 @@ const SCENARIO_NOT_INTERESTED = {
 };
 
 /**
+ * Scenario: "Pas spécialement" - Soft rejection at Step 2
+ * Lead knows the topic but is not personally concerned
+ */
+const SCENARIO_SOFT_REJECTION = {
+  name: 'Lead "Pas spécialement" - Soft rejection',
+  steps: [
+    {
+      step: 2,
+      assistant: '[STEP_2] Coucou, j\'espère que tu vas bien 🌸 J\'ai vu que tu t\'intéressais à la dépendance affective. C\'est plutôt personnel ou par curiosité ?',
+      user: 'Hellow, oui nickel et toi ? Pas spécialement ahah, mais je connais le sujet ☺️',
+      expectedNextStep: 2,
+      expectedBehavior: 'Doit inclure [NOT_INTERESTED] - la personne n\'est pas notre cible',
+      expectNotInterested: true,
+      expectedKeywords: ['souci', 'merci', 'journée']
+    },
+    {
+      step: 2,
+      assistant: '[STEP_2] C\'est plutôt personnel ou par curiosité ?',
+      user: 'Non pas vraiment, c\'est juste que j\'aime bien ce genre de contenu',
+      expectedNextStep: 2,
+      expectedBehavior: 'Doit inclure [NOT_INTERESTED]',
+      expectNotInterested: true
+    },
+    {
+      step: 2,
+      assistant: '[STEP_2] Ça résonne avec toi personnellement ?',
+      user: 'Ah non ça va moi, je suis bien dans ma vie',
+      expectedNextStep: 2,
+      expectedBehavior: 'Doit inclure [NOT_INTERESTED]',
+      expectNotInterested: true
+    }
+  ]
+};
+
+/**
  * Scenario: Lead refuses to talk but might have issues
  */
 const SCENARIO_EMPATHIC_FOLLOWUP = {
@@ -471,6 +506,38 @@ describe('Conversation Scenarios', () => {
 
         if (stepData.expectNotInterested) {
           assert.ok(isNotInterested(result.next_message), 'Should contain NOT_INTERESTED');
+        }
+      });
+    }
+  });
+
+  // ============================================
+  // SCENARIO: Soft Rejection ("Pas spécialement")
+  // ============================================
+
+  describe(SCENARIO_SOFT_REJECTION.name, () => {
+    for (const stepData of SCENARIO_SOFT_REJECTION.steps) {
+      test(`Soft rejection: "${stepData.user.substring(0, 40)}..."`, async () => {
+        const mockMessage = `[STEP_${stepData.expectedNextStep}] [NOT_INTERESTED] Pas de souci, merci pour ta réponse ! 🌸 Belle journée à toi ✨`;
+        await setupMock(async () => createMockResponse(mockMessage, String(stepData.expectedNextStep)));
+
+        const result = await generateResponse({
+          conversationHistory: [
+            { role: 'assistant', text: stepData.assistant },
+            { role: 'user', text: stepData.user }
+          ],
+          leadContext: { username: 'test', conversation_step: stepData.step }
+        });
+
+        if (stepData.expectNotInterested) {
+          assert.ok(isNotInterested(result.next_message), 'Should contain NOT_INTERESTED for soft rejection');
+        }
+
+        if (stepData.expectedKeywords) {
+          const hasKeyword = stepData.expectedKeywords.some(kw =>
+            result.next_message.toLowerCase().includes(kw.toLowerCase())
+          );
+          assert.ok(hasKeyword, `Response should contain one of: ${stepData.expectedKeywords.join(', ')}`);
         }
       });
     }
