@@ -44,6 +44,53 @@ export function createSqliteKnowledgeRepository({ getDb }) {
     },
 
     /**
+     * Get pending (inactive) knowledge entries for review
+     * @param {number} accountId
+     * @returns {Promise<Array>}
+     */
+    async getPending(accountId) {
+      const db = getDb();
+      const rows = db.prepare(`
+        SELECT * FROM knowledge_base
+        WHERE account_id = ? AND is_active = 0
+        ORDER BY created_at DESC
+      `).all(accountId);
+
+      return rows.map(row => ({
+        ...row,
+        triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
+        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
+        embedding: deserializeEmbedding(row.embedding)
+      }));
+    },
+
+    /**
+     * Activate a knowledge entry
+     * @param {number} id
+     */
+    async activate(id) {
+      const db = getDb();
+      db.prepare(`
+        UPDATE knowledge_base
+        SET is_active = 1, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(id);
+    },
+
+    /**
+     * Deactivate a knowledge entry
+     * @param {number} id
+     */
+    async deactivate(id) {
+      const db = getDb();
+      db.prepare(`
+        UPDATE knowledge_base
+        SET is_active = 0, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(id);
+    },
+
+    /**
      * Get knowledge entries by category
      * @param {number} accountId
      * @param {string} category - 'objection', 'faq', 'product', 'success_story', 'technique'
@@ -398,6 +445,14 @@ export function createSqliteKnowledgeRepository({ getDb }) {
         FROM knowledge_base
         WHERE account_id = ? AND is_active = 1
       `).get(accountId);
+
+      const pendingCount = db.prepare(`
+        SELECT COUNT(*) as count
+        FROM knowledge_base
+        WHERE account_id = ? AND is_active = 0
+      `).get(accountId);
+
+      kbStats.pending_count = pendingCount?.count || 0;
 
       const convStats = db.prepare(`
         SELECT

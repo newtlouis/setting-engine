@@ -6,6 +6,7 @@
 let currentAccountId = null;
 let currentCategory = '';
 let entries = [];
+let pendingEntries = [];
 let deleteTargetId = null;
 
 // DOM Ready
@@ -82,6 +83,7 @@ async function loadData() {
 
     await Promise.all([
         loadEntries(),
+        loadPendingEntries(),
         loadStats()
     ]);
 }
@@ -99,6 +101,26 @@ async function loadEntries() {
         renderEntries();
     } catch (err) {
         console.error('Failed to load entries:', err);
+    }
+}
+
+// Load pending entries (suggestions awaiting review)
+async function loadPendingEntries() {
+    if (!currentAccountId) return;
+
+    try {
+        const url = `/api/knowledge-base/pending?account_id=${currentAccountId}`;
+        const res = await fetch(url);
+        pendingEntries = await res.json();
+
+        document.getElementById('countPending').textContent = pendingEntries.length;
+
+        // If currently viewing pending, re-render
+        if (currentCategory === 'pending') {
+            renderEntries();
+        }
+    } catch (err) {
+        console.error('Failed to load pending entries:', err);
     }
 }
 
@@ -147,6 +169,13 @@ function updateCategoryCounts() {
 // Render entries
 function renderEntries() {
     const container = document.getElementById('entryList');
+
+    // Handle pending entries separately
+    if (currentCategory === 'pending') {
+        renderPendingEntries(container);
+        return;
+    }
+
     const filtered = currentCategory
         ? entries.filter(e => e.category === currentCategory)
         : entries;
@@ -186,6 +215,92 @@ function renderEntries() {
             </div>
         </div>
     `).join('');
+}
+
+// Render pending entries with activate/reject buttons
+function renderPendingEntries(container) {
+    if (pendingEntries.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">&#10003;</div>
+                <p>Aucune suggestion en attente</p>
+                <p style="color: var(--text-secondary); font-size: 14px;">Les suggestions de l'analyseur IA apparaitront ici</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+            <strong style="color: var(--warning);">⏳ ${pendingEntries.length} suggestion(s) en attente de validation</strong>
+            <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 14px;">
+                Ces suggestions ont ete generees par l'analyseur de conversations. Activez-les pour les utiliser dans le RAG.
+            </p>
+        </div>
+    ` + pendingEntries.map(entry => `
+        <div class="entry-card" style="border-left: 3px solid var(--warning);">
+            <div class="entry-header">
+                <span class="entry-category ${entry.category}">${formatCategory(entry.category)}</span>
+                <div class="entry-actions">
+                    <button class="btn btn-sm" style="background: var(--success); color: white;" onclick="activateEntry(${entry.id})">
+                        ✓ Activer
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="openDeleteModal(${entry.id})">
+                        ✗ Rejeter
+                    </button>
+                </div>
+            </div>
+            ${entry.situation ? `<div class="entry-situation">${escapeHtml(entry.situation)}</div>` : ''}
+            <div class="entry-content">${escapeHtml(entry.content)}</div>
+            ${entry.triggerKeywords && entry.triggerKeywords.length > 0 ? `
+                <div class="entry-keywords">
+                    ${entry.triggerKeywords.map(kw => `<span class="keyword-tag">${escapeHtml(kw)}</span>`).join('')}
+                </div>
+            ` : ''}
+            <div class="entry-meta">
+                <span style="color: var(--text-secondary);">Suggere le ${new Date(entry.createdAt).toLocaleDateString('fr-FR')}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Activate a pending entry
+async function activateEntry(id) {
+    try {
+        const res = await fetch(`/api/knowledge-base/${id}/activate`, {
+            method: 'POST'
+        });
+
+        if (res.ok) {
+            // Reload data
+            await loadData();
+            showToast('Entree activee avec succes');
+        } else {
+            const data = await res.json();
+            showToast('Erreur: ' + data.error, 'error');
+        }
+    } catch (err) {
+        showToast('Erreur: ' + err.message, 'error');
+    }
+}
+
+// Simple toast notification
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        background: ${type === 'success' ? 'var(--success)' : 'var(--danger)'};
+        color: white;
+        border-radius: 8px;
+        z-index: 10000;
+        animation: fadeIn 0.3s;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
 }
 
 // Format category name

@@ -1222,6 +1222,72 @@ app.delete('/api/knowledge-base/:id', async (req, res) => {
     }
 });
 
+// GET /api/knowledge-base/pending - Get pending (inactive) entries awaiting review
+app.get('/api/knowledge-base/pending', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const knowledgeRepo = container.repositories.knowledge;
+        const entries = await knowledgeRepo.getPending(parseInt(account_id));
+
+        const sanitized = entries.map(e => ({
+            id: e.id,
+            category: e.category,
+            situation: e.situation,
+            content: e.content,
+            triggerKeywords: e.triggerKeywords || [],
+            applicableSteps: e.applicableSteps || [],
+            hasEmbedding: !!e.embedding,
+            createdAt: e.created_at
+        }));
+
+        res.json(sanitized);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/knowledge-base/:id/activate - Activate a pending entry
+app.post('/api/knowledge-base/:id/activate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const knowledgeRepo = container.repositories.knowledge;
+
+        // Generate embedding if not present
+        const existing = db.prepare('SELECT * FROM knowledge_base WHERE id = ?').get(parseInt(id));
+        if (existing && !existing.embedding) {
+            try {
+                const textForEmbedding = `${existing.situation || ''} ${existing.content}`;
+                const embedding = await getEmbedding(textForEmbedding);
+                await knowledgeRepo.updateEmbedding(parseInt(id), embedding);
+            } catch (e) {
+                console.warn('Could not generate embedding:', e.message);
+            }
+        }
+
+        await knowledgeRepo.activate(parseInt(id));
+        res.json({ success: true, message: 'Entry activated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/knowledge-base/:id/deactivate - Deactivate an entry
+app.post('/api/knowledge-base/:id/deactivate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const knowledgeRepo = container.repositories.knowledge;
+        await knowledgeRepo.deactivate(parseInt(id));
+        res.json({ success: true, message: 'Entry deactivated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/knowledge-base/stats - Get RAG stats for an account
 app.get('/api/knowledge-base/stats', async (req, res) => {
     try {

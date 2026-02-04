@@ -509,12 +509,14 @@ export function generateReport(results, accountId = null) {
 }
 
 /**
- * Save suggested entries to Knowledge Base
+ * Save suggested entries to Knowledge Base (as inactive by default)
  * @param {number} accountId
  * @param {Array} entries
+ * @param {Object} options
  * @returns {Object} Save results
  */
-export async function saveToKnowledgeBase(accountId, entries) {
+export async function saveToKnowledgeBase(accountId, entries, options = {}) {
+  const { active = false } = options; // New entries are inactive by default
   const db = getDb();
 
   const results = {
@@ -525,7 +527,7 @@ export async function saveToKnowledgeBase(accountId, entries) {
 
   for (const entry of entries) {
     try {
-      // Check if similar entry already exists
+      // Check if similar entry already exists (active or inactive)
       const existing = db.prepare(`
         SELECT id FROM knowledge_base
         WHERE account_id = ?
@@ -538,16 +540,17 @@ export async function saveToKnowledgeBase(accountId, entries) {
         continue;
       }
 
-      // Insert new entry
+      // Insert new entry (inactive by default, pending review)
       db.prepare(`
-        INSERT INTO knowledge_base (account_id, category, situation, content, trigger_keywords)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO knowledge_base (account_id, category, situation, content, trigger_keywords, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)
       `).run(
         accountId,
         entry.category,
         entry.situation,
         entry.content,
-        JSON.stringify(entry.trigger_keywords || [])
+        JSON.stringify(entry.trigger_keywords || []),
+        active ? 1 : 0
       );
 
       results.saved++;
@@ -567,7 +570,7 @@ export async function saveToKnowledgeBase(accountId, entries) {
  * @param {Object} options
  */
 export async function runFullAnalysis(accountId, options = {}) {
-  const { autoSave = false, maxConversations = 5 } = options;
+  const { maxConversations = 5 } = options;
 
   // Run analysis
   const results = await analyzeConvertedConversations(accountId, { maxConversations });
@@ -581,16 +584,22 @@ export async function runFullAnalysis(accountId, options = {}) {
   const report = generateReport(results, accountId);
   console.log(report);
 
-  // Optionally save to KB
-  if (autoSave && results.aggregated.suggested_knowledge_entries.length > 0) {
-    console.log('\n💾 Sauvegarde automatique dans la Knowledge Base...');
+  // Auto-save new suggestions as INACTIVE (pending review in dashboard)
+  if (results.aggregated.suggested_knowledge_entries.length > 0) {
+    console.log('\n💾 Sauvegarde des suggestions (en attente de validation)...');
     const saveResults = await saveToKnowledgeBase(
       accountId,
-      results.aggregated.suggested_knowledge_entries
+      results.aggregated.suggested_knowledge_entries,
+      { active: false } // Inactive by default
     );
-    console.log(`   ✅ Sauvegardées: ${saveResults.saved}`);
+    console.log(`   ✅ Sauvegardées (inactives): ${saveResults.saved}`);
     console.log(`   ⏭️ Ignorées (doublons): ${saveResults.skipped}`);
-    console.log(`   ❌ Erreurs: ${saveResults.errors}`);
+    if (saveResults.errors > 0) {
+      console.log(`   ❌ Erreurs: ${saveResults.errors}`);
+    }
+    if (saveResults.saved > 0) {
+      console.log(`\n   👉 Activez-les dans le dashboard: npm run ui`);
+    }
   }
 
   return results;
