@@ -88,8 +88,11 @@ async function main() {
       const syncStatus = conv.lead.last_dm_sync_at
         ? `Sync: ${new Date(conv.lead.last_dm_sync_at).toLocaleDateString()}`
         : 'Jamais syncé';
+      const truncInfo = conv.truncated
+        ? ` (tronqué: ${conv.messageCount}/${conv.totalMessageCount})`
+        : '';
       console.log(`   ${i + 1}. @${conv.lead.username}`);
-      console.log(`      Messages: ${conv.messageCount} | Step: ${conv.lead.funnel_step} | ${syncStatus}`);
+      console.log(`      Messages: ${conv.messageCount}${truncInfo} | Step: ${conv.lead.funnel_step} | ${syncStatus}`);
     });
 
     process.exit(0);

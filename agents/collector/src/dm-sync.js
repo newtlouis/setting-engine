@@ -306,121 +306,135 @@ async function extractMessages(page) {
  * @returns {Array<{role: string, text: string}>}
  */
 async function extractMessagesRobust(page, debug = false) {
-  console.log('   📝 Extracting messages (robust method)...');
+  console.log('   📝 Extracting messages...');
+  console.log('   🔄 Loading and extracting conversation history...');
 
-  // First, scroll to load all messages
-  await page.evaluate(() => {
-    const scrollable = document.querySelector('div[role="grid"]') ||
-                       document.querySelector('section > div > div > div > div > div');
-    if (scrollable) {
-      scrollable.scrollTop = 0; // Scroll to top to load older messages
-    }
-  });
-  await delay(1000, 1500);
+  // Accumulate messages as we scroll
+  const allMessages = new Map(); // Use Map to deduplicate by text key
+  let sameCountIterations = 0;
+  const maxIterations = 50;
 
-  const messages = await page.evaluate((debugMode) => {
-    const result = [];
-    const debugInfo = [];
-
-    // Get the main conversation container
-    const mainSection = document.querySelector('section main') || document.querySelector('main');
-    if (!mainSection) {
-      debugInfo.push('No main section found');
-      return { messages: result, debug: debugInfo };
-    }
-
-    // Find all message groups - Instagram groups messages by sender
-    // Each group typically has a consistent alignment
-    const allDivs = mainSection.querySelectorAll('div[dir="auto"]');
-
-    allDivs.forEach((el, idx) => {
-      const text = el.textContent?.trim();
-      if (!text || text.length < 2) return;
-
-      // Skip UI elements
-      if (el.closest('button')) return;
-      if (el.closest('nav')) return;
-      if (el.closest('header')) return;
-      if (el.closest('form')) return; // Skip input area
-      if (el.closest('textarea')) return;
-
-      // Skip if it looks like a timestamp or date
-      if (text.match(/^\d{1,2}:\d{2}$/) || text.match(/^(lun|mar|mer|jeu|ven|sam|dim)/i)) return;
-      if (text.match(/^(aujourd|hier|il y a)/i)) return;
-
-      // Find the message container (bubble)
-      let container = el;
-      for (let i = 0; i < 10; i++) {
-        container = container.parentElement;
-        if (!container) break;
-
-        // Look for row-like containers
-        if (container.getAttribute('role') === 'row') break;
-        if (container.className?.includes('x1n2onr6')) break;
+  // First, click somewhere in the conversation area to focus it
+  try {
+    const messageArea = await page.$('section main, main, div[role="grid"]');
+    if (messageArea) {
+      const box = await messageArea.boundingBox();
+      if (box) {
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await delay(300, 500);
       }
-
-      if (!container) return;
-
-      // Get positioning info
-      const rect = el.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-
-      // Find the conversation area bounds
-      const conversationArea = mainSection.querySelector('div[role="grid"]') || mainSection;
-      const areaRect = conversationArea.getBoundingClientRect();
-
-      // Calculate relative position
-      const relativeLeft = rect.left - areaRect.left;
-      const areaWidth = areaRect.width;
-      const positionRatio = relativeLeft / areaWidth;
-
-      // Heuristics for detecting "our" messages (sent by account owner):
-      // Position ratio is the most reliable: > 0.45 means right side (our messages)
-      const isRightAligned = positionRatio > 0.45;
-
-      // Determine role based on position
-      const role = isRightAligned ? 'assistant' : 'user';
-
-      if (debugMode) {
-        debugInfo.push({
-          text: text.substring(0, 40),
-          positionRatio: positionRatio.toFixed(2),
-          isRightAligned,
-          role
-        });
-      }
-
-      result.push({
-        role,
-        text,
-        _debug: {
-          positionRatio
-        }
-      });
-    });
-
-    return { messages: result, debug: debugInfo };
-  }, debug);
-
-  if (debug && messages.debug?.length > 0) {
-    console.log('   🔍 Debug info:');
-    messages.debug.slice(0, 10).forEach(d => {
-      const icon = d.role === 'assistant' ? '📤' : '📥';
-      console.log(`      ${icon} [${d.role.padEnd(9)}] pos=${d.positionRatio} "${d.text}..."`);
-    });
+    }
+  } catch (e) {
+    // Ignore focus errors
   }
 
-  // Deduplicate
-  const seen = new Set();
-  const unique = messages.messages.filter(m => {
-    const key = m.text.substring(0, 50);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  // Helper function to extract currently visible messages
+  const extractVisibleMessages = async () => {
+    return await page.evaluate(() => {
+      const result = [];
+      const mainArea = document.querySelector('section main') || document.querySelector('main');
+      if (!mainArea) return result;
+
+      const allDivs = mainArea.querySelectorAll('div[dir="auto"]');
+
+      allDivs.forEach(el => {
+        const text = el.textContent?.trim();
+        if (!text || text.length < 2) return;
+
+        // Skip UI elements
+        if (el.closest('button') || el.closest('nav') || el.closest('header') ||
+            el.closest('form') || el.closest('textarea')) return;
+
+        // Skip timestamps/dates
+        if (text.match(/^\d{1,2}:\d{2}$/) || text.match(/^(lun|mar|mer|jeu|ven|sam|dim)/i) ||
+            text.match(/^(aujourd|hier|il y a)/i)) return;
+
+        // Get positioning
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const conversationArea = mainArea.querySelector('div[role="grid"]') || mainArea;
+        const areaRect = conversationArea.getBoundingClientRect();
+        const relativeLeft = rect.left - areaRect.left;
+        const areaWidth = areaRect.width;
+        const positionRatio = relativeLeft / areaWidth;
+
+        // Position > 0.35 = our message (right side)
+        const role = positionRatio > 0.35 ? 'assistant' : 'user';
+
+        result.push({
+          text,
+          role,
+          positionRatio: positionRatio.toFixed(2)
+        });
+      });
+
+      return result;
+    });
+  };
+
+  // Extract messages before scrolling (bottom of conversation)
+  let visibleMessages = await extractVisibleMessages();
+  visibleMessages.forEach(m => {
+    const key = m.text.substring(0, 100).toLowerCase().replace(/\s+/g, ' ');
+    if (!allMessages.has(key)) {
+      allMessages.set(key, m);
+    }
   });
 
-  console.log(`   📊 Found ${unique.length} messages`);
-  return unique;
+  let previousCount = allMessages.size;
+
+  // Scroll up and extract at each position
+  for (let i = 0; i < maxIterations; i++) {
+    // Scroll up
+    await page.mouse.wheel(0, -1500);
+    await delay(800, 1200);
+
+    // Extract visible messages
+    visibleMessages = await extractVisibleMessages();
+    visibleMessages.forEach(m => {
+      const key = m.text.substring(0, 100).toLowerCase().replace(/\s+/g, ' ');
+      if (!allMessages.has(key)) {
+        allMessages.set(key, m);
+      }
+    });
+
+    // Check if we found new messages
+    if (allMessages.size === previousCount) {
+      sameCountIterations++;
+      if (sameCountIterations >= 4) {
+        console.log(`   ✅ Reached top of conversation`);
+        break;
+      }
+    } else {
+      sameCountIterations = 0;
+      if (i > 0 && i % 5 === 0) {
+        console.log(`   📜 Loading... (${allMessages.size} messages found)`);
+      }
+    }
+
+    previousCount = allMessages.size;
+  }
+
+  // Convert Map to array
+  const messages = Array.from(allMessages.values());
+  console.log(`   📊 Total messages extracted: ${messages.length}`);
+
+  await delay(300, 500);
+
+  // Debug output
+  if (debug && messages.length > 0) {
+    console.log('   🔍 Debug info (first 10):');
+    messages.slice(0, 10).forEach(m => {
+      const icon = m.role === 'assistant' ? '📤' : '📥';
+      console.log(`      ${icon} [${m.role.padEnd(9)}] pos=${m.positionRatio} "${m.text.substring(0, 40)}..."`);
+    });
+    if (messages.length > 10) {
+      console.log(`      ... and ${messages.length - 10} more`);
+    }
+  }
+
+  return messages;
 }
 
 /**

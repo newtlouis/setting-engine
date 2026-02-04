@@ -22,11 +22,75 @@ const openai = new OpenAI({
 });
 
 /**
+ * Detect if a message is a booking confirmation (end of conversion funnel)
+ * @param {string} text - Message text
+ * @param {string} role - Message role (assistant/user)
+ * @returns {boolean}
+ */
+function isBookingConfirmation(text, role) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+
+  // Booking confirmation patterns (usually from assistant)
+  if (role === 'assistant') {
+    // WhatsApp/phone confirmation
+    if (lower.includes('whatsapp') && (lower.includes('écrit') || lower.includes('envoyé'))) return true;
+
+    // Calendar/meeting confirmation
+    if ((lower.includes('rendez-vous') || lower.includes('appel')) &&
+        (lower.includes('confirmé') || lower.includes('réservé') || lower.includes('noté'))) return true;
+
+    // Asking for phone/email for booking (this is the final step before booking)
+    if (lower.includes('numéro') && (lower.includes('téléphone') || lower.includes('whatsapp'))) return true;
+    if (lower.includes('email') && lower.includes('confirmer')) return true;
+  }
+
+  // User provides phone number (strong indicator of booking)
+  if (role === 'user') {
+    // Phone number pattern (at least 8 digits)
+    if (text.match(/[\d\s\+\-\.]{8,}/)) {
+      // Verify it looks like a phone number, not just random numbers
+      const digits = text.replace(/\D/g, '');
+      if (digits.length >= 8 && digits.length <= 15) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Filter messages to keep only the conversion funnel (before booking confirmation)
+ * @param {Array} messages - All messages
+ * @returns {Array} Messages up to and including booking confirmation
+ */
+function filterToConversionFunnel(messages) {
+  let bookingIndex = -1;
+
+  // Find the first booking confirmation message
+  for (let i = 0; i < messages.length; i++) {
+    if (isBookingConfirmation(messages[i].message_text, messages[i].role)) {
+      // Include a few messages after to capture the immediate confirmation
+      bookingIndex = Math.min(i + 2, messages.length - 1);
+      break;
+    }
+  }
+
+  if (bookingIndex === -1) {
+    // No booking found, return all messages
+    return messages;
+  }
+
+  return messages.slice(0, bookingIndex + 1);
+}
+
+/**
  * Get converted conversations with full message history
  * @param {number} accountId
+ * @param {Object} options
  * @returns {Array} Conversations with messages
  */
-export function getConvertedConversations(accountId) {
+export function getConvertedConversations(accountId, options = {}) {
+  const { includePostBooking = false } = options;
   const db = getDb();
 
   const leads = db.prepare(`
@@ -39,17 +103,26 @@ export function getConvertedConversations(accountId) {
   `).all(accountId);
 
   return leads.map(lead => {
-    const messages = db.prepare(`
+    let messages = db.prepare(`
       SELECT role, message_text, message_type, sent_at
       FROM conversations
       WHERE lead_id = ?
       ORDER BY sent_at ASC
     `).all(lead.id);
 
+    const totalMessages = messages.length;
+
+    // Filter to conversion funnel only (before booking)
+    if (!includePostBooking) {
+      messages = filterToConversionFunnel(messages);
+    }
+
     return {
       lead,
       messages,
-      messageCount: messages.length
+      messageCount: messages.length,
+      totalMessageCount: totalMessages,
+      truncated: messages.length < totalMessages
     };
   });
 }
@@ -60,12 +133,15 @@ export function getConvertedConversations(accountId) {
  * @returns {string}
  */
 function formatConversationForAnalysis(conversation) {
-  const { lead, messages } = conversation;
+  const { lead, messages, truncated, totalMessageCount } = conversation;
 
   let formatted = `## Conversation avec @${lead.username}\n`;
   formatted += `Funnel Step atteint: ${lead.funnel_step}\n`;
-  formatted += `Résultat: CONVERTI (booking complété)\n\n`;
-  formatted += `### Messages:\n\n`;
+  formatted += `Résultat: CONVERTI (booking complété)\n`;
+  if (truncated) {
+    formatted += `Note: Conversation tronquée au moment du booking (${messages.length}/${totalMessageCount} messages)\n`;
+  }
+  formatted += `\n### Messages:\n\n`;
 
   for (const msg of messages) {
     const role = msg.role === 'assistant' ? '🟢 COACH' : '🔵 PROSPECT';
@@ -242,11 +318,107 @@ export async function analyzeConvertedConversations(accountId, options = {}) {
 }
 
 /**
+ * Check if a suggestion already exists in the Knowledge Base
+ * @param {number} accountId
+ * @param {Object} suggestion
+ * @returns {Object} { exists: boolean, reason: string, matchedEntry: Object }
+ */
+function checkIfSuggestionExists(accountId, suggestion) {
+  const db = getDb();
+
+  // Get existing KB entries for this category
+  const existingEntries = db.prepare(`
+    SELECT id, category, situation, content, trigger_keywords
+    FROM knowledge_base
+    WHERE account_id = ? AND category = ?
+  `).all(accountId, suggestion.category);
+
+  if (existingEntries.length === 0) {
+    return { exists: false };
+  }
+
+  const suggestionKeywords = new Set(
+    (suggestion.trigger_keywords || []).map(k => k.toLowerCase())
+  );
+
+  for (const entry of existingEntries) {
+    // Parse existing keywords
+    let entryKeywords = [];
+    try {
+      entryKeywords = JSON.parse(entry.trigger_keywords || '[]');
+    } catch (e) {
+      entryKeywords = [];
+    }
+    const entryKeywordsSet = new Set(entryKeywords.map(k => k.toLowerCase()));
+
+    // Check keyword overlap (if > 50% overlap, consider duplicate)
+    const intersection = [...suggestionKeywords].filter(k => entryKeywordsSet.has(k));
+    const keywordOverlap = suggestionKeywords.size > 0
+      ? intersection.length / suggestionKeywords.size
+      : 0;
+
+    if (keywordOverlap >= 0.5) {
+      return {
+        exists: true,
+        reason: `Keywords similaires (${intersection.join(', ')})`,
+        matchedEntry: entry
+      };
+    }
+
+    // Check content similarity (simple word overlap)
+    const suggestionWords = new Set(
+      suggestion.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3)
+    );
+    const entryWords = new Set(
+      entry.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 3)
+    );
+
+    const wordIntersection = [...suggestionWords].filter(w => entryWords.has(w));
+    const contentOverlap = suggestionWords.size > 0
+      ? wordIntersection.length / suggestionWords.size
+      : 0;
+
+    if (contentOverlap >= 0.4) {
+      return {
+        exists: true,
+        reason: `Contenu similaire à l'entrée "${entry.situation?.substring(0, 30)}..."`,
+        matchedEntry: entry
+      };
+    }
+  }
+
+  return { exists: false };
+}
+
+/**
+ * Filter suggestions to remove duplicates that already exist in KB
+ * @param {number} accountId
+ * @param {Array} suggestions
+ * @returns {Object} { newSuggestions: Array, duplicates: Array }
+ */
+export function filterDuplicateSuggestions(accountId, suggestions) {
+  const newSuggestions = [];
+  const duplicates = [];
+
+  for (const suggestion of suggestions) {
+    const check = checkIfSuggestionExists(accountId, suggestion);
+    if (check.exists) {
+      duplicates.push({ suggestion, reason: check.reason });
+    } else {
+      newSuggestions.push(suggestion);
+    }
+  }
+
+  return { newSuggestions, duplicates };
+}
+
+/**
  * Generate a summary report from analysis results
  * @param {Object} results
+ * @param {number} accountId - Optional, for duplicate checking
  * @returns {string}
  */
-export function generateReport(results) {
+export function generateReport(results, accountId = null) {
   let report = '\n' + '='.repeat(60) + '\n';
   report += '📊 RAPPORT D\'ANALYSE DES CONVERSATIONS CONVERTIES\n';
   report += '='.repeat(60) + '\n\n';
@@ -292,18 +464,45 @@ export function generateReport(results) {
     });
   }
 
-  // Suggested KB entries
+  // Suggested KB entries - filter duplicates if accountId provided
   if (results.aggregated.suggested_knowledge_entries.length > 0) {
     report += '─'.repeat(40) + '\n';
     report += '📚 SUGGESTIONS POUR LA KNOWLEDGE BASE\n';
     report += '─'.repeat(40) + '\n\n';
 
-    results.aggregated.suggested_knowledge_entries.forEach((entry, i) => {
-      report += `${i + 1}. [${entry.category.toUpperCase()}]\n`;
-      report += `   Situation: ${entry.situation}\n`;
-      report += `   Contenu: ${entry.content}\n`;
-      report += `   Mots-clés: ${entry.trigger_keywords?.join(', ') || 'N/A'}\n\n`;
-    });
+    let newSuggestions = results.aggregated.suggested_knowledge_entries;
+    let duplicates = [];
+
+    // Filter duplicates if accountId is provided
+    if (accountId) {
+      const filtered = filterDuplicateSuggestions(accountId, results.aggregated.suggested_knowledge_entries);
+      newSuggestions = filtered.newSuggestions;
+      duplicates = filtered.duplicates;
+
+      // Update results with filtered suggestions
+      results.aggregated.suggested_knowledge_entries = newSuggestions;
+    }
+
+    if (newSuggestions.length > 0) {
+      report += `✨ NOUVELLES suggestions (${newSuggestions.length}):\n\n`;
+      newSuggestions.forEach((entry, i) => {
+        report += `${i + 1}. [${entry.category.toUpperCase()}]\n`;
+        report += `   Situation: ${entry.situation}\n`;
+        report += `   Contenu: ${entry.content}\n`;
+        report += `   Mots-clés: ${entry.trigger_keywords?.join(', ') || 'N/A'}\n\n`;
+      });
+    } else {
+      report += `Aucune nouvelle suggestion (toutes déjà en KB)\n\n`;
+    }
+
+    if (duplicates.length > 0) {
+      report += `⏭️ Ignorées car déjà en KB (${duplicates.length}):\n`;
+      duplicates.forEach((d, i) => {
+        report += `   - [${d.suggestion.category}] ${d.suggestion.situation?.substring(0, 40)}...\n`;
+        report += `     Raison: ${d.reason}\n`;
+      });
+      report += '\n';
+    }
   }
 
   return report;
@@ -378,8 +577,8 @@ export async function runFullAnalysis(accountId, options = {}) {
     return results;
   }
 
-  // Generate report
-  const report = generateReport(results);
+  // Generate report (with duplicate filtering)
+  const report = generateReport(results, accountId);
   console.log(report);
 
   // Optionally save to KB
@@ -401,6 +600,7 @@ export default {
   getConvertedConversations,
   analyzeConvertedConversations,
   generateReport,
+  filterDuplicateSuggestions,
   saveToKnowledgeBase,
   runFullAnalysis
 };
