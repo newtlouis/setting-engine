@@ -385,6 +385,35 @@ function runMigrations() {
 
     console.log('🧠 RAG tables ready');
 
+    // ---------------------------------------------------------
+    // DM SYNC & FEEDBACK LOOP TABLES
+    // ---------------------------------------------------------
+
+    // Message corrections table - tracks differences between AI suggestions and actual sent messages
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS message_corrections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL REFERENCES leads(id),
+        conversation_id INTEGER REFERENCES conversations(id),
+        ai_suggested TEXT,
+        actually_sent TEXT NOT NULL,
+        was_modified INTEGER DEFAULT 0,
+        modification_type TEXT,
+        synced_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(lead_id, actually_sent)
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_msg_corrections_lead ON message_corrections(lead_id);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_msg_corrections_modified ON message_corrections(was_modified);`);
+
+    // Add last_dm_sync_at to leads if not exists
+    if (!leadsColumns.some(col => col.name === 'last_dm_sync_at')) {
+      console.log('🔄 Migrating: Adding last_dm_sync_at to leads table...');
+      db.exec(`ALTER TABLE leads ADD COLUMN last_dm_sync_at TEXT`);
+    }
+
+    console.log('🔄 DM Sync tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }

@@ -1335,6 +1335,90 @@ app.get('/api/outreach-templates', async (req, res) => {
     }
 });
 
+// ============================================
+// DM SYNC & FEEDBACK LOOP API
+// ============================================
+
+// GET /api/dm-sync/stats - Get correction statistics
+app.get('/api/dm-sync/stats', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        // Get correction stats
+        const correctionStats = db.prepare(`
+            SELECT
+                COUNT(*) as total_corrections,
+                SUM(CASE WHEN modification_type = 'edited' THEN 1 ELSE 0 END) as edited,
+                SUM(CASE WHEN modification_type = 'rewritten' THEN 1 ELSE 0 END) as rewritten
+            FROM message_corrections mc
+            JOIN leads l ON mc.lead_id = l.id
+            WHERE l.account_id = ?
+        `).get(parseInt(account_id));
+
+        // Get leads to sync
+        const leadsToSync = db.prepare(`
+            SELECT COUNT(*) as count
+            FROM leads
+            WHERE account_id = ?
+              AND is_ignored = 0
+              AND (funnel_step >= 5 OR booking_status IS NOT NULL)
+        `).get(parseInt(account_id));
+
+        // Get recent corrections
+        const recentCorrections = db.prepare(`
+            SELECT mc.*, l.username
+            FROM message_corrections mc
+            JOIN leads l ON mc.lead_id = l.id
+            WHERE l.account_id = ?
+            ORDER BY mc.synced_at DESC
+            LIMIT 10
+        `).all(parseInt(account_id));
+
+        res.json({
+            corrections: correctionStats,
+            leadsToSync: leadsToSync.count,
+            recentCorrections
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/dm-sync/leads - Get leads that would be synced
+app.get('/api/dm-sync/leads', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const leads = db.prepare(`
+            SELECT l.id, l.username, l.funnel_step, l.booking_status, l.last_dm_sync_at,
+                   (SELECT COUNT(*) FROM conversations WHERE lead_id = l.id) as db_message_count,
+                   (SELECT COUNT(*) FROM message_corrections WHERE lead_id = l.id) as correction_count
+            FROM leads l
+            WHERE l.account_id = ?
+              AND l.is_ignored = 0
+              AND (l.funnel_step >= 5 OR l.booking_status IS NOT NULL)
+            ORDER BY
+              CASE WHEN l.booking_status = 'completed' THEN 1
+                   WHEN l.booking_status = 'pending' THEN 2
+                   ELSE 3 END,
+              l.funnel_step DESC
+            LIMIT 50
+        `).all(parseInt(account_id));
+
+        res.json(leads);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`\n🚀 Dashboard running at http://localhost:${PORT}`);

@@ -20,7 +20,10 @@
     "test": "node --test tests/*.test.js",
     "dev": "node --watch bin/run.js",
     "ui": "node ../dashboard/server.js",
-    "db:admin": "python3 -m sqlite_web permanent-data/leads.db --port 8081 --no-browser"
+    "db:admin": "python3 -m sqlite_web permanent-data/leads.db --port 8081 --no-browser",
+    "dm-sync": "node bin/dm-sync.js",
+    "dm-sync:stats": "node bin/dm-sync.js --stats",
+    "dm-sync:list": "node bin/dm-sync.js --list"
   },
   "keywords": [
     "instagram",
