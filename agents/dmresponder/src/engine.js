@@ -6,9 +6,13 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import { SYSTEM_PROMPT } from './prompts.js';
 import { validateConversation } from './utils.js';
+import { composeSystemPrompt } from '../../../shared/domain/services/PromptComposer.js';
 
 // Load environment variables from .env file
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+// Cache for prompt data to avoid repeated DB queries
+const promptCache = new Map();
 
 /**
  * Generates a response for a conversation using an LLM.
@@ -81,6 +85,62 @@ export async function generateRevivalMessage(conversationHistory, leadContext) {
 }
 
 /**
+ * Get the system prompt from database for an account
+ * @param {number} accountId - The account ID
+ * @returns {Promise<string|null>} The composed system prompt or null if not configured
+ */
+async function getPromptFromDatabase(accountId) {
+  if (!accountId) return null;
+
+  // Check cache first
+  const cacheKey = `prompt_${accountId}`;
+  if (promptCache.has(cacheKey)) {
+    const cached = promptCache.get(cacheKey);
+    // Cache for 5 minutes
+    if (Date.now() - cached.timestamp < 5 * 60 * 1000) {
+      return cached.prompt;
+    }
+  }
+
+  try {
+    const { getContainer } = await import('../../../shared/container.js');
+    const container = await getContainer();
+    const funnelRepo = container.repositories.funnel;
+
+    const { persona, stages } = await funnelRepo.getPromptData(accountId);
+
+    // Check if we have conversation scripts in the database
+    const hasScripts = stages.some(s => s.conversationScript);
+
+    if (!hasScripts && !persona) {
+      // No database config, will fall back to config file
+      return null;
+    }
+
+    const prompt = composeSystemPrompt({ persona, stages });
+
+    // Cache the result
+    promptCache.set(cacheKey, { prompt, timestamp: Date.now() });
+
+    return prompt;
+  } catch (error) {
+    console.error('[Engine] Failed to get prompt from database:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Clear the prompt cache (useful after updates)
+ */
+export function clearPromptCache(accountId = null) {
+  if (accountId) {
+    promptCache.delete(`prompt_${accountId}`);
+  } else {
+    promptCache.clear();
+  }
+}
+
+/**
  * Calls the OpenAI API to get a contextual response.
  * @param {Array} conversationHistory - The history of the conversation.
  * @returns {Promise<string>} The text of the next message.
@@ -104,10 +164,21 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     if (leadContext.notes) contextDescription += `- Notes: ${leadContext.notes}\n`;
   }
 
-  // Determine System Prompt
+  // Determine System Prompt (priority: database > profileConfig > default)
   let systemPrompt = SYSTEM_PROMPT;
-  if (profileConfig && profileConfig.dm_responder && profileConfig.dm_responder.system_prompt) {
-      systemPrompt = profileConfig.dm_responder.system_prompt;
+
+  // Try to get prompt from database first (if accountId is available)
+  const accountId = leadContext?.account_id || profileConfig?.account_id;
+  if (accountId) {
+    const dbPrompt = await getPromptFromDatabase(accountId);
+    if (dbPrompt) {
+      systemPrompt = dbPrompt;
+    }
+  }
+
+  // Fall back to config file if no database prompt
+  if (systemPrompt === SYSTEM_PROMPT && profileConfig?.dm_responder?.system_prompt) {
+    systemPrompt = profileConfig.dm_responder.system_prompt;
   }
 
   // Inject Calendly Availability if in booking stage (Step 5+)

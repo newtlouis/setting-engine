@@ -7,3 +7,5 @@
 export { SpamDetector, SPAM_PATTERNS, QUALITY_INDICATORS, QUALITY_THRESHOLDS } from './SpamDetector.js';
 export { EngagementScorer, SCORING_WEIGHTS, ENGAGEMENT_THRESHOLDS } from './EngagementScorer.js';
 export { LeadQualifier, QUALIFICATION_CRITERIA, QUALIFICATION_TIERS, DISQUALIFICATION_REASONS } from './LeadQualifier.js';
+export { parseFunnelStep, FunnelStepMapping } from './FunnelStepParser.js';
+export { composeSystemPrompt, getDefaultConversationScripts } from './PromptComposer.js';

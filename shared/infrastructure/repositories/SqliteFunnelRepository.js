@@ -6,6 +6,7 @@
 
 import { FunnelStage } from '../../domain/entities/FunnelStage.js';
 import { FollowupTemplate } from '../../domain/entities/FollowupTemplate.js';
+import { AccountPersona } from '../../domain/entities/AccountPersona.js';
 
 /**
  * Create SQLite Funnel Repository
@@ -72,6 +73,7 @@ export function createSqliteFunnelRepository({ getDb }) {
             stage_name = @stage_name,
             stage_label = @stage_label,
             description = @description,
+            conversation_script = @conversation_script,
             max_followups = @max_followups,
             followup_delay_hours = @followup_delay_hours,
             auto_ignore_after_max = @auto_ignore_after_max,
@@ -84,17 +86,18 @@ export function createSqliteFunnelRepository({ getDb }) {
         const result = db.prepare(`
           INSERT INTO funnel_stages (
             account_id, stage_order, stage_name, stage_label,
-            description, max_followups, followup_delay_hours,
+            description, conversation_script, max_followups, followup_delay_hours,
             auto_ignore_after_max, is_active
           ) VALUES (
             @account_id, @stage_order, @stage_name, @stage_label,
-            @description, @max_followups, @followup_delay_hours,
+            @description, @conversation_script, @max_followups, @followup_delay_hours,
             @auto_ignore_after_max, @is_active
           )
           ON CONFLICT(account_id, stage_order) DO UPDATE SET
             stage_name = excluded.stage_name,
             stage_label = excluded.stage_label,
             description = excluded.description,
+            conversation_script = excluded.conversation_script,
             max_followups = excluded.max_followups,
             followup_delay_hours = excluded.followup_delay_hours,
             auto_ignore_after_max = excluded.auto_ignore_after_max,
@@ -303,6 +306,93 @@ export function createSqliteFunnelRepository({ getDb }) {
       `).get(accountId);
 
       return row.count > 0;
+    },
+
+    // ==================== ACCOUNT PERSONAS ====================
+
+    /**
+     * Get persona for an account
+     */
+    async getPersonaForAccount(accountId) {
+      const db = getDb();
+      const row = db.prepare(`
+        SELECT * FROM account_personas WHERE account_id = ?
+      `).get(accountId);
+
+      return AccountPersona.fromDbRow(row);
+    },
+
+    /**
+     * Save account persona
+     */
+    async savePersona(persona) {
+      const db = getDb();
+      const data = persona.toDbRow();
+
+      if (persona.id) {
+        db.prepare(`
+          UPDATE account_personas SET
+            persona_name = @persona_name,
+            niche = @niche,
+            communication_rules = @communication_rules,
+            objections_script = @objections_script,
+            knowledge_base = @knowledge_base,
+            post_booking_message = @post_booking_message,
+            updated_at = datetime('now')
+          WHERE id = @id
+        `).run(data);
+        return persona;
+      } else {
+        const result = db.prepare(`
+          INSERT INTO account_personas (
+            account_id, persona_name, niche,
+            communication_rules, objections_script, knowledge_base,
+            post_booking_message
+          ) VALUES (
+            @account_id, @persona_name, @niche,
+            @communication_rules, @objections_script, @knowledge_base,
+            @post_booking_message
+          )
+          ON CONFLICT(account_id) DO UPDATE SET
+            persona_name = excluded.persona_name,
+            niche = excluded.niche,
+            communication_rules = excluded.communication_rules,
+            objections_script = excluded.objections_script,
+            knowledge_base = excluded.knowledge_base,
+            post_booking_message = excluded.post_booking_message,
+            updated_at = datetime('now')
+          RETURNING *
+        `).get(data);
+
+        return AccountPersona.fromDbRow(result);
+      }
+    },
+
+    /**
+     * Delete account persona
+     */
+    async deletePersona(accountId) {
+      const db = getDb();
+      const result = db.prepare(`
+        DELETE FROM account_personas WHERE account_id = ?
+      `).run(accountId);
+
+      return result.changes > 0;
+    },
+
+    // ==================== PROMPT COMPOSITION ====================
+
+    /**
+     * Get all data needed for prompt composition
+     */
+    async getPromptData(accountId) {
+      const persona = await this.getPersonaForAccount(accountId);
+      const stages = await this.getStagesForAccount(accountId);
+
+      return {
+        persona,
+        stages
+      };
     }
   };
 }

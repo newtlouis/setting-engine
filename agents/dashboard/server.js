@@ -696,22 +696,158 @@ app.get('/api/funnel-stats/:accountId', async (req, res) => {
 });
 
 // ============================================
+// ACCOUNT PERSONAS API
+// ============================================
+
+// GET /api/personas/:accountId - Get persona for an account
+app.get('/api/personas/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const persona = await container.repositories.funnel.getPersonaForAccount(parseInt(accountId));
+
+        if (!persona) {
+            return res.status(404).json({ error: 'Persona not found' });
+        }
+
+        res.json(persona.toJSON());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/personas - Create or update persona
+app.post('/api/personas', async (req, res) => {
+    try {
+        const { account_id, persona_name, niche, communication_rules, objections_script, knowledge_base, post_booking_message } = req.body;
+
+        if (!account_id || !persona_name) {
+            return res.status(400).json({ error: 'account_id and persona_name are required' });
+        }
+
+        const { AccountPersona } = await import('../../shared/domain/entities/AccountPersona.js');
+
+        const persona = AccountPersona.create(
+            parseInt(account_id),
+            persona_name,
+            {
+                niche,
+                communicationRules: communication_rules,
+                objectionsScript: objections_script,
+                knowledgeBase: knowledge_base,
+                postBookingMessage: post_booking_message
+            }
+        );
+
+        const saved = await container.repositories.funnel.savePersona(persona);
+        res.json(saved.toJSON());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/personas/:accountId - Update persona
+app.patch('/api/personas/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const updates = req.body;
+
+        // Get existing persona
+        const existing = db.prepare('SELECT * FROM account_personas WHERE account_id = ?').get(parseInt(accountId));
+        if (!existing) {
+            return res.status(404).json({ error: 'Persona not found' });
+        }
+
+        const allowedFields = ['persona_name', 'niche', 'communication_rules', 'objections_script', 'knowledge_base', 'post_booking_message'];
+        const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
+
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field]);
+
+        db.prepare(`UPDATE account_personas SET ${setClause}, updated_at = datetime('now') WHERE account_id = ?`)
+          .run(...values, parseInt(accountId));
+
+        const updated = db.prepare('SELECT * FROM account_personas WHERE account_id = ?').get(parseInt(accountId));
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/funnel-stages/:id/script - Update conversation script for a stage
+app.patch('/api/funnel-stages/:id/script', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { conversation_script } = req.body;
+
+        if (conversation_script === undefined) {
+            return res.status(400).json({ error: 'conversation_script is required' });
+        }
+
+        db.prepare(`UPDATE funnel_stages SET conversation_script = ?, updated_at = datetime('now') WHERE id = ?`)
+          .run(conversation_script, parseInt(id));
+
+        // Clear prompt cache for this account
+        const stage = db.prepare('SELECT account_id FROM funnel_stages WHERE id = ?').get(parseInt(id));
+        if (stage) {
+            const { clearPromptCache } = await import('../dmresponder/src/engine.js');
+            clearPromptCache(stage.account_id);
+        }
+
+        const updated = db.prepare('SELECT * FROM funnel_stages WHERE id = ?').get(parseInt(id));
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/prompt-preview/:accountId - Preview the composed prompt for an account
+app.get('/api/prompt-preview/:accountId', async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        const { composeSystemPrompt } = await import('../../shared/domain/services/PromptComposer.js');
+
+        const { persona, stages } = await container.repositories.funnel.getPromptData(parseInt(accountId));
+
+        if (!stages || stages.length === 0) {
+            return res.status(404).json({ error: 'No funnel stages configured' });
+        }
+
+        const prompt = composeSystemPrompt({ persona, stages });
+
+        res.json({
+            accountId: parseInt(accountId),
+            persona: persona?.toJSON() || null,
+            stagesCount: stages.length,
+            promptLength: prompt.length,
+            prompt
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================================
 // SCENARIO TESTING API
 // ============================================
 
 // Import scenario functions
-import { 
-    createScenario, 
-    getScenarios, 
-    getScenarioById, 
-    deleteScenario, 
+import {
+    createScenario,
+    getScenarios,
+    getScenarioById,
+    deleteScenario,
     saveScenarioResult,
     getScenarioResults,
-    updateScenario 
+    updateScenario
 } from '../collector/src/database.js';
 
 // Import AI engine
-import { generateResponse } from '../dmresponder/src/engine.js';
+import { generateResponse, clearPromptCache } from '../dmresponder/src/engine.js';
 import { loadProfileConfig } from '../../shared/utils/configLoader.js';
 
 // POST /api/test-scenarios - Create/save a scenario

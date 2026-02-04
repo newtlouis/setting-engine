@@ -1,6 +1,5 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 import { getContainer } from '../../../shared/container.js';
 import {
   initBrowser,
@@ -66,21 +65,33 @@ export async function runFollowupWatcher(options = {}) {
 
     if (!profile) throw new Error('Profile is required');
 
-    const profileConfig = await loadProfileConfig(profile);
-
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
     console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
 
     // Initialize via container
     const container = await getContainer();
     const db = container.getDb();
+    const funnelRepo = container.repositories.funnel;
     const dbFunctions = await initDB(); // Still needed for getFollowupCountForStep
     const account = await getOrCreateAccount(profile);
     const accountId = account.id;
 
+    // Load funnel stages from database
+    const stages = await funnelRepo.getStagesForAccount(accountId);
+    if (stages.length === 0) {
+        console.log('⚠️  No funnel stages configured for this account. Run migrate-init-funnel-stages.js first.');
+        return;
+    }
+
+    // Create a map of stageOrder -> stage for quick lookup
+    const stagesByOrder = {};
+    for (const stage of stages) {
+        stagesByOrder[stage.stageOrder] = stage;
+    }
+
     // 1. Find Stale Threads
     const threads = await getStaleThreads(db, accountId, hours);
-    
+
     if (threads.length === 0) {
         console.log('✅ No stale threads found needing follow-up.');
         return;
@@ -88,54 +99,62 @@ export async function runFollowupWatcher(options = {}) {
 
     console.log(`📋 Found ${threads.length} stale threads. Filtering by funnel step rules...`);
 
-    // 2. Filter threads based on Funnel Step Rules
+    // 2. Filter threads based on Funnel Stage Rules (from database)
     const threadsToProcess = [];
 
     for (const t of threads) {
-        // Only process funnel steps 2-5 (step 1 = first contact, no follow-ups)
+        // Only process funnel steps 2+ (step 1 = first contact, no follow-ups)
         const funnelStep = t.funnel_step || 0;
         if (funnelStep < 2) {
             console.log(`   Skipping @${t.username}: Funnel step ${funnelStep} < 2 (no follow-ups for first contact).`);
             continue;
         }
 
-        // Map funnel step to config key (max step5 for steps 5+)
-        const configStep = Math.min(funnelStep, 5);
-        const stepKey = `step${configStep}`;
-        const stepConfig = profileConfig.outreach?.followups?.[stepKey];
-        
-        if (!stepConfig) {
-            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): No config for step${configStep}.`);
+        // Get the stage configuration from database
+        const stage = stagesByOrder[funnelStep];
+        if (!stage) {
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): No stage configured.`);
+            continue;
+        }
+
+        // Get templates for this stage from database
+        const templates = await funnelRepo.getTemplatesForStage(stage.id);
+        const maxFollowups = stage.maxFollowups;
+
+        if (maxFollowups === 0 || templates.length === 0) {
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): No follow-ups configured for stage "${stage.stageName}".`);
             continue;
         }
 
         // Check max follow-ups for this funnel step
         const existingCount = await dbFunctions.getFollowupCountForStep(t.username, funnelStep);
-        
-        if (existingCount >= stepConfig.max) {
-            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): Max follow-ups reached (${existingCount}/${stepConfig.max}).`);
-            // If max reached for step 2 (first reply), mark as ignored
-            if (funnelStep === 2 && stepConfig.max === 1) {
-                console.log(`   ⚠️  @${t.username}: Marking as ignored (no response after step 2 follow-up).`);
-                // Mark lead as ignored since they didn't respond after first reply follow-up
+
+        if (existingCount >= maxFollowups) {
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): Max follow-ups reached (${existingCount}/${maxFollowups}).`);
+            // If max reached and auto_ignore is enabled, mark as ignored
+            if (stage.autoIgnoreAfterMax) {
+                console.log(`   ⚠️  @${t.username}: Marking as ignored (auto_ignore_after_max for stage "${stage.stageName}").`);
                 db.prepare(`UPDATE leads SET status = 'ignored', is_ignored = 1, updated_at = datetime('now') WHERE username = ?`).run(t.username);
             }
             continue;
         }
 
-        // Determine next template index (sequential)
+        // Determine next template (sequential)
         let templateIndex = existingCount;
-        if (templateIndex >= stepConfig.templates.length) {
-            templateIndex = stepConfig.templates.length - 1; // Fallback to last template
+        if (templateIndex >= templates.length) {
+            templateIndex = templates.length - 1; // Fallback to last template
         }
 
-        t.nextMessage = stepConfig.templates[templateIndex];
+        const template = templates[templateIndex];
+        t.nextMessage = template.templateText;
+        t.templateId = template.id;
         t.followupIndex = existingCount + 1;
+        t.maxFollowups = maxFollowups;
         t.funnelStep = funnelStep;
-        t.configStep = configStep;
+        t.stageName = stage.stageName;
         threadsToProcess.push(t);
     }
-    
+
     if (threadsToProcess.length === 0) {
         console.log('✅ No threads eligible for follow-up after filtering.');
         return;
@@ -147,8 +166,7 @@ export async function runFollowupWatcher(options = {}) {
     if (dryRun) {
         console.log(`🚧 DRY RUN MODE. Would process ${targetThreads.length} threads:`);
         for (const t of targetThreads) {
-            const stepConfig = profileConfig.outreach.followups[`step${t.configStep}`];
-            console.log(`   - @${t.username} (Funnel step ${t.funnelStep}) -> Relance #${t.followupIndex}/${stepConfig.max}`);
+            console.log(`   - @${t.username} (Funnel step ${t.funnelStep}, stage: ${t.stageName}) -> Relance #${t.followupIndex}/${t.maxFollowups}`);
             console.log(`     Message: "${t.nextMessage.substring(0, 50)}..."`);
         }
         return;
@@ -219,7 +237,12 @@ export async function runFollowupWatcher(options = {}) {
             // 8. Update DB
             // Store followup type with funnel step: e.g. 'followup_funnel3_1'
             await addMessage(thread.username, 'assistant', message, `followup_funnel${thread.funnelStep}_${thread.followupIndex}`);
-            
+
+            // 9. Track template usage for A/B testing
+            if (thread.templateId) {
+                await funnelRepo.recordTemplateUsage(thread.templateId, false); // false = not yet replied
+            }
+
             processedCount++;
             
             // Close tab to save memory/resources if we are processing many? 
