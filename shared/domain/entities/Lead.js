@@ -69,6 +69,7 @@ export class Lead {
     // Source
     this.leadSource = data.lead_source || data.leadSource || null;
     this.leadType = data.lead_type || data.leadType || 'cold';
+    this.platform = data.platform || 'instagram'; // instagram, tiktok, linkedin
 
     // Qualification
     this.bookingStatus = data.booking_status || data.bookingStatus || null;
@@ -271,6 +272,7 @@ export class Lead {
       last_contact_at: this.lastContactAt,
       lead_source: this.leadSource,
       lead_type: this.leadType,
+      platform: this.platform,
       booking_status: this.bookingStatus,
       pain_points: JSON.stringify(this.painPoints),
       notes: this.notes,
@@ -306,6 +308,7 @@ export class Lead {
       lastContactAt: this.lastContactAt,
       leadSource: this.leadSource,
       leadType: this.leadType,
+      platform: this.platform,
       bookingStatus: this.bookingStatus,
       painPoints: this.painPoints,
       notes: this.notes,

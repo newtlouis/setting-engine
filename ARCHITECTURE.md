@@ -407,4 +407,82 @@ Le `RecordMessage` use case parse automatiquement:
 - `[STEP_X]` → Met à jour `funnel_step` (seulement si plus grand)
 - `[NOT_INTERESTED]` → Passe le lead en `ignored`
 - `[MANUAL]` → Passe le lead en `manual`
+
+---
+
+## Architecture Multi-Plateforme
+
+Le système est conçu pour supporter plusieurs plateformes sociales.
+
+### Plateformes supportées
+
+| Plateforme | Status | Adapter |
+|------------|--------|---------|
+| Instagram | ✅ Actif | `InstagramAdapter.js` |
+| TikTok | 🔜 Coming soon | - |
+| LinkedIn | 🔜 Coming soon | - |
+
+### Structure
+
+```
+shared/
+├── platforms/
+│   ├── index.js                 # Registry/Factory
+│   ├── instagram/
+│   │   └── InstagramAdapter.js  # Implémentation Instagram
+│   ├── tiktok/                  # (futur)
+│   │   └── TikTokAdapter.js
+│   └── linkedin/                # (futur)
+│       └── LinkedInAdapter.js
+│
+├── application/
+│   └── ports/
+│       └── IPlatformAdapter.js  # Interface commune
+```
+
+### Interface IPlatformAdapter
+
+Chaque plateforme doit implémenter:
+
+```javascript
+{
+  platform: 'instagram',        // Identifiant
+  initSession(options),         // Initialiser le browser
+  login(session),               // Gérer le login
+  scrapeProfile(session, user), // Scraper un profil
+  openDM(session, user),        // Ouvrir une conversation
+  scrapeConversation(tab),      // Lire les messages
+  sendMessage(tab, message),    // Envoyer un message
+  typeMessage(tab, message),    // Taper sans envoyer
+  closeSession(session)         // Fermer le browser
+}
+```
+
+### Utilisation
+
+```javascript
+import { getPlatformAdapter, Platform } from './shared/platforms/index.js';
+
+// Obtenir l'adapter pour une plateforme
+const adapter = getPlatformAdapter(Platform.INSTAGRAM);
+
+// Initialiser une session
+const session = await adapter.initSession({ profile: 'melanie' });
+
+// Scraper un profil
+const profile = await adapter.scrapeProfile(session, 'john_doe');
+
+// Ouvrir un DM
+const dm = await adapter.openDM(session, 'john_doe');
+
+// Fermer
+await adapter.closeSession(session);
+```
+
+### Ajouter une nouvelle plateforme
+
+1. Créer `shared/platforms/{platform}/{Platform}Adapter.js`
+2. Implémenter l'interface `IPlatformAdapter`
+3. Enregistrer dans `shared/platforms/index.js`
+4. Créer les sélecteurs CSS spécifiques
 - `[ALERT_BOOKING]` → Détecté pour alerter (notification future)

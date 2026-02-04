@@ -74,6 +74,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       total_messages_received INTEGER DEFAULT 0,
       lead_source TEXT,
       lead_type TEXT DEFAULT 'cold',
+      platform TEXT DEFAULT 'instagram', -- instagram, tiktok, linkedin
       booking_status TEXT, -- pending, confirmed, completed
       funnel_step INTEGER DEFAULT 0, -- Sales funnel stage (1-9 from [STEP_X] labels)
       is_ignored INTEGER DEFAULT 0,
