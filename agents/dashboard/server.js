@@ -1160,22 +1160,22 @@ app.patch('/api/knowledge-base/:id', async (req, res) => {
 
         const knowledgeRepo = container.repositories.knowledge;
 
-        // Get existing entry
-        const entries = await knowledgeRepo.getByAccount(1); // Temporary: need to get by ID
-        const existing = entries.find(e => e.id === parseInt(id));
+        // Get existing entry by ID directly from database
+        const existing = db.prepare('SELECT * FROM knowledge_base WHERE id = ?').get(parseInt(id));
 
         if (!existing) {
             return res.status(404).json({ error: 'Knowledge entry not found' });
         }
 
         // Build update
+        const existingKeywords = existing.trigger_keywords ? JSON.parse(existing.trigger_keywords) : [];
         const update = {
             id: parseInt(id),
             accountId: existing.account_id,
             category: category || existing.category,
             situation: situation !== undefined ? situation : existing.situation,
             content: content || existing.content,
-            triggerKeywords: trigger_keywords || existing.triggerKeywords,
+            triggerKeywords: trigger_keywords || existingKeywords,
             embedding: existing.embedding
         };
 
