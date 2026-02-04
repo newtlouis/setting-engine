@@ -347,6 +347,7 @@ function runMigrations() {
         situation TEXT,
         content TEXT NOT NULL,
         embedding BLOB,
+        applicable_steps TEXT,
         usage_count INTEGER DEFAULT 0,
         success_count INTEGER DEFAULT 0,
         success_rate REAL,
@@ -355,6 +356,13 @@ function runMigrations() {
         updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Migration: Add applicable_steps column if missing
+    const kbColumns = db.prepare("PRAGMA table_info(knowledge_base)").all();
+    if (!kbColumns.some(col => col.name === 'applicable_steps')) {
+      console.log('🔄 Migrating: Adding applicable_steps to knowledge_base table...');
+      db.exec(`ALTER TABLE knowledge_base ADD COLUMN applicable_steps TEXT`);
+    }
     db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_category ON knowledge_base(account_id, category);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_active ON knowledge_base(account_id, is_active);`);
 

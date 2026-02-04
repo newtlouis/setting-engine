@@ -38,6 +38,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
       return rows.map(row => ({
         ...row,
         triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
+        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
         embedding: deserializeEmbedding(row.embedding)
       }));
     },
@@ -59,6 +60,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
       return rows.map(row => ({
         ...row,
         triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
+        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
         embedding: deserializeEmbedding(row.embedding)
       }));
     },
@@ -87,6 +89,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
           matches.push({
             ...row,
             triggerKeywords: keywords,
+            applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
             embedding: deserializeEmbedding(row.embedding),
             matchedKeyword
           });
@@ -105,6 +108,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
       const db = getDb();
       const embedding = entry.embedding ? serializeEmbedding(entry.embedding) : null;
       const triggerKeywords = entry.triggerKeywords ? JSON.stringify(entry.triggerKeywords) : null;
+      const applicableSteps = entry.applicableSteps ? JSON.stringify(entry.applicableSteps) : null;
 
       if (entry.id) {
         db.prepare(`
@@ -114,6 +118,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
             situation = ?,
             content = ?,
             embedding = ?,
+            applicable_steps = ?,
             is_active = ?,
             updated_at = datetime('now')
           WHERE id = ?
@@ -123,6 +128,7 @@ export function createSqliteKnowledgeRepository({ getDb }) {
           entry.situation,
           entry.content,
           embedding,
+          applicableSteps,
           entry.isActive ?? 1,
           entry.id
         );
@@ -130,8 +136,8 @@ export function createSqliteKnowledgeRepository({ getDb }) {
       } else {
         const result = db.prepare(`
           INSERT INTO knowledge_base (
-            account_id, category, trigger_keywords, situation, content, embedding
-          ) VALUES (?, ?, ?, ?, ?, ?)
+            account_id, category, trigger_keywords, situation, content, embedding, applicable_steps
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
           RETURNING *
         `).get(
           entry.accountId,
@@ -139,12 +145,14 @@ export function createSqliteKnowledgeRepository({ getDb }) {
           triggerKeywords,
           entry.situation,
           entry.content,
-          embedding
+          embedding,
+          applicableSteps
         );
 
         return {
           ...result,
           triggerKeywords: entry.triggerKeywords,
+          applicableSteps: entry.applicableSteps,
           embedding: entry.embedding
         };
       }

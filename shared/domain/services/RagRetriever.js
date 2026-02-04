@@ -85,7 +85,13 @@ export class RagRetriever {
         results.keywordMatches
       );
 
-      // 7. Record usage for learning
+      // 7. Filter by applicable steps (if configured)
+      const currentStep = leadContext?.funnel_step || leadContext?.conversation_step;
+      if (currentStep) {
+        results.relevantKnowledge = this.filterByStep(results.relevantKnowledge, currentStep);
+      }
+
+      // 8. Record usage for learning
       await this.recordUsage(results.relevantKnowledge);
 
     } catch (error) {
@@ -138,6 +144,21 @@ export class RagRetriever {
     }
 
     return semanticResults.sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * Filter results by applicable steps
+   * @private
+   */
+  filterByStep(results, currentStep) {
+    return results.filter(entry => {
+      // If no applicable_steps defined, the entry applies to all steps
+      if (!entry.applicableSteps || entry.applicableSteps.length === 0) {
+        return true;
+      }
+      // Check if current step is in the applicable steps
+      return entry.applicableSteps.includes(currentStep);
+    });
   }
 
   /**

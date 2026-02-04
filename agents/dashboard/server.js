@@ -1096,6 +1096,7 @@ app.get('/api/knowledge-base', async (req, res) => {
             situation: e.situation,
             content: e.content,
             triggerKeywords: e.triggerKeywords || [],
+            applicableSteps: e.applicableSteps || [],
             usageCount: e.usage_count,
             successCount: e.success_count,
             successRate: e.success_rate,
@@ -1113,7 +1114,7 @@ app.get('/api/knowledge-base', async (req, res) => {
 // POST /api/knowledge-base - Create a new knowledge entry
 app.post('/api/knowledge-base', async (req, res) => {
     try {
-        const { account_id, category, situation, content, trigger_keywords } = req.body;
+        const { account_id, category, situation, content, trigger_keywords, applicable_steps } = req.body;
 
         if (!account_id || !category || !content) {
             return res.status(400).json({ error: 'account_id, category, and content are required' });
@@ -1136,6 +1137,7 @@ app.post('/api/knowledge-base', async (req, res) => {
             situation,
             content,
             triggerKeywords: trigger_keywords || [],
+            applicableSteps: applicable_steps || [],
             embedding
         });
 
@@ -1145,6 +1147,7 @@ app.post('/api/knowledge-base', async (req, res) => {
             situation: entry.situation,
             content: entry.content,
             triggerKeywords: entry.triggerKeywords,
+            applicableSteps: entry.applicableSteps,
             hasEmbedding: !!embedding
         });
     } catch (err) {
@@ -1156,7 +1159,7 @@ app.post('/api/knowledge-base', async (req, res) => {
 app.patch('/api/knowledge-base/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { category, situation, content, trigger_keywords, regenerate_embedding } = req.body;
+        const { category, situation, content, trigger_keywords, applicable_steps, regenerate_embedding } = req.body;
 
         const knowledgeRepo = container.repositories.knowledge;
 
@@ -1169,13 +1172,15 @@ app.patch('/api/knowledge-base/:id', async (req, res) => {
 
         // Build update
         const existingKeywords = existing.trigger_keywords ? JSON.parse(existing.trigger_keywords) : [];
+        const existingSteps = existing.applicable_steps ? JSON.parse(existing.applicable_steps) : [];
         const update = {
             id: parseInt(id),
             accountId: existing.account_id,
             category: category || existing.category,
             situation: situation !== undefined ? situation : existing.situation,
             content: content || existing.content,
-            triggerKeywords: trigger_keywords || existingKeywords,
+            triggerKeywords: trigger_keywords !== undefined ? trigger_keywords : existingKeywords,
+            applicableSteps: applicable_steps !== undefined ? applicable_steps : existingSteps,
             embedding: existing.embedding
         };
 
@@ -1197,6 +1202,7 @@ app.patch('/api/knowledge-base/:id', async (req, res) => {
             situation: update.situation,
             content: update.content,
             triggerKeywords: update.triggerKeywords,
+            applicableSteps: update.applicableSteps,
             hasEmbedding: !!update.embedding
         });
     } catch (err) {
@@ -1244,9 +1250,12 @@ app.post('/api/knowledge-base/test', async (req, res) => {
 
         const ragRetriever = container.services.ragRetriever;
 
+        // Pass funnel_step only if provided (null means no step filtering)
+        const leadContext = funnel_step ? { funnel_step } : {};
+
         const results = await ragRetriever.retrieve({
             prospectMessage: message,
-            leadContext: { funnel_step: funnel_step || 3 },
+            leadContext,
             accountId: parseInt(account_id)
         });
 
@@ -1256,9 +1265,11 @@ app.post('/api/knowledge-base/test', async (req, res) => {
                 category: k.category,
                 situation: k.situation,
                 content: k.content,
-                score: Math.round(k.score * 100)
+                score: Math.round(k.score * 100),
+                applicableSteps: k.applicableSteps || []
             })),
             keywordMatches: results.keywordMatches.length,
+            funnelStepUsed: funnel_step || null,
             formattedPrompt: ragRetriever.formatForPrompt(results)
         });
     } catch (err) {

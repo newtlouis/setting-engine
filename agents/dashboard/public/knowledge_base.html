@@ -505,6 +505,18 @@
                     <h3 style="margin: 0 0 16px 0;">Tester le RAG</h3>
                     <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center;">
                         <input type="text" id="testMessage" placeholder="Tape un message prospect pour voir ce que le RAG retourne..." style="flex: 1 1 auto; width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 14px;">
+                        <select id="testFunnelStep" style="flex: 0 0 auto; padding: 10px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 14px;">
+                            <option value="" selected>Step: Tous</option>
+                            <option value="1">Step 1</option>
+                            <option value="2">Step 2</option>
+                            <option value="3">Step 3</option>
+                            <option value="4">Step 4</option>
+                            <option value="5">Step 5</option>
+                            <option value="6">Step 6</option>
+                            <option value="7">Step 7</option>
+                            <option value="8">Step 8</option>
+                            <option value="9">Step 9</option>
+                        </select>
                         <button onclick="testRag()" style="flex: 0 0 auto; padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;">Tester</button>
                     </div>
                     <div class="test-results" id="testResults">Les resultats apparaitront ici...</div>
@@ -557,6 +569,42 @@
                 <div class="form-group">
                     <label>Mots-cles declencheurs (separes par des virgules)</label>
                     <input type="text" id="entryKeywords" placeholder="pas le temps, occupe, busy, deborde">
+                </div>
+
+                <div class="form-group">
+                    <label>Etapes applicables (laisser vide = toutes les etapes)</label>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0;">
+                        Selectionne les etapes du funnel ou cette connaissance doit etre utilisee
+                    </p>
+                    <div class="steps-checkboxes" id="stepsCheckboxes" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="1"> Step 1
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="2"> Step 2
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="3"> Step 3
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="4"> Step 4
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="5"> Step 5
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="6"> Step 6
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="7"> Step 7
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="8"> Step 8
+                        </label>
+                        <label class="step-checkbox" style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; font-size: 13px;">
+                            <input type="checkbox" name="applicable_steps" value="9"> Step 9
+                        </label>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

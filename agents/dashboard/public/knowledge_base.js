@@ -182,6 +182,7 @@ function renderEntries() {
                 <span>${entry.hasEmbedding ? '&#10003; Embedding' : '&#10007; Pas d\'embedding'}</span>
                 <span>Utilisations: ${entry.usageCount || 0}</span>
                 ${entry.successRate ? `<span>Succes: ${Math.round(entry.successRate * 100)}%</span>` : ''}
+                <span>${formatApplicableSteps(entry.applicableSteps)}</span>
             </div>
         </div>
     `).join('');
@@ -199,6 +200,14 @@ function formatCategory(category) {
     return names[category] || category;
 }
 
+// Format applicable steps for display
+function formatApplicableSteps(steps) {
+    if (!steps || steps.length === 0) {
+        return 'Toutes etapes';
+    }
+    return `Steps: ${steps.sort((a, b) => a - b).join(', ')}`;
+}
+
 // Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -214,6 +223,8 @@ function openCreateModal() {
     document.getElementById('entrySituation').value = '';
     document.getElementById('entryContent').value = '';
     document.getElementById('entryKeywords').value = '';
+    // Clear all step checkboxes
+    document.querySelectorAll('input[name="applicable_steps"]').forEach(cb => cb.checked = false);
     document.getElementById('entryModal').classList.add('active');
 }
 
@@ -227,6 +238,13 @@ function openEditModal(id) {
     document.getElementById('entrySituation').value = entry.situation || '';
     document.getElementById('entryContent').value = entry.content;
     document.getElementById('entryKeywords').value = (entry.triggerKeywords || []).join(', ');
+
+    // Set step checkboxes
+    const applicableSteps = entry.applicableSteps || [];
+    document.querySelectorAll('input[name="applicable_steps"]').forEach(cb => {
+        cb.checked = applicableSteps.includes(parseInt(cb.value));
+    });
+
     document.getElementById('entryModal').classList.add('active');
 }
 
@@ -244,6 +262,11 @@ async function saveEntry() {
         .map(k => k.trim())
         .filter(k => k);
 
+    // Get selected applicable steps
+    const applicableSteps = Array.from(
+        document.querySelectorAll('input[name="applicable_steps"]:checked')
+    ).map(cb => parseInt(cb.value));
+
     if (!content) {
         alert('Le contenu est obligatoire');
         return;
@@ -258,7 +281,8 @@ async function saveEntry() {
             category,
             situation,
             content,
-            trigger_keywords: keywords
+            trigger_keywords: keywords,
+            applicable_steps: applicableSteps
         };
 
         if (id) {
@@ -319,6 +343,9 @@ async function testRag() {
     const message = document.getElementById('testMessage').value.trim();
     if (!message) return;
 
+    const funnelStepSelect = document.getElementById('testFunnelStep');
+    const funnelStep = funnelStepSelect.value ? parseInt(funnelStepSelect.value) : null;
+
     const resultsDiv = document.getElementById('testResults');
     resultsDiv.textContent = 'Recherche en cours...';
 
@@ -328,22 +355,26 @@ async function testRag() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 account_id: currentAccountId,
-                message
+                message,
+                funnel_step: funnelStep
             })
         });
 
         const data = await res.json();
 
         if (data.relevantKnowledge.length === 0) {
-            resultsDiv.textContent = 'Aucun resultat pertinent trouve.';
+            resultsDiv.textContent = `Aucun resultat pertinent trouve (Step: ${data.funnelStepUsed || 'tous'}).`;
             return;
         }
 
-        let output = `Resultats pour: "${message}"\n`;
+        let output = `Resultats pour: "${message}" (Step: ${data.funnelStepUsed || 'tous'})\n`;
         output += '='.repeat(50) + '\n\n';
 
         data.relevantKnowledge.forEach((k, i) => {
-            output += `[${k.score}%] [${k.category.toUpperCase()}]\n`;
+            const stepsInfo = k.applicableSteps && k.applicableSteps.length > 0
+                ? `[Steps: ${k.applicableSteps.join(',')}]`
+                : '[Toutes etapes]';
+            output += `[${k.score}%] [${k.category.toUpperCase()}] ${stepsInfo}\n`;
             if (k.situation) output += `Situation: ${k.situation}\n`;
             output += `${k.content}\n`;
             output += '\n' + '-'.repeat(30) + '\n\n';
