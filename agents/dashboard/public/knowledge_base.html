@@ -205,10 +205,27 @@
             display: flex;
             gap: 12px;
             margin-bottom: 16px;
+            align-items: center;
         }
 
         .test-input {
             flex: 1;
+            min-width: 0;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .test-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .test-input-group .btn {
+            flex-shrink: 0;
         }
 
         .test-results {
@@ -486,9 +503,9 @@
                 <!-- Test Section -->
                 <div class="test-section">
                     <h3 style="margin: 0 0 16px 0;">Tester le RAG</h3>
-                    <div class="test-input-group">
-                        <input type="text" id="testMessage" class="test-input" placeholder="Tape un message prospect pour voir ce que le RAG retourne...">
-                        <button class="btn btn-primary" onclick="testRag()">Tester</button>
+                    <div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center;">
+                        <input type="text" id="testMessage" placeholder="Tape un message prospect pour voir ce que le RAG retourne..." style="flex: 1 1 auto; width: 100%; padding: 10px 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 14px;">
+                        <button onclick="testRag()" style="flex: 0 0 auto; padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;">Tester</button>
                     </div>
                     <div class="test-results" id="testResults">Les resultats apparaitront ici...</div>
                 </div>
