@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commands | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .cmd-layout {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 24px;
+            height: calc(100vh - 140px);
+        }
+
+        /* Command Panel */
+        .cmd-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .cmd-category {
+            margin-bottom: 20px;
+        }
+
+        .cmd-category-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin: 0 0 8px 4px;
+            font-weight: 700;
+        }
+
+        .cmd-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+        }
+
+        .cmd-card:hover {
+            border-color: var(--accent);
+            background: #1c2128;
+        }
+
+        .cmd-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .cmd-name {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .cmd-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .cmd-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .cmd-option-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(88, 166, 255, 0.1);
+            color: var(--accent);
+            font-family: monospace;
+        }
+
+        .cmd-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .cmd-args-input {
+            flex: 1;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .cmd-args-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .cmd-args-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .btn-run {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-run:hover {
+            background: #34a13e;
+            transform: translateY(-1px);
+        }
+
+        .btn-run:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Terminal Panel */
+        .terminal-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .terminal-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: #1c2128;
+        }
+
+        .terminal-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .terminal-title.active {
+            color: var(--success);
+        }
+
+        .terminal-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-stop {
+            background: var(--error);
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-stop:hover {
+            background: #da3633;
+        }
+
+        .btn-stop:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-clear {
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-clear:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
+        .terminal-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            background: #0d1117;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .terminal-output .ansi-bold { font-weight: 700; }
+        .terminal-output .ansi-black { color: #484f58; }
+        .terminal-output .ansi-red { color: #ff7b72; }
+        .terminal-output .ansi-green { color: #56d364; }
+        .terminal-output .ansi-yellow { color: #e3b341; }
+        .terminal-output .ansi-blue { color: #58a6ff; }
+        .terminal-output .ansi-magenta { color: #bc8cff; }
+        .terminal-output .ansi-cyan { color: #76e3ea; }
+        .terminal-output .ansi-white { color: #f0f6fc; }
+
+        .terminal-welcome {
+            color: var(--text-secondary);
+            text-align: center;
+            padding-top: 40px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+
+            <!-- Navigation -->
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Dashboard</a>
+                <a href="/lead_details.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Lead
+                    Details</a>
+                <a href="/scenario_tester.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Chatbox
+                    testeur</a>
+                <a href="/funnel_config.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Config
+                    Funnel</a>
+                <a href="/knowledge_base.html"
+                    style="color: var(--text-secondary); text-decoration: none; font-weight: 500; transition: color 0.2s;">Knowledge
+                    Base</a>
+                <a href="/commands.html"
+                    style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Commands</a>
+            </nav>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="cmd-layout">
+            <!-- Left: Command List -->
+            <div class="cmd-panel" id="commandPanel">
+                <div style="color: var(--text-secondary); text-align: center; padding: 20px;">Loading commands...</div>
+            </div>
+
+            <!-- Right: Terminal -->
+            <div class="terminal-panel">
+                <div class="terminal-toolbar">
+                    <span class="terminal-title" id="terminalTitle">Terminal</span>
+                    <div class="terminal-btns">
+                        <button class="btn-stop" id="btnStop" onclick="stopProcess()" disabled>Stop</button>
+                        <button class="btn-clear" onclick="clearTerminal()">Clear</button>
+                    </div>
+                </div>
+                <div class="terminal-output" id="terminalOutput">
+                    <div class="terminal-welcome">Selectionnez une commande pour l'executer.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="commands.js"></script>
+</body>
+
+</html>

@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import { getContainer } from '../../shared/container.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,6 +53,46 @@ try {
 } catch (err) {
     console.error('❌ Database initialization failed:', err.message);
 }
+
+// ============================================
+// COMMAND LAUNCHER REGISTRY & PROCESS MAP
+// ============================================
+
+const COMMAND_REGISTRY = {
+    Collection: [
+        { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max', '--show-browser'] },
+        { name: 'collect', description: 'Traiter et qualifier les leads', options: ['--profile'] },
+        { name: 'dm-sync', description: 'Sync DMs Instagram vers DB', options: ['--profile', '--max', '--include-recent'] },
+        { name: 'dm-sync:stats', description: 'Stats de sync DM', options: ['--profile'] },
+        { name: 'analyze', description: 'Analyser conversations converties', options: ['--profile', '--max'] },
+        { name: 'analyze:list', description: 'Lister conversations converties', options: ['--profile'] },
+    ],
+    Prospecting: [
+        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--max', '--show-browser'] },
+    ],
+    Outreach: [
+        { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max', '--show-browser'] },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: [] },
+    ],
+    Responder: [
+        { name: 'reply', description: 'Repondre a un lead', options: ['--profile', '--show-browser'] },
+        { name: 'reply:auto', description: 'Cycle auto de reponses', options: ['--profile'] },
+        { name: 'reply:conversation', description: 'Repondre leads conversation', options: ['--profile'] },
+        { name: 'reply:outreach', description: 'Repondre leads outreach', options: ['--profile'] },
+        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
+        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
+        { name: 'respond:followers', description: 'Surveiller followers', options: ['--profile', '--show-browser'] },
+        { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile', '--show-browser'] },
+    ],
+    Operations: [
+        { name: 'harvest', description: 'Recolter leads', options: [] },
+        { name: 'backup', description: 'Backup base de donnees', options: ['--upload'] },
+        { name: 'restore', description: 'Restaurer base de donnees', options: ['--remote'] },
+    ],
+};
+
+// Map of processId -> { process, logs[], listeners[], exitCode, command, startedAt }
+const runningProcesses = new Map();
 
 // API Routes
 
@@ -1483,6 +1525,169 @@ app.get('/api/dm-sync/leads', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// ============================================
+// COMMAND LAUNCHER API
+// ============================================
+
+// Build flat allowlist for validation
+const allowedCommands = new Set();
+for (const cmds of Object.values(COMMAND_REGISTRY)) {
+    for (const cmd of cmds) {
+        allowedCommands.add(cmd.name);
+    }
+}
+
+// GET /api/commands - Return the command registry
+app.get('/api/commands', (req, res) => {
+    res.json(COMMAND_REGISTRY);
+});
+
+// POST /api/commands/run - Launch a command
+app.post('/api/commands/run', (req, res) => {
+    const { command, args = [] } = req.body;
+
+    if (!command || !allowedCommands.has(command)) {
+        return res.status(400).json({ error: `Unknown command: ${command}` });
+    }
+
+    // Validate args are strings starting with --
+    const sanitizedArgs = args.filter(a => typeof a === 'string' && a.startsWith('--'));
+
+    const processId = randomUUID();
+    const projectRoot = path.join(__dirname, '..', '..');
+
+    const child = spawn('node', ['cli.js', command, ...sanitizedArgs], {
+        cwd: projectRoot,
+        env: { ...process.env, FORCE_COLOR: '1' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const entry = {
+        process: child,
+        logs: [],
+        listeners: [],
+        exitCode: null,
+        command: [command, ...sanitizedArgs].join(' '),
+        startedAt: new Date().toISOString(),
+    };
+    runningProcesses.set(processId, entry);
+
+    const appendLog = (data) => {
+        const text = data.toString();
+        entry.logs.push(text);
+        for (const listener of entry.listeners) {
+            listener(text);
+        }
+    };
+
+    child.stdout.on('data', appendLog);
+    child.stderr.on('data', appendLog);
+
+    child.on('close', (code) => {
+        entry.exitCode = code;
+        const exitMsg = `\n[Process exited with code ${code}]\n`;
+        entry.logs.push(exitMsg);
+        for (const listener of entry.listeners) {
+            listener(exitMsg);
+        }
+        // Auto-cleanup after 60s
+        setTimeout(() => {
+            runningProcesses.delete(processId);
+        }, 60_000);
+    });
+
+    res.json({ processId, command: entry.command });
+});
+
+// GET /api/commands/stream/:processId - SSE stream
+app.get('/api/commands/stream/:processId', (req, res) => {
+    const { processId } = req.params;
+    const entry = runningProcesses.get(processId);
+
+    if (!entry) {
+        return res.status(404).json({ error: 'Process not found' });
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+    });
+
+    // Replay buffered logs
+    for (const log of entry.logs) {
+        res.write(`data: ${JSON.stringify(log)}\n\n`);
+    }
+
+    // If already finished, send done and close
+    if (entry.exitCode !== null) {
+        res.write(`event: done\ndata: ${JSON.stringify({ exitCode: entry.exitCode })}\n\n`);
+        return res.end();
+    }
+
+    // Register live listener
+    const listener = (text) => {
+        res.write(`data: ${JSON.stringify(text)}\n\n`);
+    };
+    entry.listeners.push(listener);
+
+    // Send done event when process exits
+    const onClose = entry.process;
+    const checkDone = setInterval(() => {
+        if (entry.exitCode !== null) {
+            clearInterval(checkDone);
+            res.write(`event: done\ndata: ${JSON.stringify({ exitCode: entry.exitCode })}\n\n`);
+            res.end();
+        }
+    }, 500);
+
+    req.on('close', () => {
+        clearInterval(checkDone);
+        entry.listeners = entry.listeners.filter(l => l !== listener);
+    });
+});
+
+// POST /api/commands/stop/:processId - Stop a running process
+app.post('/api/commands/stop/:processId', (req, res) => {
+    const { processId } = req.params;
+    const entry = runningProcesses.get(processId);
+
+    if (!entry) {
+        return res.status(404).json({ error: 'Process not found' });
+    }
+
+    if (entry.exitCode !== null) {
+        return res.json({ success: true, message: 'Process already exited' });
+    }
+
+    entry.process.kill('SIGTERM');
+
+    // Force kill after 5s
+    setTimeout(() => {
+        try {
+            if (entry.exitCode === null) {
+                entry.process.kill('SIGKILL');
+            }
+        } catch (_) { /* already dead */ }
+    }, 5000);
+
+    res.json({ success: true, message: 'SIGTERM sent' });
+});
+
+// GET /api/commands/running - List running processes
+app.get('/api/commands/running', (req, res) => {
+    const list = [];
+    for (const [id, entry] of runningProcesses) {
+        list.push({
+            processId: id,
+            command: entry.command,
+            startedAt: entry.startedAt,
+            exitCode: entry.exitCode,
+        });
+    }
+    res.json(list);
 });
 
 // Start Server
