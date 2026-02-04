@@ -18,6 +18,7 @@ import {
   createSqliteAccountRepository,
   createSqliteOutreachQueueRepository
 } from './infrastructure/index.js';
+import { createSqliteFunnelRepository } from './infrastructure/repositories/SqliteFunnelRepository.js';
 import {
   SaveLeadsFromComments,
   QualifyLeads,
@@ -61,7 +62,8 @@ class Container {
       lead: createSqliteLeadRepository({ getDb }),
       conversation: createSqliteConversationRepository({ getDb }),
       account: createSqliteAccountRepository({ getDb }),
-      outreachQueue: createSqliteOutreachQueueRepository({ getDb })
+      outreachQueue: createSqliteOutreachQueueRepository({ getDb }),
+      funnel: createSqliteFunnelRepository({ getDb })
     };
 
     // Domain services (stateless, no dependencies)

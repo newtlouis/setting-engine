@@ -158,7 +158,42 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       FOREIGN KEY (scenario_id) REFERENCES test_scenarios(id) ON DELETE CASCADE
     );
 
+    -- Funnel Stages table: configurable funnel steps per account
+    CREATE TABLE IF NOT EXISTS funnel_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      stage_order INTEGER NOT NULL,        -- 1, 2, 3... order in funnel
+      stage_name TEXT NOT NULL,            -- e.g., "connexion", "exploration"
+      stage_label TEXT NOT NULL,           -- e.g., "STEP_2" (for LLM parsing)
+      description TEXT,
+      max_followups INTEGER DEFAULT 0,     -- max relances for this stage
+      followup_delay_hours INTEGER DEFAULT 24,
+      auto_ignore_after_max INTEGER DEFAULT 0,  -- ignore lead if max reached
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(account_id, stage_order)
+    );
+
+    -- Followup Templates table: message templates for each stage
+    CREATE TABLE IF NOT EXISTS followup_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stage_id INTEGER NOT NULL REFERENCES funnel_stages(id) ON DELETE CASCADE,
+      account_id INTEGER NOT NULL REFERENCES accounts(id),
+      template_order INTEGER NOT NULL,     -- 1st, 2nd, 3rd followup
+      template_text TEXT NOT NULL,
+      template_name TEXT,                  -- e.g., "Relance douce"
+      is_active INTEGER DEFAULT 1,
+      usage_count INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,     -- replies received
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(stage_id, template_order)
+    );
+
     -- Create indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_funnel_stages_account ON funnel_stages(account_id);
+    CREATE INDEX IF NOT EXISTS idx_followup_templates_stage ON followup_templates(stage_id);
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_leads_warmth ON leads(warmth);
