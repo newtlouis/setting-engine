@@ -75,14 +75,15 @@ export function composeSystemPrompt({ persona, stages, leadContext = null }) {
     parts.push(composeStagesSection(stages));
   }
 
-  // 5. Add objections handling if defined
-  if (persona?.objectionsScript) {
-    parts.push(`\n**GESTION DES OBJECTIONS :**\n${persona.objectionsScript}`);
-  }
+  // 5. Objections handling - MIGRATED TO RAG
+  // Le script d'objections est maintenant géré par le RAG (Knowledge Base)
+  // qui injecte dynamiquement les connaissances pertinentes selon le message du prospect.
+  // Voir: RagRetriever.js et engine.js
 
-  // 6. Add knowledge base if defined
+  // 6. Add knowledge base if defined (règles générales uniquement)
+  // Note: Pour les objections spécifiques, utiliser la Knowledge Base (RAG) dans le dashboard
   if (persona?.knowledgeBase) {
-    parts.push(`\n**KNOWLEDGE BASE :**\n${persona.knowledgeBase}`);
+    parts.push(`\n**RÈGLES GÉNÉRALES :**\n${persona.knowledgeBase}`);
   }
 
   // 7. Add lead context if provided
