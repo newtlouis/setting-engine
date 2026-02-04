@@ -19,6 +19,7 @@ import {
   createSqliteOutreachQueueRepository
 } from './infrastructure/index.js';
 import { createSqliteFunnelRepository } from './infrastructure/repositories/SqliteFunnelRepository.js';
+import { createSqliteKnowledgeRepository } from './infrastructure/repositories/SqliteKnowledgeRepository.js';
 import {
   SaveLeadsFromComments,
   QualifyLeads,
@@ -33,6 +34,7 @@ import {
   EngagementScorer,
   LeadQualifier
 } from './domain/index.js';
+import { RagRetriever } from './domain/services/RagRetriever.js';
 
 let container = null;
 
@@ -63,14 +65,18 @@ class Container {
       conversation: createSqliteConversationRepository({ getDb }),
       account: createSqliteAccountRepository({ getDb }),
       outreachQueue: createSqliteOutreachQueueRepository({ getDb }),
-      funnel: createSqliteFunnelRepository({ getDb })
+      funnel: createSqliteFunnelRepository({ getDb }),
+      knowledge: createSqliteKnowledgeRepository({ getDb })
     };
 
     // Domain services (stateless, no dependencies)
     this.services = {
       spamDetector: SpamDetector,
       engagementScorer: EngagementScorer,
-      leadQualifier: LeadQualifier
+      leadQualifier: LeadQualifier,
+      ragRetriever: new RagRetriever({
+        knowledgeRepository: this.repositories.knowledge
+      })
     };
 
     // Create use cases with dependencies

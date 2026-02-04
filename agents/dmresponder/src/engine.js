@@ -181,6 +181,38 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     systemPrompt = profileConfig.dm_responder.system_prompt;
   }
 
+  // === RAG ENRICHMENT ===
+  // Retrieve relevant knowledge and similar conversations (accountId already defined above)
+  if (accountId) {
+    try {
+      const { getContainer } = await import('../../../shared/container.js');
+      const container = await getContainer();
+      const ragRetriever = container.services.ragRetriever;
+
+      // Get the last prospect message
+      const lastProspectMessage = conversationHistory
+        .filter(m => m.role === 'user')
+        .pop()?.text || '';
+
+      if (lastProspectMessage) {
+        const ragResults = await ragRetriever.retrieve({
+          prospectMessage: lastProspectMessage,
+          leadContext,
+          accountId
+        });
+
+        if (ragRetriever.hasRelevantResults(ragResults)) {
+          const ragContext = ragRetriever.formatForPrompt(ragResults);
+          contextDescription += `\n\n${ragContext}`;
+          console.log(`[Engine] RAG enriched context with ${ragResults.relevantKnowledge.length} knowledge entries`);
+        }
+      }
+    } catch (e) {
+      console.error('[Engine] RAG retrieval failed (continuing without):', e.message);
+      // Continue without RAG - graceful degradation
+    }
+  }
+
   // Inject Calendly Availability if in booking stage (Step 5+)
   const currentStep = leadContext?.conversation_step || 0;
   if (currentStep >= 5) {

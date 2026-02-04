@@ -333,6 +333,50 @@ function runMigrations() {
       }
     }
 
+    // ---------------------------------------------------------
+    // RAG SYSTEM TABLES
+    // ---------------------------------------------------------
+
+    // Knowledge Base table for RAG
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_base (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        category TEXT NOT NULL,
+        trigger_keywords TEXT,
+        situation TEXT,
+        content TEXT NOT NULL,
+        embedding BLOB,
+        usage_count INTEGER DEFAULT 0,
+        success_count INTEGER DEFAULT 0,
+        success_rate REAL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_category ON knowledge_base(account_id, category);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_active ON knowledge_base(account_id, is_active);`);
+
+    // Conversation Embeddings table for RAG (successful conversation patterns)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_embeddings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL REFERENCES leads(id),
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        conversation_summary TEXT,
+        embedding BLOB,
+        outcome TEXT DEFAULT 'pending',
+        funnel_step_reached INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_conv_emb_account_outcome ON conversation_embeddings(account_id, outcome);`);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_emb_lead ON conversation_embeddings(lead_id);`);
+
+    console.log('🧠 RAG tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }
