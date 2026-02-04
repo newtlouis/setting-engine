@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base (RAG) | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Knowledge Base Specific Styles */
+        .kb-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            min-height: calc(100vh - 200px);
+        }
+
+        /* Sidebar */
+        .kb-sidebar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 24px;
+        }
+
+        .sidebar-section h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin: 0 0 12px 0;
+            letter-spacing: 0.5px;
+        }
+
+        .category-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .category-item:hover {
+            background: var(--bg-input);
+            color: var(--text-primary);
+        }
+
+        .category-item.active {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .category-count {
+            background: var(--bg-input);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .category-item.active .category-count {
+            background: rgba(88, 166, 255, 0.3);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Main Content */
+        .kb-main {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* Entry List */
+        .entry-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .entry-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .entry-card:hover {
+            border-color: var(--accent);
+        }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .entry-category {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .entry-category.objection { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+        .entry-category.faq { background: rgba(88, 166, 255, 0.2); color: #58a6ff; }
+        .entry-category.technique { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+        .entry-category.success_story { background: rgba(210, 153, 34, 0.2); color: #d29922; }
+        .entry-category.product { background: rgba(163, 113, 247, 0.2); color: #a371f7; }
+
+        .entry-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .entry-situation {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .entry-content {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .entry-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .entry-keywords {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .keyword-tag {
+            background: var(--bg-input);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Test Section */
+        .test-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .test-input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .test-input {
+            flex: 1;
+        }
+
+        .test-results {
+            background: var(--bg-input);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 600px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #4a9eff;
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border-color: var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: #2d333b;
+        }
+
+        .btn-danger {
+            background: rgba(248, 81, 73, 0.15);
+            color: var(--error);
+            border-color: var(--error);
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 81, 73, 0.3);
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Header actions */
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header>
+        <div class="logo">
+            <span class="logo-icon">&#9670;</span>
+            <span>Instagram Lead Engine</span>
+        </div>
+        <nav>
+            <a href="index.html">Dashboard</a>
+            <a href="funnel_config.html">Funnel Config</a>
+            <a href="knowledge_base.html" class="active">Knowledge Base</a>
+            <a href="scenario_tester.html">Scenario Tester</a>
+        </nav>
+        <div class="account-selector">
+            <select id="accountSelect">
+                <option value="">Chargement...</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <div class="page-header">
+            <h1>Knowledge Base (RAG)</h1>
+            <p class="page-subtitle">Enrichis les reponses IA avec des connaissances contextuelles</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Entrees</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statWithEmbedding">0</div>
+                <div class="stat-label">Avec Embedding</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statUsage">0</div>
+                <div class="stat-label">Utilisations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statCategories">0</div>
+                <div class="stat-label">Categories</div>
+            </div>
+        </div>
+
+        <div class="kb-layout">
+            <!-- Sidebar -->
+            <aside class="kb-sidebar">
+                <div class="sidebar-section">
+                    <h3>Categories</h3>
+                    <div id="categoryList">
+                        <div class="category-item active" data-category="">
+                            <span>Toutes</span>
+                            <span class="category-count" id="countAll">0</span>
+                        </div>
+                        <div class="category-item" data-category="objection">
+                            <span>Objections</span>
+                            <span class="category-count" id="countObjection">0</span>
+                        </div>
+                        <div class="category-item" data-category="faq">
+                            <span>FAQ</span>
+                            <span class="category-count" id="countFaq">0</span>
+                        </div>
+                        <div class="category-item" data-category="technique">
+                            <span>Techniques</span>
+                            <span class="category-count" id="countTechnique">0</span>
+                        </div>
+                        <div class="category-item" data-category="success_story">
+                            <span>Success Stories</span>
+                            <span class="category-count" id="countSuccessStory">0</span>
+                        </div>
+                        <div class="category-item" data-category="product">
+                            <span>Produit/Service</span>
+                            <span class="category-count" id="countProduct">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Actions</h3>
+                    <button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" onclick="openCreateModal()">
+                        + Nouvelle entree
+                    </button>
+                    <button class="btn btn-secondary" style="width: 100%;" onclick="generateEmbeddings()">
+                        Generer embeddings
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main -->
+            <div class="kb-main">
+                <!-- Test Section -->
+                <div class="test-section">
+                    <h3 style="margin: 0 0 16px 0;">Tester le RAG</h3>
+                    <div class="test-input-group">
+                        <input type="text" id="testMessage" class="test-input" placeholder="Tape un message prospect pour voir ce que le RAG retourne...">
+                        <button class="btn btn-primary" onclick="testRag()">Tester</button>
+                    </div>
+                    <div class="test-results" id="testResults">Les resultats apparaitront ici...</div>
+                </div>
+
+                <!-- Entry List -->
+                <div class="entry-list" id="entryList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#128218;</div>
+                        <p>Aucune entree dans la knowledge base</p>
+                        <button class="btn btn-primary" onclick="openCreateModal()">Creer la premiere</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create/Edit Modal -->
+    <div class="modal-overlay" id="entryModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Nouvelle entree</h3>
+                <button class="btn btn-sm btn-secondary" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="entryId">
+
+                <div class="form-group">
+                    <label>Categorie *</label>
+                    <select id="entryCategory">
+                        <option value="objection">Objection</option>
+                        <option value="faq">FAQ</option>
+                        <option value="technique">Technique</option>
+                        <option value="success_story">Success Story</option>
+                        <option value="product">Produit/Service</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Situation (quand utiliser cette reponse)</label>
+                    <input type="text" id="entrySituation" placeholder="Ex: Le prospect dit ne pas avoir le temps">
+                </div>
+
+                <div class="form-group">
+                    <label>Contenu / Reponse *</label>
+                    <textarea id="entryContent" placeholder="La reponse ou connaissance a injecter dans le contexte LLM..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Mots-cles declencheurs (separes par des virgules)</label>
+                    <input type="text" id="entryKeywords" placeholder="pas le temps, occupe, busy, deborde">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="saveEntry()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal" style="width: 400px;">
+            <div class="modal-header">
+                <h3>Confirmer la suppression</h3>
+                <button class="btn btn-sm btn-secondary" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Es-tu sur de vouloir supprimer cette entree ?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Annuler</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Supprimer</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="knowledge_base.js"></script>
+</body>
+
+</html>

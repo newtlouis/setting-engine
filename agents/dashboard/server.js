@@ -1065,6 +1065,243 @@ app.post('/api/test-scenarios/replay-all', async (req, res) => {
     }
 });
 
+// ============================================
+// KNOWLEDGE BASE (RAG) API
+// ============================================
+
+import { getEmbedding } from '../../shared/utils/embeddings.js';
+
+// GET /api/knowledge-base - List knowledge entries for an account
+app.get('/api/knowledge-base', async (req, res) => {
+    try {
+        const { account_id, category } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const knowledgeRepo = container.repositories.knowledge;
+        let entries;
+
+        if (category) {
+            entries = await knowledgeRepo.getByCategory(parseInt(account_id), category);
+        } else {
+            entries = await knowledgeRepo.getByAccount(parseInt(account_id));
+        }
+
+        // Don't send raw embeddings to frontend (too large)
+        const sanitized = entries.map(e => ({
+            id: e.id,
+            category: e.category,
+            situation: e.situation,
+            content: e.content,
+            triggerKeywords: e.triggerKeywords || [],
+            usageCount: e.usage_count,
+            successCount: e.success_count,
+            successRate: e.success_rate,
+            hasEmbedding: !!e.embedding,
+            createdAt: e.created_at,
+            updatedAt: e.updated_at
+        }));
+
+        res.json(sanitized);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/knowledge-base - Create a new knowledge entry
+app.post('/api/knowledge-base', async (req, res) => {
+    try {
+        const { account_id, category, situation, content, trigger_keywords } = req.body;
+
+        if (!account_id || !category || !content) {
+            return res.status(400).json({ error: 'account_id, category, and content are required' });
+        }
+
+        const knowledgeRepo = container.repositories.knowledge;
+
+        // Generate embedding
+        let embedding = null;
+        try {
+            const textForEmbedding = `${situation || ''} ${content}`;
+            embedding = await getEmbedding(textForEmbedding);
+        } catch (e) {
+            console.error('Failed to generate embedding:', e.message);
+        }
+
+        const entry = await knowledgeRepo.save({
+            accountId: parseInt(account_id),
+            category,
+            situation,
+            content,
+            triggerKeywords: trigger_keywords || [],
+            embedding
+        });
+
+        res.json({
+            id: entry.id,
+            category: entry.category,
+            situation: entry.situation,
+            content: entry.content,
+            triggerKeywords: entry.triggerKeywords,
+            hasEmbedding: !!embedding
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/knowledge-base/:id - Update a knowledge entry
+app.patch('/api/knowledge-base/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { category, situation, content, trigger_keywords, regenerate_embedding } = req.body;
+
+        const knowledgeRepo = container.repositories.knowledge;
+
+        // Get existing entry
+        const entries = await knowledgeRepo.getByAccount(1); // Temporary: need to get by ID
+        const existing = entries.find(e => e.id === parseInt(id));
+
+        if (!existing) {
+            return res.status(404).json({ error: 'Knowledge entry not found' });
+        }
+
+        // Build update
+        const update = {
+            id: parseInt(id),
+            accountId: existing.account_id,
+            category: category || existing.category,
+            situation: situation !== undefined ? situation : existing.situation,
+            content: content || existing.content,
+            triggerKeywords: trigger_keywords || existing.triggerKeywords,
+            embedding: existing.embedding
+        };
+
+        // Regenerate embedding if content changed or explicitly requested
+        if (regenerate_embedding || content) {
+            try {
+                const textForEmbedding = `${update.situation || ''} ${update.content}`;
+                update.embedding = await getEmbedding(textForEmbedding);
+            } catch (e) {
+                console.error('Failed to regenerate embedding:', e.message);
+            }
+        }
+
+        await knowledgeRepo.save(update);
+
+        res.json({
+            id: update.id,
+            category: update.category,
+            situation: update.situation,
+            content: update.content,
+            triggerKeywords: update.triggerKeywords,
+            hasEmbedding: !!update.embedding
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/knowledge-base/:id - Delete a knowledge entry
+app.delete('/api/knowledge-base/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const knowledgeRepo = container.repositories.knowledge;
+        await knowledgeRepo.delete(parseInt(id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/knowledge-base/stats - Get RAG stats for an account
+app.get('/api/knowledge-base/stats', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const knowledgeRepo = container.repositories.knowledge;
+        const stats = await knowledgeRepo.getStats(parseInt(account_id));
+        res.json(stats);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/knowledge-base/test - Test RAG retrieval with a message
+app.post('/api/knowledge-base/test', async (req, res) => {
+    try {
+        const { account_id, message, funnel_step } = req.body;
+
+        if (!account_id || !message) {
+            return res.status(400).json({ error: 'account_id and message are required' });
+        }
+
+        const ragRetriever = container.services.ragRetriever;
+
+        const results = await ragRetriever.retrieve({
+            prospectMessage: message,
+            leadContext: { funnel_step: funnel_step || 3 },
+            accountId: parseInt(account_id)
+        });
+
+        res.json({
+            relevantKnowledge: results.relevantKnowledge.map(k => ({
+                id: k.id,
+                category: k.category,
+                situation: k.situation,
+                content: k.content,
+                score: Math.round(k.score * 100)
+            })),
+            keywordMatches: results.keywordMatches.length,
+            formattedPrompt: ragRetriever.formatForPrompt(results)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/knowledge-base/generate-embeddings - Generate embeddings for entries without them
+app.post('/api/knowledge-base/generate-embeddings', async (req, res) => {
+    try {
+        const { account_id } = req.body;
+
+        if (!account_id) {
+            return res.status(400).json({ error: 'account_id is required' });
+        }
+
+        const knowledgeRepo = container.repositories.knowledge;
+        const entries = await knowledgeRepo.getByAccount(parseInt(account_id));
+        const withoutEmbedding = entries.filter(e => !e.embedding);
+
+        let generated = 0;
+        for (const entry of withoutEmbedding) {
+            try {
+                const textForEmbedding = `${entry.situation || ''} ${entry.content}`;
+                const embedding = await getEmbedding(textForEmbedding);
+                await knowledgeRepo.updateEmbedding(entry.id, embedding);
+                generated++;
+            } catch (e) {
+                console.error(`Failed to generate embedding for entry ${entry.id}:`, e.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            total: entries.length,
+            generated,
+            alreadyHad: entries.length - withoutEmbedding.length
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/outreach-templates - Get outreach templates for scenario testing
 app.get('/api/outreach-templates', async (req, res) => {
     try {
