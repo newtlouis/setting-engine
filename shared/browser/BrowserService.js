@@ -179,6 +179,7 @@ class BrowserSession {
         if (resolved) return;
         resolved = true;
         process.stdin.removeListener('data', onData);
+        process.stdin.pause(); // Stop stdin from keeping event loop active
         process.removeListener('SIGINT', onSigInt);
         if (this.context) {
           this.context.removeListener('close', onBrowserClose);

@@ -605,5 +605,7 @@ export async function runInboxScanner(options = {}) {
     }
   } finally {
     await closeBrowser();
+    // Ensure stdin doesn't keep the process running
+    process.stdin.pause();
   }
 }

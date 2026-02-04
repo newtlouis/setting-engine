@@ -728,6 +728,18 @@ export async function waitForUserToFinish() {
  * Close browser
  */
 export async function closeBrowser() {
+  // Close via BrowserSession if available (preferred)
+  if (browserSession) {
+    await browserSession.close().catch(() => {});
+    browserSession = null;
+    browserContext = null;
+    workingPage = null;
+    messageTabs = [];
+    console.log('   Browser closed.');
+    return;
+  }
+
+  // Fallback: close context directly
   if (browserContext) {
     await browserContext.close().catch(() => {});
     browserContext = null;
