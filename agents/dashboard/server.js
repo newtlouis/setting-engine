@@ -59,6 +59,12 @@ try {
 // ============================================
 
 const COMMAND_REGISTRY = {
+    Favoris: [
+        { name: 'harvest', description: 'Recolter leads', options: [] },
+        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--max'] },
+        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
+    ],
     Collection: [
         { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max', '--show-browser'] },
         { name: 'collect', description: 'Traiter et qualifier les leads', options: ['--profile'] },
@@ -72,7 +78,7 @@ const COMMAND_REGISTRY = {
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max', '--show-browser'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: [] },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--max'] },
     ],
     Responder: [
         { name: 'reply', description: 'Repondre a un lead', options: ['--profile', '--show-browser'] },
