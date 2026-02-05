@@ -25,7 +25,8 @@
     "dm-sync:stats": "node bin/dm-sync.js --stats",
     "dm-sync:list": "node bin/dm-sync.js --list",
     "analyze": "node bin/analyze-conversations.js",
-    "analyze:list": "node bin/analyze-conversations.js --list"
+    "analyze:list": "node bin/analyze-conversations.js --list",
+    "analyze:steps": "node bin/analyze-funnel-steps.js"
   },
   "keywords": [
     "instagram",

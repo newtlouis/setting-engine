@@ -40,7 +40,8 @@
         "backup": "node agents/collector/scripts/backup.js",
         "backup:remote": "npm run backup -- --upload",
         "restore": "node agents/collector/scripts/restore.js",
-        "restore:remote": "node agents/collector/scripts/restore.js --remote"
+        "restore:remote": "node agents/collector/scripts/restore.js --remote",
+        "analyze:steps": "cd agents/collector && npm run analyze:steps --"
     },
     "author": "Louis",
     "license": "ISC",

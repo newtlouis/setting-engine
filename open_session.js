@@ -2,7 +2,9 @@ import { chromium } from 'playwright';
 import { getBrowserDataDir, cleanupBrowserLocks } from './shared/paths.js';
 import { getStealthContextOptions, applyStealthToPage } from './shared/stealth.js';
 
-const profile = process.argv[2] || 'default';
+// Support both positional arg and --profile flag (for dashboard compatibility)
+const profileFlagIndex = process.argv.indexOf('--profile');
+const profile = profileFlagIndex !== -1 ? process.argv[profileFlagIndex + 1] : (process.argv[2] || 'default');
 const userDataDir = getBrowserDataDir(profile);
 
 console.log(`Opening Instagram for profile: ${profile}`);

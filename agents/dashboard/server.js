@@ -65,12 +65,15 @@ const COMMAND_REGISTRY = {
         { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5' },
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
+        { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
+        { name: 'open:session', description: 'Ouvrir Instagram (session Chrome)', options: ['--profile'] },
     ],
     Collection: [
         { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max', '--show-browser'] },
         { name: 'collect', description: 'Traiter et qualifier les leads', options: ['--profile'] },
         { name: 'dm-sync', description: 'Sync DMs Instagram vers DB', options: ['--profile', '--max', '--include-recent'] },
         { name: 'analyze', description: 'Analyser conversations converties', options: ['--profile', '--max'] },
+        { name: 'analyze:steps', description: 'Analyse step-by-step vs scripts funnel', options: ['--profile', '--username', '--save'] },
     ],
     Prospecting: [
         { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--max', '--show-browser'] },
