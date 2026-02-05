@@ -89,12 +89,15 @@ function renderCommands(registry) {
         html += `<div class="cmd-category-title">${escapeHtml(category)}</div>`;
 
         for (const cmd of commands) {
-            const optionsHtml = cmd.options.length > 0
-                ? `<div class="cmd-options">${cmd.options.map(o => `<span class="cmd-option-tag">${escapeHtml(o)}</span>`).join('')}</div>`
+            // Hide --profile from displayed options (injected automatically)
+            const visibleOptions = cmd.options.filter(o => o !== '--profile');
+            const optionsHtml = visibleOptions.length > 0
+                ? `<div class="cmd-options">${visibleOptions.map(o => `<span class="cmd-option-tag">${escapeHtml(o)}</span>`).join('')}</div>`
                 : '';
 
-            const placeholder = cmd.options.length > 0
-                ? cmd.options.join(' ')
+            const defaultValue = cmd.defaults || '';
+            const placeholder = visibleOptions.length > 0
+                ? visibleOptions.join(' ')
                 : '';
 
             html += `
@@ -107,6 +110,7 @@ function renderCommands(registry) {
                     <div class="cmd-actions">
                         <input type="text" class="cmd-args-input"
                                id="args-${cmd.name}"
+                               value="${escapeAttr(defaultValue)}"
                                placeholder="${escapeAttr(placeholder)}"
                                onkeydown="if(event.key==='Enter') runCommand('${escapeAttr(cmd.name)}')">
                         <button class="btn-run" onclick="runCommand('${escapeAttr(cmd.name)}')">Run</button>
@@ -128,12 +132,25 @@ function escapeAttr(str) {
     return str.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 }
 
+// Get selected profile name from account selector
+function getSelectedProfile() {
+    const select = document.getElementById('accountSelect');
+    if (!select || !select.value) return null;
+    return select.options[select.selectedIndex].textContent.trim();
+}
+
 // Run a command
 async function runCommand(name) {
     // Parse args from input field
     const input = document.getElementById(`args-${name}`);
     const argsStr = input ? input.value.trim() : '';
     const args = argsStr ? argsStr.split(/\s+/) : [];
+
+    // Auto-inject --profile from account selector
+    const profile = getSelectedProfile();
+    if (profile && !args.includes('--profile')) {
+        args.push('--profile', profile);
+    }
 
     // Clear terminal
     const output = document.getElementById('terminalOutput');
@@ -242,6 +259,33 @@ async function checkRunningProcesses() {
     }
 }
 
+// Load accounts into selector
+async function loadAccounts() {
+    const select = document.getElementById('accountSelect');
+    try {
+        const res = await fetch('/api/accounts');
+        const accounts = await res.json();
+        select.innerHTML = '';
+        accounts.forEach(acc => {
+            if (acc.id) {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = acc.name;
+                select.appendChild(opt);
+            }
+        });
+        // Set default account
+        const defRes = await fetch('/api/accounts/default');
+        const defAcc = await defRes.json();
+        if (defAcc && defAcc.id) {
+            select.value = defAcc.id;
+        }
+    } catch (e) {
+        select.innerHTML = '<option value="">Erreur</option>';
+    }
+}
+
 // Init
+loadAccounts();
 loadCommands();
 checkRunningProcesses();

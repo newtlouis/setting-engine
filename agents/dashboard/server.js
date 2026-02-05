@@ -62,7 +62,7 @@ const COMMAND_REGISTRY = {
     Favoris: [
         { name: 'harvest', description: 'Recolter leads', options: [] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--max'] },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5' },
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
     ],
@@ -77,7 +77,7 @@ const COMMAND_REGISTRY = {
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max', '--show-browser'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--max'] },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5' },
     ],
     Responder: [
         { name: 'reply', description: 'Repondre a un lead', options: ['--profile', '--show-browser'] },
@@ -1566,8 +1566,17 @@ app.post('/api/commands/run', (req, res) => {
         return res.status(400).json({ error: `Unknown command: ${command}` });
     }
 
-    // Validate args are strings starting with --
-    const sanitizedArgs = args.filter(a => typeof a === 'string' && a.startsWith('--'));
+    // Validate args: allow --flags and their values (strings/numbers following a flag)
+    const sanitizedArgs = [];
+    for (let i = 0; i < args.length; i++) {
+        const a = String(args[i]);
+        if (a.startsWith('--')) {
+            sanitizedArgs.push(a);
+        } else if (sanitizedArgs.length > 0 && !sanitizedArgs[sanitizedArgs.length - 1].includes('=')) {
+            // Value for previous flag (e.g. --limit 5, --profile melanie)
+            sanitizedArgs.push(a);
+        }
+    }
 
     const processId = randomUUID();
     const projectRoot = path.join(__dirname, '..', '..');
