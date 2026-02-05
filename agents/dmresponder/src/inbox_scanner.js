@@ -348,7 +348,14 @@ export async function runInboxScanner(options = {}) {
             skippedCount++;
             continue;
           }
-          
+
+          // Skip booked leads and leads at conversation step 8+
+          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending' || (leadContext.conversation_step && leadContext.conversation_step >= 8)) {
+            console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}', step: ${leadContext.conversation_step}) - already booked or advanced. Skipped.`);
+            skippedCount++;
+            continue;
+          }
+
           // 4. Scrape & Process
           console.log(`   📖 Scraping...`);
           const scrapedMessages = await scrapeConversationMessages(workingPage);

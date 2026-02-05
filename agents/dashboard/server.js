@@ -1708,13 +1708,16 @@ app.post('/api/commands/stop/:processId', (req, res) => {
         process.kill(-entry.process.pid, 'SIGTERM');
     } catch (_) { /* ignore if already dead */ }
 
-    // Force kill group after 5s
+    // Force kill group after 5s, then cleanup orphan Chrome processes
     setTimeout(() => {
         try {
             if (entry.exitCode === null) {
                 process.kill(-entry.process.pid, 'SIGKILL');
             }
         } catch (_) { /* already dead */ }
+
+        // Kill any orphan Chrome processes tied to browser-data profiles
+        spawn('pkill', ['-9', '-f', 'chrome.*browser-data-'], { stdio: 'ignore', detached: true }).unref();
     }, 5000);
 
     res.json({ success: true, message: 'SIGTERM sent to process group' });

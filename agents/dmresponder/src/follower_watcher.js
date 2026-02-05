@@ -181,7 +181,7 @@ export async function runFollowerWatcher(options = {}) {
             const existingLead = await getLeadWithContext(follower.username, account.id);
 
             // Skip if lead exists AND (has messages OR has a "processed" status)
-            const skipStatuses = ['contacted', 'replied', 'qualified', 'converted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'ignored', 'failed'];
+            const skipStatuses = ['contacted', 'replied', 'qualified', 'converted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable', 'ignored', 'failed'];
             const hasMessages = existingLead && (existingLead.total_messages_sent > 0 || existingLead.total_messages_received > 0);
             const hasSkipStatus = existingLead && skipStatuses.includes(existingLead.status);
 
@@ -225,7 +225,20 @@ export async function runFollowerWatcher(options = {}) {
                 console.log(`   ⚠️ Failed to scrape metadata for @${username}. Skipping.`);
                 continue;
             }
-            
+
+            // 6b. Contact Check
+            if (!metadata.canContact) {
+                console.log(`   🚫 @${username} not contactable (No Message button). Skipping.`);
+                await fullUpsertLead(username, account.id, {
+                    status: 'uncontactable',
+                    full_name: metadata.fullName,
+                    bio: metadata.bio,
+                    lead_source: 'new_follower',
+                    notes: 'No message button found on profile.'
+                });
+                continue;
+            }
+
             // 7. Qualify Lead
             console.log(`   🔍 Qualifying @${username}...`);
             const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);

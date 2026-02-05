@@ -244,7 +244,7 @@ export async function runProspector(options = {}) {
 
              // Skip if already in database in active or completed stage
              const existingLead = dbFunctions.getLeadByUsername(username, accountId);
-             const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested'];
+             const skipStatuses = ['contacted', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
              
              if (existingLead && skipStatuses.includes(existingLead.status)) {
                console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
