@@ -64,14 +64,13 @@ const COMMAND_REGISTRY = {
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
         { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--max'] },
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
+        { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
     ],
     Collection: [
         { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max', '--show-browser'] },
         { name: 'collect', description: 'Traiter et qualifier les leads', options: ['--profile'] },
         { name: 'dm-sync', description: 'Sync DMs Instagram vers DB', options: ['--profile', '--max', '--include-recent'] },
-        { name: 'dm-sync:stats', description: 'Stats de sync DM', options: ['--profile'] },
         { name: 'analyze', description: 'Analyser conversations converties', options: ['--profile', '--max'] },
-        { name: 'analyze:list', description: 'Lister conversations converties', options: ['--profile'] },
     ],
     Prospecting: [
         { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--max', '--show-browser'] },
@@ -1550,7 +1549,16 @@ app.get('/api/commands', (req, res) => {
     res.json(COMMAND_REGISTRY);
 });
 
-// POST /api/commands/run - Launch a command
+// Lookup combo definition for a command name
+function findCommandDef(name) {
+    for (const cmds of Object.values(COMMAND_REGISTRY)) {
+        const found = cmds.find(c => c.name === name);
+        if (found) return found;
+    }
+    return null;
+}
+
+// POST /api/commands/run - Launch a command (or combo)
 app.post('/api/commands/run', (req, res) => {
     const { command, args = [] } = req.body;
 
@@ -1563,19 +1571,36 @@ app.post('/api/commands/run', (req, res) => {
 
     const processId = randomUUID();
     const projectRoot = path.join(__dirname, '..', '..');
+    const argsStr = sanitizedArgs.length > 0 ? ' ' + sanitizedArgs.join(' ') : '';
 
-    const child = spawn('node', ['cli.js', command, ...sanitizedArgs], {
+    // Check if this is a combo command
+    const cmdDef = findCommandDef(command);
+    let shellCmd;
+    if (cmdDef && cmdDef.combo) {
+        // Chain sub-commands with &&
+        shellCmd = cmdDef.combo
+            .map(sub => `node cli.js ${sub}${argsStr}`)
+            .join(' && ');
+    } else {
+        shellCmd = `node cli.js ${command}${argsStr}`;
+    }
+
+    const child = spawn('sh', ['-c', shellCmd], {
         cwd: projectRoot,
         env: { ...process.env, FORCE_COLOR: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
+
+    const label = cmdDef && cmdDef.combo
+        ? cmdDef.combo.join(' + ') + argsStr
+        : command + argsStr;
 
     const entry = {
         process: child,
         logs: [],
         listeners: [],
         exitCode: null,
-        command: [command, ...sanitizedArgs].join(' '),
+        command: label,
         startedAt: new Date().toISOString(),
     };
     runningProcesses.set(processId, entry);
@@ -1604,7 +1629,7 @@ app.post('/api/commands/run', (req, res) => {
         }, 60_000);
     });
 
-    res.json({ processId, command: entry.command });
+    res.json({ processId, command: label });
 });
 
 // GET /api/commands/stream/:processId - SSE stream
