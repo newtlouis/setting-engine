@@ -340,8 +340,8 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          // Expanded valid statuses to include not_interested/already_known for "Question Only" check
-          const validStatuses = ['conversation', 'outreach', 'contacted', 'replied', 'qualified', 'not_interested', 'already_known'];
+          // Expanded valid statuses: 'new' = manual outreach, not_interested = question-only check
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'not_interested'];
           
           if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored) {
             console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}', ignored: ${leadContext.is_ignored}) skipped.`);
@@ -394,8 +394,8 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
-          // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' / 'ALREADY KNOWN' ---
-          if (['not_interested', 'already_known'].includes(leadContext.status)) {
+          // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' (question-only) ---
+          if (leadContext.status === 'not_interested') {
              const text = (lastMsg.text || '').trim();
              
              // Stricter check:
