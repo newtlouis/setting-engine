@@ -562,6 +562,21 @@ export function saveCorrections(leadId, corrections) {
   for (const correction of corrections) {
     const modificationType = correction.similarity > 0.7 ? 'edited' : 'rewritten';
     stmt.run(leadId, correction.ai_suggested, correction.actually_sent, modificationType);
+
+    // Update conversations with the actually sent text
+    const conv = db.prepare(`
+      SELECT id FROM conversations
+      WHERE lead_id = ? AND role = 'assistant' AND message_text = ?
+      LIMIT 1
+    `).get(leadId, correction.ai_suggested);
+
+    if (conv) {
+      db.prepare(`
+        UPDATE conversations
+        SET message_text = ?, message_type = 'synced_correction'
+        WHERE id = ?
+      `).run(correction.actually_sent, conv.id);
+    }
   }
 }
 
