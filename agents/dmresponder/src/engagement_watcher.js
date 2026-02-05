@@ -468,7 +468,7 @@ export async function runEngagementWatcher(options = {}) {
                     }
 
                 } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {
-                    console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as known_contact.`);
+                    console.log(`   ⚠️ Existing conversation history found for @${username}. Marking as already_known.`);
                     
                     // Register as known contact with context
                     await fullUpsertLead(username, account.id, {

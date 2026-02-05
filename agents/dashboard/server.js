@@ -1597,7 +1597,8 @@ app.post('/api/commands/run', (req, res) => {
     const child = spawn('sh', ['-c', shellCmd], {
         cwd: projectRoot,
         env: { ...process.env, FORCE_COLOR: '1' },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
     });
 
     const label = cmdDef && cmdDef.combo
@@ -1689,7 +1690,7 @@ app.get('/api/commands/stream/:processId', (req, res) => {
     });
 });
 
-// POST /api/commands/stop/:processId - Stop a running process
+// POST /api/commands/stop/:processId - Stop a running process (kills entire process tree)
 app.post('/api/commands/stop/:processId', (req, res) => {
     const { processId } = req.params;
     const entry = runningProcesses.get(processId);
@@ -1702,18 +1703,42 @@ app.post('/api/commands/stop/:processId', (req, res) => {
         return res.json({ success: true, message: 'Process already exited' });
     }
 
-    entry.process.kill('SIGTERM');
+    // Kill entire process group (sh + npm + node + chromium)
+    try {
+        process.kill(-entry.process.pid, 'SIGTERM');
+    } catch (_) { /* ignore if already dead */ }
 
-    // Force kill after 5s
+    // Force kill group after 5s
     setTimeout(() => {
         try {
             if (entry.exitCode === null) {
-                entry.process.kill('SIGKILL');
+                process.kill(-entry.process.pid, 'SIGKILL');
             }
         } catch (_) { /* already dead */ }
     }, 5000);
 
-    res.json({ success: true, message: 'SIGTERM sent' });
+    res.json({ success: true, message: 'SIGTERM sent to process group' });
+});
+
+// POST /api/commands/stdin/:processId - Send input to a running process
+app.post('/api/commands/stdin/:processId', (req, res) => {
+    const { processId } = req.params;
+    const entry = runningProcesses.get(processId);
+
+    if (!entry) {
+        return res.status(404).json({ error: 'Process not found' });
+    }
+
+    if (entry.exitCode !== null) {
+        return res.status(400).json({ error: 'Process already exited' });
+    }
+
+    try {
+        entry.process.stdin.write('\n');
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // GET /api/commands/running - List running processes

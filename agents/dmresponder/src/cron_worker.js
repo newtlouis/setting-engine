@@ -256,7 +256,10 @@ async function processThread(thread, options) {
       // Last message is from user - Always reply UNLESS it's a 'not_interested' lead without a question
       shouldGenerate = true;
       
-      if (['not_interested', 'already_known'].includes(leadContext?.status)) {
+      if (leadContext?.status === 'already_known') {
+         console.log(`   🛑 Lead is 'already_known' — skipping entirely.`);
+         shouldGenerate = false;
+      } else if (leadContext?.status === 'not_interested') {
          const text = (lastMsg.text || '').trim();
          const hasQuestionMark = text.includes('?');
          const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu'];

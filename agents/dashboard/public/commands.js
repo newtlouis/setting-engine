@@ -209,6 +209,16 @@ function connectSSE(processId) {
     };
 }
 
+// Send Enter to stdin of current process
+async function sendEnter() {
+    if (!currentProcessId) return;
+    try {
+        await fetch(`/api/commands/stdin/${currentProcessId}`, { method: 'POST' });
+    } catch (err) {
+        console.error('Stdin error:', err);
+    }
+}
+
 // Stop current process
 async function stopProcess() {
     if (!currentProcessId) return;
@@ -229,15 +239,18 @@ function clearTerminal() {
 function updateToolbar(command, running) {
     const title = document.getElementById('terminalTitle');
     const btnStop = document.getElementById('btnStop');
+    const btnEnter = document.getElementById('btnEnter');
 
     if (running && command) {
         title.textContent = `Running: ${command}`;
         title.className = 'terminal-title active';
         btnStop.disabled = false;
+        btnEnter.style.display = 'inline-block';
     } else {
         title.textContent = 'Terminal';
         title.className = 'terminal-title';
         btnStop.disabled = true;
+        btnEnter.style.display = 'none';
     }
 }
 
