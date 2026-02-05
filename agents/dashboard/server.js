@@ -1571,7 +1571,7 @@ app.post('/api/commands/run', (req, res) => {
 
     const processId = randomUUID();
     const projectRoot = path.join(__dirname, '..', '..');
-    const argsStr = sanitizedArgs.length > 0 ? ' ' + sanitizedArgs.join(' ') : '';
+    const argsStr = sanitizedArgs.length > 0 ? ' -- ' + sanitizedArgs.join(' ') : '';
 
     // Check if this is a combo command
     const cmdDef = findCommandDef(command);
@@ -1579,10 +1579,10 @@ app.post('/api/commands/run', (req, res) => {
     if (cmdDef && cmdDef.combo) {
         // Chain sub-commands with &&
         shellCmd = cmdDef.combo
-            .map(sub => `node cli.js ${sub}${argsStr}`)
+            .map(sub => `npm run ${sub}${argsStr}`)
             .join(' && ');
     } else {
-        shellCmd = `node cli.js ${command}${argsStr}`;
+        shellCmd = `npm run ${command}${argsStr}`;
     }
 
     const child = spawn('sh', ['-c', shellCmd], {
