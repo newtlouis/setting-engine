@@ -5,6 +5,7 @@
 // State
 let currentAccountId = null;
 let currentCategory = '';
+let currentStep = '';
 let entries = [];
 let pendingEntries = [];
 let deleteTargetId = null;
@@ -24,13 +25,31 @@ function setupEventListeners() {
     });
 
     // Category filters
-    document.querySelectorAll('.category-item').forEach(item => {
+    document.querySelectorAll('#categoryList .category-item').forEach(item => {
         item.addEventListener('click', () => {
-            document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
+            document.querySelectorAll('#categoryList .category-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             currentCategory = item.dataset.category;
             renderEntries();
         });
+    });
+
+    // Step filters
+    document.querySelectorAll('#stepList .category-item').forEach(item => {
+        item.addEventListener('click', () => {
+            document.querySelectorAll('#stepList .category-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            currentStep = item.dataset.step;
+            renderEntries();
+        });
+    });
+
+    // Pending filter (outside both lists)
+    document.querySelector('[data-category="pending"]').addEventListener('click', () => {
+        document.querySelectorAll('#categoryList .category-item').forEach(i => i.classList.remove('active'));
+        document.querySelector('[data-category="pending"]').classList.add('active');
+        currentCategory = 'pending';
+        renderEntries();
     });
 
     // Test on Enter
@@ -152,9 +171,21 @@ function updateCategoryCounts() {
         product: 0
     };
 
+    const stepCounts = { global: 0 };
+    for (let i = 1; i <= 9; i++) stepCounts[i] = 0;
+
     entries.forEach(e => {
         if (counts[e.category] !== undefined) {
             counts[e.category]++;
+        }
+
+        const steps = e.applicableSteps || [];
+        if (steps.length === 0) {
+            stepCounts.global++;
+        } else {
+            steps.forEach(s => {
+                if (stepCounts[s] !== undefined) stepCounts[s]++;
+            });
         }
     });
 
@@ -164,6 +195,12 @@ function updateCategoryCounts() {
     document.getElementById('countTechnique').textContent = counts.technique;
     document.getElementById('countSuccessStory').textContent = counts.success_story;
     document.getElementById('countProduct').textContent = counts.product;
+
+    document.getElementById('countStepAll').textContent = counts.all;
+    for (let i = 1; i <= 9; i++) {
+        document.getElementById(`countStep${i}`).textContent = stepCounts[i];
+    }
+    document.getElementById('countStepGlobal').textContent = stepCounts.global;
 }
 
 // Render entries
@@ -176,9 +213,19 @@ function renderEntries() {
         return;
     }
 
-    const filtered = currentCategory
+    let filtered = currentCategory
         ? entries.filter(e => e.category === currentCategory)
         : entries;
+
+    // Apply step filter
+    if (currentStep === 'global') {
+        filtered = filtered.filter(e => !e.applicableSteps || e.applicableSteps.length === 0);
+    } else if (currentStep) {
+        const stepNum = parseInt(currentStep);
+        filtered = filtered.filter(e =>
+            e.applicableSteps && e.applicableSteps.length > 0 && e.applicableSteps.includes(stepNum)
+        );
+    }
 
     if (filtered.length === 0) {
         container.innerHTML = `
