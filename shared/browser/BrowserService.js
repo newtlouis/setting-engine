@@ -197,6 +197,7 @@ class BrowserSession {
         cleanup();
       };
 
+      process.stdin.resume();
       process.stdin.once('data', onData);
       process.on('SIGINT', onSigInt);
 
