@@ -62,13 +62,20 @@ export function getFollowupCountForStep(username, step) {
   const lead = getLeadByUsername(username);
   if (!lead) return 0;
 
+  // Count follow-ups matching various historical formats:
+  // - followup_stepX_Y (old format)
+  // - followup_funnelX_Y (newer format)
+  // - followup_X (legacy simple format, count all as step-agnostic)
   const result = db.prepare(`
     SELECT COUNT(*) as count
     FROM conversations
     WHERE lead_id = ?
       AND role = 'assistant'
-      AND message_type LIKE ?
-  `).get(lead.id, `followup_step${step}%`);
+      AND (
+        message_type LIKE ?
+        OR message_type LIKE ?
+      )
+  `).get(lead.id, `followup_step${step}%`, `followup_funnel${step}%`);
 
   return result ? result.count : 0;
 }

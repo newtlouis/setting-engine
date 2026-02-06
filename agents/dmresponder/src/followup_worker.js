@@ -43,13 +43,14 @@ async function getStaleThreads(db, accountId, hours = 24) {
         )
         SELECT l.*,
                lm.sent_at as last_msg_at,
-               lm.role as last_role
+               lm.role as last_role,
+               CAST(l.conversation_step AS INTEGER) as effective_step
         FROM leads l
         JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
         WHERE l.account_id = ?
-          AND l.status IN ('contacted', 'replied', 'qualified')
-          AND l.funnel_step > 0
-          AND (l.booking_status IS NULL OR l.booking_status != 'completed')
+          AND l.status IN ('contacted', 'replied', 'qualified', 'conversation', 'outreach')
+          AND l.conversation_step >= 2
+          AND (l.booking_status IS NULL OR l.booking_status NOT IN ('completed', 'confirmed'))
           AND l.is_ignored = 0
           AND lm.role = 'assistant'
           AND lm.sent_at < ?
@@ -103,10 +104,10 @@ export async function runFollowupWatcher(options = {}) {
     const threadsToProcess = [];
 
     for (const t of threads) {
-        // Only process funnel steps 2+ (step 1 = first contact, no follow-ups)
-        const funnelStep = t.funnel_step || 0;
+        // Use conversation_step (effective_step) instead of funnel_step
+        const funnelStep = t.effective_step || t.funnel_step || 0;
         if (funnelStep < 2) {
-            console.log(`   Skipping @${t.username}: Funnel step ${funnelStep} < 2 (no follow-ups for first contact).`);
+            console.log(`   Skipping @${t.username}: Step ${funnelStep} < 2 (no follow-ups for first contact).`);
             continue;
         }
 
@@ -235,8 +236,8 @@ export async function runFollowupWatcher(options = {}) {
             registerOpenTab(thread.username, openTab, message);
 
             // 8. Update DB
-            // Store followup type with funnel step: e.g. 'followup_funnel3_1'
-            await addMessage(thread.username, 'assistant', message, `followup_funnel${thread.funnelStep}_${thread.followupIndex}`);
+            // Store followup type with step: e.g. 'followup_step4_1'
+            await addMessage(thread.username, 'assistant', message, `followup_step${thread.funnelStep}_${thread.followupIndex}`);
 
             // 9. Track template usage for A/B testing
             if (thread.templateId) {
