@@ -189,7 +189,7 @@ async function selectLead(username) {
              }
         }
         
-        document.getElementById('fieldStep').value = lead.conversation_step || 0;
+        document.getElementById('fieldStep').value = lead.funnel_step || 0;
         
         // Populate is_ignored
         document.getElementById('fieldIsIgnored').checked = (lead.is_ignored === 1);
@@ -456,7 +456,7 @@ document.getElementById('btnSaveStep').addEventListener('click', async () => {
         const res = await fetch(`/api/leads/${currentLead.username}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_step: newStep })
+            body: JSON.stringify({ funnel_step: newStep })
         });
         
         if (res.ok) {

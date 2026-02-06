@@ -44,12 +44,12 @@ async function getStaleThreads(db, accountId, hours = 24) {
         SELECT l.*,
                lm.sent_at as last_msg_at,
                lm.role as last_role,
-               CAST(l.conversation_step AS INTEGER) as effective_step
+               l.funnel_step as effective_step
         FROM leads l
         JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
         WHERE l.account_id = ?
           AND l.status IN ('contacted', 'replied', 'qualified', 'conversation', 'outreach')
-          AND l.conversation_step >= 2
+          AND l.funnel_step >= 2
           AND (l.booking_status IS NULL OR l.booking_status NOT IN ('completed', 'confirmed'))
           AND l.is_ignored = 0
           AND lm.role = 'assistant'
@@ -104,7 +104,7 @@ export async function runFollowupWatcher(options = {}) {
     const threadsToProcess = [];
 
     for (const t of threads) {
-        // Use conversation_step (effective_step) instead of funnel_step
+        // Use funnel_step (effective_step) as the single source of truth
         const funnelStep = t.effective_step || t.funnel_step || 0;
         if (funnelStep < 2) {
             console.log(`   Skipping @${t.username}: Step ${funnelStep} < 2 (no follow-ups for first contact).`);

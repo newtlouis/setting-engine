@@ -350,8 +350,8 @@ export async function runInboxScanner(options = {}) {
           }
 
           // Skip booked leads and leads at conversation step 8+
-          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending' || (leadContext.conversation_step && leadContext.conversation_step >= 8)) {
-            console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}', step: ${leadContext.conversation_step}) - already booked or advanced. Skipped.`);
+          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending' || (leadContext.funnel_step && leadContext.funnel_step >= 8)) {
+            console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}', step: ${leadContext.funnel_step}) - already booked or advanced. Skipped.`);
             skippedCount++;
             continue;
           }

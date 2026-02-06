@@ -164,11 +164,11 @@ app.get('/api/stats', (req, res) => {
             booked: booked,
             booking_rate: totalContacted > 0 ? ((booked / totalContacted) * 100).toFixed(1) : 0,
             step_breakdown: {
-                step1: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 1 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
-                step2: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 2 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
-                step3: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 3 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
-                step4: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 4 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
-                step5: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE conversation_step = 5 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c
+                step1: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE funnel_step = 1 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step2: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE funnel_step = 2 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step3: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE funnel_step = 3 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step4: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE funnel_step = 4 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c,
+                step5: db.prepare(`SELECT COUNT(*) as c FROM leads WHERE funnel_step = 5 AND is_ignored = 0 ${accountFilter}`).get(...accountParam).c
             }
         };
         res.json(stats);
@@ -196,12 +196,12 @@ app.get('/api/analytics/funnel', (req, res) => {
         `).get(...accountParam).c;
 
         // Step counts - cumulative (reached at least step N)
-        // Note: conversation_step can be decimal (3.1, 3.2, etc.) so we use >= and floor
+        // funnel_step is now the single source of truth (integer 1-9)
         const stepAtLeast = {};
         for (let i = 2; i <= 5; i++) {
             stepAtLeast[i] = db.prepare(`
                 SELECT COUNT(*) as c FROM leads
-                WHERE CAST(conversation_step AS INTEGER) >= ? AND is_ignored = 0 AND total_messages_received > 0 ${accountFilter}
+                WHERE funnel_step >= ? AND is_ignored = 0 AND total_messages_received > 0 ${accountFilter}
             `).get(i, ...accountParam).c;
         }
         // Step 2+ = everyone who replied (since step 1 doesn't exist in practice)
@@ -322,11 +322,11 @@ app.get('/api/analytics/funnel', (req, res) => {
         // Step distribution (exact count at each step for the mini-cards)
         const stepDistribution = db.prepare(`
             SELECT
-                CAST(conversation_step AS INTEGER) as step,
+                funnel_step as step,
                 COUNT(*) as count
             FROM leads
             WHERE is_ignored = 0 AND total_messages_received > 0 ${accountFilter}
-            GROUP BY CAST(conversation_step AS INTEGER)
+            GROUP BY funnel_step
             ORDER BY step
         `).all(...accountParam);
 
@@ -359,15 +359,15 @@ app.get('/api/analytics/funnel', (req, res) => {
 // GET /api/leads
 app.get('/api/leads', (req, res) => {
     try {
-        const { page = 1, limit = 50, status, search, account_id, conversation_step } = req.query;
+        const { page = 1, limit = 50, status, search, account_id, funnel_step, conversation_step } = req.query;
         const offset = (page - 1) * limit;
-        
+
         // Build dynamic query
         let sql = `
             SELECT id, username, full_name,
-                   engagement_score, 
+                   engagement_score,
                    status, warmth, booking_status,
-                   lead_source, lead_type, bio, account_id, conversation_step,
+                   lead_source, lead_type, bio, account_id, funnel_step,
                    is_ignored, updated_at,
                    (SELECT COUNT(*) FROM comments WHERE lead_id = leads.id) as comment_count
             FROM leads
@@ -379,17 +379,18 @@ app.get('/api/leads', (req, res) => {
         if (!search) {
             sql += ' AND is_ignored = 0';
         }
-        
+
         // Account filter
         if (account_id) {
             sql += ' AND account_id = ?';
             params.push(parseInt(account_id));
         }
-        
-        // Step filter
-        if (conversation_step) {
-            sql += ' AND conversation_step = ?';
-            params.push(parseInt(conversation_step));
+
+        // Step filter (accept both funnel_step and conversation_step for backward compat)
+        const stepFilter = funnel_step || conversation_step;
+        if (stepFilter) {
+            sql += ' AND funnel_step = ?';
+            params.push(parseInt(stepFilter));
         }
 
         if (status && status !== 'all') {
@@ -500,7 +501,7 @@ app.patch('/api/leads/:username', (req, res) => {
         const updates = req.body;
         
         // Allowed fields to update
-        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored', 'full_name', 'conversation_step'];
+        const allowedFields = ['status', 'warmth', 'notes', 'email', 'booking_status', 'is_ignored', 'full_name', 'funnel_step', 'conversation_step'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
         
         if (fields.length === 0) {

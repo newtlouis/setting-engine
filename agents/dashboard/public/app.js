@@ -289,9 +289,9 @@ async function loadLeads(filter) {
         }
         
         if (isStep5Filter && filter !== 'step5_confirmed') {
-             url += `&conversation_step=5`;
+             url += `&funnel_step=5`;
         } else if (currentStepFilter) {
-            url += `&conversation_step=${currentStepFilter}`;
+            url += `&funnel_step=${currentStepFilter}`;
         }
 
         if (search) {
@@ -309,7 +309,7 @@ async function loadLeads(filter) {
 
                 leads = leads.filter(l => {
                     // Keep only step 5 and active conversations
-                    const step = parseInt(l.conversation_step);
+                    const step = parseInt(l.funnel_step);
                     if (step !== 5) return false;
                     
                     // Exclude booked/ignored/not interested
@@ -424,7 +424,7 @@ async function loadLeads(filter) {
                 <td>${statusDropdown}</td>
                 <td>
                     <div style="font-weight: 700; color: var(--accent); text-align: center;">
-                        ${lead.conversation_step || 0}
+                        ${lead.funnel_step || 0}
                     </div>
                 </td>
                 <td><span class="badge ${typeBadgeClass}">${(lead.lead_type || 'cold').toUpperCase()}</span></td>

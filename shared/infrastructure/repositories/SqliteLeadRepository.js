@@ -100,7 +100,7 @@ export function createSqliteLeadRepository({ getDb }) {
           AND status = 'contacted'
           AND is_ignored = 0
           AND total_messages_received = 0
-          AND conversation_step = 1
+          AND funnel_step = 1
         ORDER BY last_contact_at ASC
         LIMIT ?
       `).all(accountId, limit);

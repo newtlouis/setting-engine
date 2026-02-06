@@ -189,7 +189,7 @@ async function handleDatabaseMode(options, accountId) {
   
   console.log(`Lead: @${username}`);
   console.log(`  Status: ${leadContext.status}`);
-  console.log(`  Step: ${leadContext.conversation_step || 0}`);
+  console.log(`  Step: ${leadContext.funnel_step || 0}`);
   console.log(`  Engagement: ${leadContext.warmth} (Score: ${leadContext.engagement_score})`);
   // Bio removed
   if (leadContext.pain_points.length > 0) {
@@ -296,7 +296,7 @@ async function handleListMode(accountId) {
     const summary = await getConversationSummary(lead.username);
     
     console.log(`@${lead.username}`);
-    console.log(`  Status: ${lead.status} | Step: ${lead.conversation_step || 0}`);
+    console.log(`  Status: ${lead.status} | Step: ${lead.funnel_step || 0}`);
     console.log(`  Messages: ${summary.message_count} | Last: ${lead.last_message_at || 'N/A'}`);
     if (summary.last_message) {
       const lastText = summary.last_message.text.substring(0, 60);
