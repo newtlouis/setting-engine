@@ -441,48 +441,18 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
-          // --- LOGIC: CALENDLY BOOKING ---
-          if (response.booking_intent && response.booking_intent.email && (response.booking_intent.phone || response.booking_intent.email)) {
-              console.log(`   📅 BOOKING INTENT DETECTED:`, response.booking_intent);
-              try {
-                  const { createBooking } = await import('../../../shared/utils/calendly.js');
-                  const bookingResult = await createBooking(profile, {
-                      startTime: response.booking_intent.slot,
-                      email: response.booking_intent.email,
-                      name: leadContext.fullName || username,
-                      phone: response.booking_intent.phone
-                  });
-                  
-                  if (bookingResult.success) {
-                      console.log(`   ✅ Booking success: ${bookingResult.message}`);
-                      
-                      // Format the slot for the confirmation message
-                      const slotDate = new Date(response.booking_intent.slot);
-                      const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-                      const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                      
-                      const template = profileConfig.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}}";
-                      const confirmationMsg = template
-                          .replace('{{day}}', day)
-                          .replace('{{hour}}', hour);
-                      
-                      console.log(`   📝 Using confirmation template: "${confirmationMsg}"`);
-                      finalMessage = confirmationMsg;
-                  }
-              } catch (e) {
-                  console.error(`   ❌ Booking failed:`, e.message);
-              }
-          }
-          
           const profileUrl = `https://www.instagram.com/${username}/`;
           console.log(`\n   💬 SENDING RESPONSE:`);
           console.log(`   Profile: ${profileUrl}`);
           console.log(`   Message: "${message}"\n`);
-          
+
           // 7. Special Tags Detection
           let finalMessage = message;
           let newStatus = 'conversation';
           let bookingStatus = null;
+          let bookingIntent = null;
+          let bookingUrl = null;
+          let bookingAttempts = leadContext.booking_attempts || 0;
           let detectedStep = response.step_used || null;
 
           // Extract [STEP_X] label
@@ -497,13 +467,14 @@ export async function runInboxScanner(options = {}) {
             console.log(`   ⛔ NOT INTERESTED tag detected!`);
             finalMessage = finalMessage.replace('[NOT_INTERESTED]', '').trim();
             newStatus = 'not_interested';
+            bookingStatus = 'cancelled';
           }
-          
+
           if (finalMessage.includes('[ALERT_BOOKING]')) {
             console.log(`   🚨 BOOKING ALERT!`);
             finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
             newStatus = 'scheduling';
-            bookingStatus = 'pending';
+            bookingStatus = 'proposed';
           }
 
           if (finalMessage.includes('[MANUAL]')) {
@@ -511,12 +482,68 @@ export async function runInboxScanner(options = {}) {
             finalMessage = finalMessage.replace('[MANUAL]', '').trim();
             newStatus = 'manual';
           }
-          
+
+          // --- BOOKING STATE MACHINE ---
+          // If we have a complete booking_intent from LLM, attempt Calendly booking
+          if (response.booking_intent && response.booking_intent.slot && response.booking_intent.email) {
+              bookingIntent = response.booking_intent;
+              bookingStatus = 'pending';
+              bookingAttempts++;
+
+              console.log(`   📅 BOOKING INTENT DETECTED (attempt ${bookingAttempts}):`, bookingIntent);
+
+              // Validate email format
+              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (!emailRegex.test(bookingIntent.email)) {
+                  console.log(`   ⚠️ Invalid email format: "${bookingIntent.email}" — skipping Calendly`);
+                  bookingStatus = 'pending'; // Keep pending, need valid email
+              } else {
+                  try {
+                      const { createBooking } = await import('../../../shared/utils/calendly.js');
+                      const bookingResult = await createBooking(profile, {
+                          startTime: bookingIntent.slot,
+                          email: bookingIntent.email,
+                          name: leadContext.fullName || username,
+                          phone: bookingIntent.phone || null
+                      });
+
+                      if (bookingResult.success) {
+                          console.log(`   ✅ Booking CONFIRMED: ${bookingResult.message}`);
+                          bookingStatus = 'confirmed';
+                          bookingUrl = bookingResult.booking_url || null;
+
+                          // Format the slot for the confirmation message
+                          const slotDate = new Date(bookingIntent.slot);
+                          const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+                          const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+                          const template = profileConfig.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}} !";
+                          finalMessage = template
+                              .replace('{{day}}', day)
+                              .replace('{{hour}}', hour);
+
+                          console.log(`   📝 Confirmation message: "${finalMessage}"`);
+                      } else {
+                          console.log(`   ⚠️ Calendly API returned failure: ${bookingResult.message}`);
+                          bookingStatus = 'failed';
+                          // Keep original message, don't confirm what didn't happen
+                      }
+                  } catch (e) {
+                      console.error(`   ❌ Booking API error (attempt ${bookingAttempts}):`, e.message);
+                      bookingStatus = 'failed';
+                      // Keep original message
+                  }
+              }
+          }
+
           // 8. STORE RESULT
           await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
-          await setDmThreadStatus(username, newStatus, { 
+          await setDmThreadStatus(username, newStatus, {
             last_checked_at: new Date().toISOString(),
             booking_status: bookingStatus,
+            booking_intent: bookingIntent,
+            booking_url: bookingUrl,
+            booking_attempts: bookingAttempts,
             conversation_step: detectedStep
           });
           

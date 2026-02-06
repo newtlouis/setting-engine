@@ -331,11 +331,13 @@ async function processThread(thread, options) {
     // Check for special tags
     let finalMessage = message;
     let newStatus = 'conversation';
+    let bookingStatus = null;
 
     if (finalMessage.includes('[NOT_INTERESTED]')) {
       console.log(`   ⛔ NOT INTERESTED tag detected!`);
       finalMessage = finalMessage.replace('[NOT_INTERESTED]', '').trim();
       newStatus = 'not_interested';
+      bookingStatus = 'cancelled';
     }
 
     if (finalMessage.includes('[MANUAL]')) {
@@ -348,7 +350,8 @@ async function processThread(thread, options) {
       console.log(`   🚨 BOOKING ALERT DETECTED! Sending system notification...`);
       finalMessage = finalMessage.replace('[ALERT_BOOKING]', '').trim();
       newStatus = 'scheduling';
-      
+      bookingStatus = 'proposed';
+
       // Trigger macOS system notification
       try {
         const { exec } = await import('child_process');
@@ -356,12 +359,12 @@ async function processThread(thread, options) {
       } catch (err) {
         console.error('Failed to send notification:', err.message);
       }
-      
-      console.log(`   📅 Status update to 'scheduling' (Automation Stopped)`);
+
+      console.log(`   📅 Status update to 'scheduling' — booking_status: proposed`);
     }
 
     const typeResult = await typeInOpenTab(openTab, finalMessage);
-    
+
     if (!typeResult.success) {
       console.log(`   ❌ Failed to type: ${typeResult.error}`);
       await openTab.close().catch(() => {});
@@ -371,14 +374,14 @@ async function processThread(thread, options) {
       });
       return { success: false };
     }
-    
+
     // Register this tab so it stays open for user review
     registerOpenTab(username, openTab, finalMessage);
-    
+
     // Step 6: Save the typed message as 'assistant' message
     console.log(`   💾 Saving typed message to DB...`);
     await addMessage(username, 'assistant', finalMessage, response.message_type || 'generated');
-    
+
     await markThread(
       username,
       newStatus,
@@ -386,7 +389,7 @@ async function processThread(thread, options) {
       {
         last_checked_at: new Date().toISOString(),
         last_message_preview: finalMessage.substring(0, 100),
-        booking_status: newStatus === 'scheduling' ? 'pending' : (thread.booking_status || null)
+        booking_status: bookingStatus
       }
     );
     

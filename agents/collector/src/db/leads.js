@@ -294,18 +294,31 @@ export function updateLeadDmStatus(username, status, dmUrl = null) {
 
 /**
  * Higher-level update for DM Responder
- * Supports status, notes, and metadata
+ * Supports status, notes, booking_status and metadata
  */
 export function updateDmThreadStatus(username, status, updates = {}) {
   const db = getDb();
   const notes = updates.last_error || updates.notes || null;
   const conversationStep = updates.conversation_step;
+  const bookingStatus = updates.booking_status;
+  const bookingIntent = updates.booking_intent ? JSON.stringify(updates.booking_intent) : null;
+  const bookingUrl = updates.booking_url || null;
+  const bookingAttempts = updates.booking_attempts;
 
   const stmt = db.prepare(`
     UPDATE leads SET
       status = @status,
       notes = COALESCE(@notes, notes),
       conversation_step = COALESCE(@conversation_step, conversation_step),
+      booking_status = COALESCE(@booking_status, booking_status),
+      booking_intent = COALESCE(@booking_intent, booking_intent),
+      booking_url = COALESCE(@booking_url, booking_url),
+      booking_attempts = COALESCE(@booking_attempts, booking_attempts),
+      booking_confirmed_at = CASE
+        WHEN @booking_status = 'confirmed' AND booking_confirmed_at IS NULL
+        THEN datetime('now')
+        ELSE booking_confirmed_at
+      END,
       updated_at = datetime('now')
     WHERE username = @username
   `);
@@ -314,7 +327,11 @@ export function updateDmThreadStatus(username, status, updates = {}) {
     username,
     status,
     notes,
-    conversation_step: conversationStep !== undefined ? conversationStep : null
+    conversation_step: conversationStep !== undefined ? conversationStep : null,
+    booking_status: bookingStatus || null,
+    booking_intent: bookingIntent,
+    booking_url: bookingUrl,
+    booking_attempts: bookingAttempts !== undefined ? bookingAttempts : null
   });
 }
 
