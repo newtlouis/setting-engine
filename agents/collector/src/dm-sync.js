@@ -609,29 +609,44 @@ export function updateSyncTimestamp(leadId) {
  * @param {Object} options - Sync options
  */
 export async function syncDMs(session, accountId, options = {}) {
-  const { maxLeads = 20, skipRecent = true } = options;
+  const { maxLeads = 20, skipRecent = true, usernames = null } = options;
 
   console.log('\n' + '='.repeat(50));
   console.log('🔄 DM SYNC - Synchronizing conversations');
   console.log('='.repeat(50));
 
   const page = session.getWorkingPage();
+  const db = getDb();
 
-  // Get leads to sync
-  let leads = getLeadsToSync(accountId);
+  let leads;
 
-  // Optionally skip recently synced
-  if (skipRecent) {
-    const db = getDb();
-    leads = leads.filter(l => {
-      if (!l.last_dm_sync_at) return true;
-      const lastSync = new Date(l.last_dm_sync_at);
-      const hoursSince = (Date.now() - lastSync.getTime()) / (1000 * 60 * 60);
-      return hoursSince > 24; // Only sync if not synced in last 24h
-    });
+  // If specific usernames provided, get those leads directly
+  if (usernames && usernames.length > 0) {
+    const placeholders = usernames.map(() => '?').join(',');
+    leads = db.prepare(`
+      SELECT l.*,
+             (SELECT COUNT(*) FROM conversations WHERE lead_id = l.id) as db_message_count
+      FROM leads l
+      WHERE l.account_id = ?
+        AND l.username IN (${placeholders})
+    `).all(accountId, ...usernames);
+    console.log(`\n🎯 Syncing specific usernames: ${usernames.join(', ')}`);
+  } else {
+    // Get leads to sync based on criteria
+    leads = getLeadsToSync(accountId);
+
+    // Optionally skip recently synced
+    if (skipRecent) {
+      leads = leads.filter(l => {
+        if (!l.last_dm_sync_at) return true;
+        const lastSync = new Date(l.last_dm_sync_at);
+        const hoursSince = (Date.now() - lastSync.getTime()) / (1000 * 60 * 60);
+        return hoursSince > 24; // Only sync if not synced in last 24h
+      });
+    }
+
+    leads = leads.slice(0, maxLeads);
   }
-
-  leads = leads.slice(0, maxLeads);
 
   console.log(`\n📋 Found ${leads.length} leads to sync:`);
   leads.forEach(l => {
