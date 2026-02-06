@@ -173,7 +173,7 @@ async function main() {
           await fullUpsertLead(lead.username, account.id, {
             status: 'contacted',
             dm_url: dmResult.dmUrl || lead.dmUrl,
-            conversation_step: 1
+            funnel_step: 1
           });
 
           // Record in conversation history

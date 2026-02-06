@@ -319,11 +319,11 @@ async function processThread(thread, options) {
     // Save suggestion to file
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     
-    // Step 5: Update conversation step if LLM detected one
+    // Step 5: Update funnel step if LLM detected one
     if (response.step_used) {
-        console.log(`   📈 Updating conversation step to: ${response.step_used}`);
+        console.log(`   📈 Updating funnel step to: ${response.step_used}`);
         await fullUpsertLead(username, options.accountId, {
-            conversation_step: response.step_used
+            funnel_step: Math.floor(parseFloat(response.step_used))
         });
     }
 

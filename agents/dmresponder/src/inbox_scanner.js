@@ -544,7 +544,7 @@ export async function runInboxScanner(options = {}) {
             booking_intent: bookingIntent,
             booking_url: bookingUrl,
             booking_attempts: bookingAttempts,
-            conversation_step: detectedStep
+            funnel_step: detectedStep ? Math.floor(parseFloat(detectedStep)) : null
           });
           
           processedResults.push({

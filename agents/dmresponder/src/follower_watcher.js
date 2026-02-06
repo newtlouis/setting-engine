@@ -343,7 +343,7 @@ export async function runFollowerWatcher(options = {}) {
                         bio: metadata.bio,
                         lead_source: 'new_follower',
                         dm_url: dmResult.dmUrl,
-                        conversation_step: 2
+                        funnel_step: 1
                     });
                     await addMessage(username, 'assistant', finalMessage, 'new_follower', account.id);
                     processedCount++;

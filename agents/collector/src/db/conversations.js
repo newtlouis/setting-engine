@@ -19,12 +19,12 @@ export function addConversationMessage(leadId, role, messageText, messageType = 
 
   const result = stmt.get(leadId, role, messageText, messageType);
 
-  // Update lead message counts
+  // Update lead message counts and funnel_step
   if (role === 'assistant') {
     db.prepare(`
       UPDATE leads SET
         total_messages_sent = total_messages_sent + 1,
-        conversation_step = CASE WHEN conversation_step = 0 THEN 1 ELSE conversation_step END,
+        funnel_step = CASE WHEN funnel_step = 0 THEN 1 ELSE funnel_step END,
         last_contact_at = datetime('now'),
         updated_at = datetime('now')
       WHERE id = ?
@@ -33,10 +33,10 @@ export function addConversationMessage(leadId, role, messageText, messageType = 
     db.prepare(`
       UPDATE leads SET
         total_messages_received = total_messages_received + 1,
-        conversation_step = CASE
-          WHEN (total_messages_received + 1) = 1 AND conversation_step < 2 THEN 2
-          WHEN (total_messages_received + 1) > 1 AND conversation_step < 3 THEN 3
-          ELSE conversation_step
+        funnel_step = CASE
+          WHEN (total_messages_received + 1) = 1 AND funnel_step < 2 THEN 2
+          WHEN (total_messages_received + 1) > 1 AND funnel_step < 3 THEN 3
+          ELSE funnel_step
         END,
         updated_at = datetime('now')
       WHERE id = ?

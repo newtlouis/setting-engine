@@ -82,8 +82,8 @@ export async function getLeadWithContext(username, accountId = null) {
       warmth: lead.warmth || 'cold',
       pain_points: lead.painPoints || [],
 
-      // Conversation state
-      conversation_step: lead.conversationStep || 0,
+      // Funnel state
+      funnel_step: lead.funnelStep || 0,
       booking_status: lead.bookingStatus || null,
       status: lead.status,
       is_ignored: lead.isIgnored,

@@ -12,13 +12,6 @@ import {
   parseStatus
 } from '../value-objects/LeadStatus.js';
 import {
-  ConversationStep,
-  calculateStep,
-  isActiveConversation,
-  needsFollowUp,
-  parseStep
-} from '../value-objects/ConversationStep.js';
-import {
   Warmth,
   calculateWarmth,
   isValidWarmth,
@@ -60,9 +53,8 @@ export class Lead {
     this.totalMessagesSent = Number(data.total_messages_sent || data.totalMessagesSent || 0);
     this.totalMessagesReceived = Number(data.total_messages_received || data.totalMessagesReceived || 0);
 
-    // Conversation tracking - auto-calculated from message counts
-    this.conversationStep = parseStep(data.conversation_step || data.conversationStep);
-    this.funnelStep = Number(data.funnel_step || data.funnelStep || 0); // Sales script stage (1-9)
+    // Funnel tracking - sales script stage (1-9 from [STEP_X] labels)
+    this.funnelStep = Number(data.funnel_step || data.funnelStep || data.conversation_step || data.conversationStep || 0);
     this.lastFollowupTemplateId = data.last_followup_template_id || data.lastFollowupTemplateId || null;
     this.lastContactAt = data.last_contact_at || data.lastContactAt || null;
 
@@ -108,14 +100,14 @@ export class Lead {
    * Check if conversation is active
    */
   hasActiveConversation() {
-    return isActiveConversation(this.conversationStep);
+    return this.funnelStep >= 1 && this.funnelStep < 9;
   }
 
   /**
    * Check if lead needs follow-up
    */
   requiresFollowUp() {
-    return needsFollowUp(this.conversationStep);
+    return this.funnelStep >= 2 && this.funnelStep < 8;
   }
 
   /**
@@ -149,7 +141,7 @@ export class Lead {
       this.status = LeadStatus.CONTACTED;
       this.totalMessagesSent++;
       this.lastContactAt = new Date().toISOString();
-      this._syncConversationStep();
+      if (this.funnelStep === 0) this.funnelStep = 1;
     }
     return this;
   }
@@ -161,7 +153,7 @@ export class Lead {
     if (this.canTransitionTo(LeadStatus.REPLIED)) {
       this.status = LeadStatus.REPLIED;
       this.totalMessagesReceived++;
-      this._syncConversationStep();
+      if (this.funnelStep < 2) this.funnelStep = 2;
     }
     return this;
   }
@@ -266,7 +258,6 @@ export class Lead {
       total_comments: this.totalComments,
       total_messages_sent: this.totalMessagesSent,
       total_messages_received: this.totalMessagesReceived,
-      conversation_step: this.conversationStep,
       funnel_step: this.funnelStep,
       last_followup_template_id: this.lastFollowupTemplateId,
       last_contact_at: this.lastContactAt,
@@ -302,7 +293,6 @@ export class Lead {
       totalComments: this.totalComments,
       totalMessagesSent: this.totalMessagesSent,
       totalMessagesReceived: this.totalMessagesReceived,
-      conversationStep: this.conversationStep,
       funnelStep: this.funnelStep,
       lastFollowupTemplateId: this.lastFollowupTemplateId,
       lastContactAt: this.lastContactAt,
@@ -337,7 +327,7 @@ export class Lead {
       lead_source: source,
       status: LeadStatus.NEW,
       warmth: Warmth.COLD,
-      conversation_step: ConversationStep.NO_CONTACT
+      funnel_step: 0
     });
   }
 
@@ -362,15 +352,13 @@ export class Lead {
     return [];
   }
 
-  _syncConversationStep() {
-    this.conversationStep = calculateStep(
-      this.totalMessagesSent,
-      this.totalMessagesReceived
-    );
-  }
-
   _recalculateWarmth() {
     this.warmth = calculateWarmth(this.engagementScore);
+  }
+
+  // Deprecated: kept for backward compatibility with old code
+  get conversationStep() {
+    return this.funnelStep;
   }
 }
 

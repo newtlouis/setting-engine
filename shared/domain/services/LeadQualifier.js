@@ -7,7 +7,6 @@
 
 import { LeadStatus } from '../value-objects/LeadStatus.js';
 import { Warmth, isHot } from '../value-objects/Warmth.js';
-import { ConversationStep, isActiveConversation } from '../value-objects/ConversationStep.js';
 
 /**
  * Qualification criteria weights
@@ -92,7 +91,8 @@ export const LeadQualifier = {
       reasons.push('High engagement (hot)');
     }
 
-    if (isActiveConversation(lead.conversationStep || lead.conversation_step)) {
+    const funnelStep = lead.funnelStep || lead.funnel_step || 0;
+    if (funnelStep >= 1 && funnelStep < 9) {
       score += QUALIFICATION_CRITERIA.IS_ACTIVE_CONVERSATION;
       reasons.push('Active conversation');
     }

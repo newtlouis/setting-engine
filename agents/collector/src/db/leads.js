@@ -12,12 +12,12 @@ import { getDb } from './core.js';
 export function upsertLead(lead) {
   const db = getDb();
   const stmt = db.prepare(`
-    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, conversation_step, updated_at)
-    VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, @conversation_step, datetime('now'))
+    INSERT INTO leads (username, profile_url, lead_source, lead_type, account_id, funnel_step, updated_at)
+    VALUES (@username, @profile_url, @lead_source, @lead_type, @account_id, @funnel_step, datetime('now'))
     ON CONFLICT(username, account_id) DO UPDATE SET
       updated_at = datetime('now'),
       lead_source = COALESCE(NULLIF(NULLIF(lead_source, ''), 'unknown'), @lead_source),
-      conversation_step = COALESCE(NULLIF(@conversation_step, 0), conversation_step)
+      funnel_step = COALESCE(NULLIF(@funnel_step, 0), funnel_step)
     RETURNING *
   `);
 
@@ -27,7 +27,7 @@ export function upsertLead(lead) {
     lead_source: lead.lead_source || null,
     lead_type: lead.lead_type || 'cold',
     account_id: lead.account_id || null,
-    conversation_step: lead.conversation_step || 0
+    funnel_step: lead.funnel_step || lead.conversation_step || 0
   });
 }
 
@@ -42,9 +42,9 @@ export function saveLeads(leadsData) {
   // Prepare bulk insert statement
   const insert = db.prepare(`
     INSERT INTO leads (
-      username, profile_url, lead_source, lead_type, account_id, conversation_step, updated_at
+      username, profile_url, lead_source, lead_type, account_id, funnel_step, updated_at
     ) VALUES (
-      @username, @profile_url, @lead_source, @lead_type, @account_id, @conversation_step, datetime('now')
+      @username, @profile_url, @lead_source, @lead_type, @account_id, @funnel_step, datetime('now')
     )
     ON CONFLICT(username, account_id) DO UPDATE SET
       updated_at = datetime('now')
@@ -84,7 +84,7 @@ export function saveLeads(leadsData) {
           lead_source: lead.source || null, // Allow passing source
           lead_type: lead.type || 'cold',    // Default to cold
           account_id: lead.account_id || null,
-          conversation_step: lead.conversation_step || 0
+          funnel_step: lead.funnel_step || lead.conversation_step || 0
         });
 
         // Get lead ID
@@ -299,7 +299,7 @@ export function updateLeadDmStatus(username, status, dmUrl = null) {
 export function updateDmThreadStatus(username, status, updates = {}) {
   const db = getDb();
   const notes = updates.last_error || updates.notes || null;
-  const conversationStep = updates.conversation_step;
+  const funnelStep = updates.funnel_step || updates.conversation_step;
   const bookingStatus = updates.booking_status;
   const bookingIntent = updates.booking_intent ? JSON.stringify(updates.booking_intent) : null;
   const bookingUrl = updates.booking_url || null;
@@ -309,7 +309,7 @@ export function updateDmThreadStatus(username, status, updates = {}) {
     UPDATE leads SET
       status = @status,
       notes = COALESCE(@notes, notes),
-      conversation_step = COALESCE(@conversation_step, conversation_step),
+      funnel_step = COALESCE(@funnel_step, funnel_step),
       booking_status = COALESCE(@booking_status, booking_status),
       booking_intent = COALESCE(@booking_intent, booking_intent),
       booking_url = COALESCE(@booking_url, booking_url),
@@ -327,7 +327,7 @@ export function updateDmThreadStatus(username, status, updates = {}) {
     username,
     status,
     notes,
-    conversation_step: conversationStep !== undefined ? conversationStep : null,
+    funnel_step: funnelStep !== undefined ? Math.floor(funnelStep) : null,
     booking_status: bookingStatus || null,
     booking_intent: bookingIntent,
     booking_url: bookingUrl,
@@ -343,10 +343,10 @@ export function fullUpsertLead(username, account_id, data = {}) {
   const stmt = db.prepare(`
     INSERT INTO leads (
       username, account_id, profile_url, status,
-      full_name, bio, dm_url, lead_source, conversation_step, notes, updated_at
+      full_name, bio, dm_url, lead_source, funnel_step, notes, updated_at
     ) VALUES (
       @username, @account_id, @profile_url, @status,
-      @full_name, @bio, @dm_url, @lead_source, @conversation_step, @notes, datetime('now')
+      @full_name, @bio, @dm_url, @lead_source, @funnel_step, @notes, datetime('now')
     )
     ON CONFLICT(username, account_id) DO UPDATE SET
       status = COALESCE(@status, status),
@@ -354,7 +354,7 @@ export function fullUpsertLead(username, account_id, data = {}) {
       bio = COALESCE(@bio, bio),
       dm_url = COALESCE(@dm_url, dm_url),
       lead_source = COALESCE(lead_source, @lead_source),
-      conversation_step = COALESCE(NULLIF(@conversation_step, 0), conversation_step),
+      funnel_step = COALESCE(NULLIF(@funnel_step, 0), funnel_step),
       notes = COALESCE(@notes, notes),
       updated_at = datetime('now')
     RETURNING *
@@ -369,7 +369,7 @@ export function fullUpsertLead(username, account_id, data = {}) {
     bio: data.bio || null,
     dm_url: data.dm_url || null,
     lead_source: data.lead_source || null,
-    conversation_step: data.conversation_step || 0,
+    funnel_step: data.funnel_step || data.conversation_step || 0,
     notes: data.notes || null
   });
 }

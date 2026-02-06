@@ -86,7 +86,7 @@ export class RagRetriever {
       );
 
       // 7. Filter by applicable steps (if configured)
-      const currentStep = leadContext?.funnel_step || leadContext?.conversation_step;
+      const currentStep = leadContext?.funnel_step || leadContext?.funnelStep;
       if (currentStep) {
         results.relevantKnowledge = this.filterByStep(results.relevantKnowledge, currentStep);
       }
