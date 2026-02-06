@@ -197,7 +197,7 @@ function renderSourcePerformance(sourceStats) {
             <tbody>
     `;
 
-    sourceStats.slice(0, 6).forEach(src => {
+    sourceStats.forEach(src => {
         html += `
             <tr>
                 <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${src.source}">${src.source}</td>

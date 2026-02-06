@@ -275,20 +275,35 @@ app.get('/api/analytics/funnel', (req, res) => {
         const bookingRate = totalContacted > 0 ? (booked / totalContacted * 100).toFixed(1) : 0;
         const bookingFromReplies = totalReplied > 0 ? (booked / totalReplied * 100).toFixed(1) : 0;
 
-        // Source performance
+        // Source performance - resolve hashtags and profiles from posts table
         const sourceStats = db.prepare(`
             SELECT
-                lead_source,
+                COALESCE(
+                    CASE
+                        WHEN p.source_type = 'hashtag' THEN '#' || p.source_name
+                        WHEN p.source_type = 'profile' THEN '@' || p.source_name
+                        ELSE NULL
+                    END,
+                    CASE
+                        WHEN l.lead_source LIKE 'hashtag:%' THEN '#' || SUBSTR(l.lead_source, 9)
+                        WHEN l.lead_source = 'post_like' THEN 'post_like'
+                        WHEN l.lead_source = 'post_comment' THEN 'post_comment'
+                        WHEN l.lead_source LIKE 'follower%' OR l.lead_source LIKE 'new_follower%' THEN 'follower'
+                        WHEN l.lead_source LIKE 'https://www.instagram.com/%' THEN 'autre_post'
+                        ELSE COALESCE(l.lead_source, 'unknown')
+                    END
+                ) as source_group,
                 COUNT(*) as total,
-                SUM(CASE WHEN total_messages_received > 0 THEN 1 ELSE 0 END) as replied,
-                SUM(CASE WHEN booking_status = 'completed' THEN 1 ELSE 0 END) as booked
-            FROM leads
-            WHERE total_messages_sent > 0 AND is_ignored = 0 AND lead_source IS NOT NULL ${accountFilter}
-            GROUP BY lead_source
+                SUM(CASE WHEN l.total_messages_received > 0 THEN 1 ELSE 0 END) as replied,
+                SUM(CASE WHEN l.booking_status = 'completed' THEN 1 ELSE 0 END) as booked
+            FROM leads l
+            LEFT JOIN posts p ON l.lead_source = p.post_url
+            WHERE l.total_messages_sent > 0 AND l.is_ignored = 0 ${accountFilter.replace(/account_id/g, 'l.account_id')}
+            GROUP BY source_group
             ORDER BY total DESC
-            LIMIT 10
+            LIMIT 20
         `).all(...accountParam).map(row => ({
-            source: row.lead_source || 'Unknown',
+            source: row.source_group || 'Unknown',
             total: row.total,
             replied: row.replied,
             booked: row.booked,
