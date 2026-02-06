@@ -92,7 +92,9 @@ function renderCommands(registry) {
             // Hide --profile from displayed options (injected automatically)
             const visibleOptions = cmd.options.filter(o => o !== '--profile');
             const optionsHtml = visibleOptions.length > 0
-                ? `<div class="cmd-options">${visibleOptions.map(o => `<span class="cmd-option-tag">${escapeHtml(o)}</span>`).join('')}</div>`
+                ? `<div class="cmd-options">${visibleOptions.map(o =>
+                    `<span class="cmd-option-tag" onclick="addOptionToInput('${escapeAttr(cmd.name)}', '${escapeAttr(o)}')" style="cursor: pointer;" title="Cliquez pour ajouter">${escapeHtml(o)}</span>`
+                  ).join('')}</div>`
                 : '';
 
             const defaultValue = cmd.defaults || '';
@@ -122,6 +124,29 @@ function renderCommands(registry) {
     }
 
     panel.innerHTML = html;
+}
+
+// Add option to input field when tag is clicked
+function addOptionToInput(cmdName, option) {
+    const input = document.getElementById(`args-${cmdName}`);
+    if (!input) return;
+
+    const currentValue = input.value.trim();
+
+    // Check if option is already present
+    if (currentValue.includes(option)) {
+        // Remove it (toggle off)
+        input.value = currentValue
+            .split(/\s+/)
+            .filter(part => part !== option)
+            .join(' ')
+            .trim();
+    } else {
+        // Add it
+        input.value = currentValue ? `${currentValue} ${option}` : option;
+    }
+
+    input.focus();
 }
 
 function escapeHtml(str) {

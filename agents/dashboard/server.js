@@ -60,9 +60,9 @@ try {
 
 const COMMAND_REGISTRY = {
     Favoris: [
-        { name: 'harvest', description: 'Recolter leads', options: [] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5' },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5 --manual' },
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--show-browser'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
@@ -80,7 +80,7 @@ const COMMAND_REGISTRY = {
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max', '--show-browser'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5' },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5 --manual' },
     ],
     Responder: [
         { name: 'reply', description: 'Repondre a un lead', options: ['--profile', '--show-browser'] },
@@ -93,7 +93,7 @@ const COMMAND_REGISTRY = {
         { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile', '--show-browser'] },
     ],
     Operations: [
-        { name: 'harvest', description: 'Recolter leads', options: [] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
         { name: 'backup', description: 'Backup base de donnees', options: ['--upload'] },
         { name: 'restore', description: 'Restaurer base de donnees', options: ['--remote'] },
     ],
