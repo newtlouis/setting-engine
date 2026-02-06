@@ -55,7 +55,7 @@ async function getStaleThreads(db, accountId, hours = 24) {
           AND lm.role = 'assistant'
           AND lm.sent_at < ?
         ORDER BY lm.sent_at ASC
-        LIMIT 50
+        LIMIT 500
     `;
 
     return db.prepare(sql).all(accountId, cutoffDate);

@@ -68,8 +68,8 @@ export class MarkMessageSent {
         lead.dmUrl = dmUrl;
       }
 
-      // Sync conversation step
-      lead.conversationStep = calculateStep(
+      // Sync funnel step
+      lead.funnelStep = calculateStep(
         lead.totalMessagesSent,
         lead.totalMessagesReceived
       );

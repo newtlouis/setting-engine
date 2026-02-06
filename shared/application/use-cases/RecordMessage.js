@@ -112,8 +112,8 @@ export class RecordMessage {
       }
     }
 
-    // Sync conversation step
-    lead.conversationStep = calculateStep(
+    // Sync funnel step
+    lead.funnelStep = calculateStep(
       lead.totalMessagesSent,
       lead.totalMessagesReceived
     );
