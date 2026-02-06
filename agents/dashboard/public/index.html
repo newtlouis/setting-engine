@@ -446,6 +446,148 @@
             color: var(--border);
             font-size: 18px;
         }
+
+        /* Stat rate sub-text */
+        .stat-rate {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Funnel Analysis - Horizontal bars */
+        .funnel-analysis {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .funnel-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 12px;
+        }
+
+        .funnel-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .funnel-label {
+            width: 140px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .funnel-bar-container {
+            flex: 1;
+            height: 32px;
+            background: var(--bg-input);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .funnel-bar {
+            height: 100%;
+            transition: width 0.5s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+        }
+
+        .funnel-bar-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .funnel-dropoff {
+            width: 100px;
+            text-align: right;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .dropoff-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .dropoff-low {
+            background: rgba(63, 185, 80, 0.15);
+            color: #56d364;
+        }
+
+        .dropoff-medium {
+            background: rgba(210, 153, 34, 0.15);
+            color: #e3b341;
+        }
+
+        .dropoff-high {
+            background: rgba(248, 81, 73, 0.15);
+            color: #ff7b72;
+        }
+
+        /* Source table */
+        .source-table {
+            width: 100%;
+            font-size: 13px;
+        }
+
+        .source-table th {
+            text-align: left;
+            padding: 8px 4px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .source-table td {
+            padding: 8px 4px;
+            border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+        }
+
+        .source-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Step count mini cards */
+        .step-mini {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .step-mini:hover {
+            border-color: var(--accent);
+            background: #1c2128;
+        }
+
+        .step-mini.active {
+            border-color: var(--accent);
+            background: rgba(88, 166, 255, 0.1);
+        }
+
+        .step-mini-num {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .step-mini-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent);
+        }
     </style>
 </head>
 
@@ -489,71 +631,64 @@
             </div>
         </header>
 
-        <!-- Stats -->
+        <!-- Key Metrics -->
         <div class="stats-grid" id="statsGrid">
-
             <div class="stat-card" onclick="loadLeads('contacted_total')">
                 <div class="stat-value" id="stat-total_contacted" style="color: var(--warning);">-</div>
-                <div class="stat-label">Total Contactés</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-reply_rate" style="color: var(--accent);">-</div>
-                <div class="stat-label">Taux de Réponse</div>
+                <div class="stat-label">Contactés</div>
             </div>
             <div class="stat-card" onclick="loadLeads('conversation')">
-                <div class="stat-value" id="stat-conversation" style="color: #a371f7;">-</div>
-                <div class="stat-label">Conversation</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-booking_rate" style="color: var(--success);">-</div>
-                <div class="stat-label">Taux de RDV</div>
-            </div>
-            <div class="stat-card" onclick="loadLeads('manual')">
-                <div class="stat-value" id="stat-manual" style="color: #ff7b72;">-</div>
-                <div class="stat-label">Manual / Vocaux</div>
+                <div class="stat-value" id="stat-replied" style="color: var(--accent);">-</div>
+                <div class="stat-label">Ont répondu</div>
+                <div class="stat-rate" id="stat-reply_rate">-</div>
             </div>
             <div class="stat-card" onclick="loadLeads('booked')">
                 <div class="stat-value" id="stat-booked" style="color: var(--success);">-</div>
                 <div class="stat-label">RDV Effectués</div>
+                <div class="stat-rate" id="stat-booking_rate">-</div>
             </div>
-
+            <div class="stat-card" onclick="loadLeads('not_interested')">
+                <div class="stat-value" id="stat-not_interested" style="color: #ff7b72;">-</div>
+                <div class="stat-label">Pas intéressés</div>
+            </div>
         </div>
 
-        <!-- Workflow Funnel -->
+        <!-- Insight Alert -->
+        <div id="insightAlert" style="display: none; margin-bottom: 24px; padding: 16px; background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 20px;">⚠️</span>
+                <div>
+                    <div style="font-weight: 600; color: #ff7b72; margin-bottom: 4px;">Point de friction détecté</div>
+                    <div id="insightText" style="color: var(--text-secondary); font-size: 13px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Funnel Analysis -->
         <div style="margin-bottom: 32px;">
-            <h2
-                style="font-size: 16px; margin-bottom: 12px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                📊 Workflow Funnel (Conversation Progress)
+            <h2 style="font-size: 16px; margin-bottom: 12px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                📊 Funnel Analysis (Drop-off par étape)
             </h2>
-            <div class="funnel-container" id="funnelContainer">
-                <div class="funnel-step" onclick="filterByStep(1)" id="step-1-card">
-                    <div class="funnel-step-num">Étape 1</div>
-                    <div class="funnel-step-val" id="funnel-step-1">-</div>
-                    <div class="funnel-step-label">Premier contact</div>
+            <div class="funnel-analysis" id="funnelAnalysis">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+
+        <!-- Two columns: Source Performance + Quick Stats -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
+            <!-- Source Performance -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                <h3 style="font-size: 14px; margin: 0 0 16px 0; color: var(--text-secondary);">📈 Performance par source</h3>
+                <div id="sourcePerformance">
+                    <div style="color: var(--text-secondary); font-size: 13px;">Chargement...</div>
                 </div>
-                <div class="funnel-arrow">➜</div>
-                <div class="funnel-step" onclick="filterByStep(2)" id="step-2-card">
-                    <div class="funnel-step-num">Étape 2</div>
-                    <div class="funnel-step-val" id="funnel-step-2">-</div>
-                    <div class="funnel-step-label">Connexion</div>
-                </div>
-                <div class="funnel-arrow">➜</div>
-                <div class="funnel-step" onclick="filterByStep(3)" id="step-3-card">
-                    <div class="funnel-step-num">Étape 3</div>
-                    <div class="funnel-step-val" id="funnel-step-3">-</div>
-                    <div class="funnel-step-label">Exploration</div>
-                </div>
-                <div class="funnel-arrow">➜</div>
-                <div class="funnel-step" onclick="filterByStep(4)" id="step-4-card">
-                    <div class="funnel-step-num">Étape 4</div>
-                    <div class="funnel-step-val" id="funnel-step-4">-</div>
-                    <div class="funnel-step-label">Objectif</div>
-                </div>
-                <div class="funnel-arrow">➜</div>
-                <div class="funnel-step" onclick="filterByStep(5)" id="step-5-card">
-                    <div class="funnel-step-num">Étape 5</div>
-                    <div class="funnel-step-val" id="funnel-step-5">-</div>
-                    <div class="funnel-step-label">Appel</div>
+            </div>
+
+            <!-- Quick Counts -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                <h3 style="font-size: 14px; margin: 0 0 16px 0; color: var(--text-secondary);">🎯 Leads par étape</h3>
+                <div id="stepCounts" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+                    <!-- Generated by JS -->
                 </div>
             </div>
         </div>

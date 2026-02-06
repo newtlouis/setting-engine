@@ -8,9 +8,9 @@ let searchTimeout = null;
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
     await loadAccounts();
-    await loadDefaultAccount(); // New: Load default account filter
-    loadBookings();
-    loadStats();
+    await loadDefaultAccount();
+    loadFunnelAnalytics(); // New: Load funnel analytics
+    loadStats(); // Keep for backward compat
     loadLeads(currentFilter);
 });
 
@@ -75,44 +75,167 @@ async function setDefaultAccount() {
 // Account change handler
 function onAccountChange(accountId) {
     currentAccountId = accountId || null;
-    loadStats();
+    loadFunnelAnalytics();
     loadLeads(currentFilter);
 }
 
-// Load Bookings (Dedicated Section)
 
-// Load Bookings - DEPRECATED / REMOVED BY USER REQUEST
-async function loadBookings() {
-   // Function kept empty to prevent errors if called, but UI section is gone.
-   return;
+
+
+// Load Stats (legacy - kept for compatibility)
+async function loadStats() {
+    // Stats are now loaded via loadFunnelAnalytics()
 }
 
-
-
-// Load Stats
-async function loadStats() {
+// Load Funnel Analytics (New)
+async function loadFunnelAnalytics() {
     try {
         const params = currentAccountId ? `?account_id=${currentAccountId}` : '';
-        const res = await fetch('/api/stats' + params);
+        const res = await fetch('/api/analytics/funnel' + params);
         const data = await res.json();
-        
-        document.getElementById('stat-total_contacted').textContent = data.total_contacted;
-        document.getElementById('stat-reply_rate').textContent = data.reply_rate + '%';
-        document.getElementById('stat-conversation').textContent = data.conversation;
-        document.getElementById('stat-manual').textContent = data.manual;
-        document.getElementById('stat-booking_rate').textContent = data.booking_rate + '%';
-        document.getElementById('stat-booked').textContent = data.booked;
 
-        // Step Breakdown (Funnel)
-        // Update funnel steps 1-5
-        for (let i = 1; i <= 5; i++) {
-            const count = data.step_breakdown[`step${i}`] || 0;
-            const el = document.getElementById(`funnel-step-${i}`);
-            if (el) el.textContent = count;
+        // Update summary stats
+        document.getElementById('stat-total_contacted').textContent = data.summary.totalContacted;
+        document.getElementById('stat-replied').textContent = data.summary.totalReplied;
+        document.getElementById('stat-reply_rate').textContent = `${data.summary.replyRate}% taux`;
+        document.getElementById('stat-booked').textContent = data.summary.booked;
+        document.getElementById('stat-booking_rate').textContent = `${data.summary.bookingRate}% taux`;
+        document.getElementById('stat-not_interested').textContent = data.summary.notInterested;
+
+        // Render funnel bars
+        renderFunnelAnalysis(data.funnel, data.summary.totalContacted);
+
+        // Render source performance
+        renderSourcePerformance(data.sourceStats);
+
+        // Render step counts from distribution
+        renderStepCounts(data.stepDistribution);
+
+        // Show insight if any
+        const insightAlert = document.getElementById('insightAlert');
+        const insightText = document.getElementById('insightText');
+        if (data.insights.recommendation) {
+            insightText.textContent = data.insights.recommendation;
+            insightAlert.style.display = 'block';
+        } else {
+            insightAlert.style.display = 'none';
         }
+
     } catch (e) {
-        console.error('Stats load error', e);
+        console.error('Funnel analytics load error', e);
     }
+}
+
+// Render funnel analysis bars
+function renderFunnelAnalysis(funnel, maxCount) {
+    const container = document.getElementById('funnelAnalysis');
+    if (!container) return;
+
+    const colors = [
+        'linear-gradient(90deg, #d29922 0%, #e3b341 100%)',  // Contactés
+        'linear-gradient(90deg, #1f6feb 0%, #58a6ff 100%)',  // Ont répondu
+        'linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%)',  // Connexion
+        'linear-gradient(90deg, #db61a2 0%, #f778ba 100%)',  // Exploration
+        'linear-gradient(90deg, #f97316 0%, #fb923c 100%)',  // Objectif
+        'linear-gradient(90deg, #06b6d4 0%, #22d3ee 100%)',  // Appel
+        'linear-gradient(90deg, #22c55e 0%, #4ade80 100%)'   // RDV Confirmé
+    ];
+
+    let html = '';
+    funnel.forEach((step, idx) => {
+        // Use 'reached' for bar width (flow through funnel)
+        const reached = step.reached || step.count;
+        const pct = maxCount > 0 ? (reached / maxCount * 100) : 0;
+        const barWidth = Math.max(pct, 2); // Minimum 2% for visibility
+
+        // Determine dropoff badge class
+        let dropoffClass = 'dropoff-low';
+        const dropoffVal = parseFloat(step.dropoff) || 0;
+        if (dropoffVal > 50) dropoffClass = 'dropoff-high';
+        else if (dropoffVal > 25) dropoffClass = 'dropoff-medium';
+
+        html += `
+            <div class="funnel-row">
+                <div class="funnel-label">${step.label}</div>
+                <div class="funnel-bar-container">
+                    <div class="funnel-bar" style="width: ${barWidth}%; background: ${colors[idx] || colors[0]};">
+                        <span class="funnel-bar-text">${reached}</span>
+                    </div>
+                </div>
+                <div class="funnel-dropoff">
+                    ${step.dropoff !== null
+                        ? `<span class="dropoff-badge ${dropoffClass}">-${step.dropoff}%</span>`
+                        : '<span style="color: var(--text-secondary);">—</span>'}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// Render source performance table
+function renderSourcePerformance(sourceStats) {
+    const container = document.getElementById('sourcePerformance');
+    if (!container) return;
+
+    if (!sourceStats || sourceStats.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Aucune donnée</div>';
+        return;
+    }
+
+    let html = `
+        <table class="source-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Total</th>
+                    <th>Réponses</th>
+                    <th>RDV</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    sourceStats.slice(0, 6).forEach(src => {
+        html += `
+            <tr>
+                <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${src.source}">${src.source}</td>
+                <td>${src.total}</td>
+                <td>${src.replied} <span style="color: var(--text-secondary);">(${src.replyRate}%)</span></td>
+                <td>${src.booked} <span style="color: var(--text-secondary);">(${src.bookingRate}%)</span></td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// Render step counts mini cards from stepDistribution
+function renderStepCounts(stepDistribution) {
+    const container = document.getElementById('stepCounts');
+    if (!container) return;
+
+    // Create a map of step -> count
+    const stepMap = {};
+    (stepDistribution || []).forEach(s => {
+        stepMap[s.step] = (stepMap[s.step] || 0) + s.count;
+    });
+
+    let html = '';
+    for (let stepNum = 2; stepNum <= 5; stepNum++) {
+        const count = stepMap[stepNum] || 0;
+        const isActive = currentStepFilter === stepNum;
+        html += `
+            <div class="step-mini ${isActive ? 'active' : ''}" onclick="filterByStep(${stepNum})">
+                <div class="step-mini-num">Step ${stepNum}</div>
+                <div class="step-mini-val">${count}</div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
 }
 
 // Load Leads
@@ -496,24 +619,18 @@ function filterByStep(step) {
         currentStepFilter = step;
         currentFilter = 'all'; // Default to 'all' status when filtering by step
     }
-    
-    // Update UI highlights
-    document.querySelectorAll('.funnel-step').forEach(el => {
+
+    // Update step-mini cards highlighting
+    document.querySelectorAll('.step-mini').forEach(el => {
         el.classList.remove('active');
-        if (currentStepFilter) {
-            el.classList.add('inactive');
-        } else {
-            el.classList.remove('inactive');
-        }
     });
-    
+
     if (currentStepFilter) {
-        const activeCard = document.getElementById(`step-${currentStepFilter}-card`);
-        if (activeCard) {
-            activeCard.classList.remove('inactive');
-            activeCard.classList.add('active');
+        const allMinis = document.querySelectorAll('.step-mini');
+        if (allMinis[currentStepFilter - 1]) {
+            allMinis[currentStepFilter - 1].classList.add('active');
         }
     }
-    
+
     loadLeads(currentFilter);
 }

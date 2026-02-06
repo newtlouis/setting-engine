@@ -177,6 +177,170 @@ app.get('/api/stats', (req, res) => {
     }
 });
 
+// GET /api/analytics/funnel - Comprehensive funnel analytics with drop-off
+app.get('/api/analytics/funnel', (req, res) => {
+    try {
+        const { account_id } = req.query;
+        const accountFilter = account_id ? ' AND account_id = ?' : '';
+        const accountParam = account_id ? [parseInt(account_id)] : [];
+
+        // Base counts
+        const totalContacted = db.prepare(`
+            SELECT COUNT(*) as c FROM leads
+            WHERE total_messages_sent > 0 AND is_ignored = 0 ${accountFilter}
+        `).get(...accountParam).c;
+
+        const totalReplied = db.prepare(`
+            SELECT COUNT(*) as c FROM leads
+            WHERE total_messages_sent > 0 AND total_messages_received > 0 AND is_ignored = 0 ${accountFilter}
+        `).get(...accountParam).c;
+
+        // Step counts - cumulative (reached at least step N)
+        // Note: conversation_step can be decimal (3.1, 3.2, etc.) so we use >= and floor
+        const stepAtLeast = {};
+        for (let i = 2; i <= 5; i++) {
+            stepAtLeast[i] = db.prepare(`
+                SELECT COUNT(*) as c FROM leads
+                WHERE CAST(conversation_step AS INTEGER) >= ? AND is_ignored = 0 AND total_messages_received > 0 ${accountFilter}
+            `).get(i, ...accountParam).c;
+        }
+        // Step 2+ = everyone who replied (since step 1 doesn't exist in practice)
+        stepAtLeast[2] = totalReplied;
+
+        // Terminal states
+        const booked = db.prepare(`
+            SELECT COUNT(*) as c FROM leads
+            WHERE booking_status = 'completed' AND is_ignored = 0 ${accountFilter}
+        `).get(...accountParam).c;
+
+        const notInterested = db.prepare(`
+            SELECT COUNT(*) as c FROM leads
+            WHERE status = 'not_interested' AND is_ignored = 0 ${accountFilter}
+        `).get(...accountParam).c;
+
+        const failed = db.prepare(`
+            SELECT COUNT(*) as c FROM leads
+            WHERE status IN ('failed', 'failed_outreach') AND is_ignored = 0 ${accountFilter}
+        `).get(...accountParam).c;
+
+        // Calculate drop-off rates through the funnel
+        // Each step shows: how many reached this point, and what % dropped off before next step
+        const funnel = [
+            {
+                step: 0,
+                label: 'Contactés',
+                reached: totalContacted,
+                dropoff: null,
+                lostCount: totalContacted - totalReplied
+            },
+            {
+                step: 1,
+                label: 'Ont répondu',
+                reached: totalReplied,
+                dropoff: totalContacted > 0 ? ((totalContacted - totalReplied) / totalContacted * 100).toFixed(1) : 0,
+                lostCount: totalReplied - stepAtLeast[3]
+            },
+            {
+                step: 3,
+                label: 'Exploration (Step 3+)',
+                reached: stepAtLeast[3],
+                dropoff: totalReplied > 0 ? ((totalReplied - stepAtLeast[3]) / totalReplied * 100).toFixed(1) : 0,
+                lostCount: stepAtLeast[3] - stepAtLeast[4]
+            },
+            {
+                step: 4,
+                label: 'Objectif (Step 4+)',
+                reached: stepAtLeast[4],
+                dropoff: stepAtLeast[3] > 0 ? ((stepAtLeast[3] - stepAtLeast[4]) / stepAtLeast[3] * 100).toFixed(1) : 0,
+                lostCount: stepAtLeast[4] - stepAtLeast[5]
+            },
+            {
+                step: 5,
+                label: 'Appel (Step 5)',
+                reached: stepAtLeast[5],
+                dropoff: stepAtLeast[4] > 0 ? ((stepAtLeast[4] - stepAtLeast[5]) / stepAtLeast[4] * 100).toFixed(1) : 0,
+                lostCount: stepAtLeast[5] - booked
+            },
+            {
+                step: 6,
+                label: 'RDV Confirmé',
+                reached: booked,
+                dropoff: stepAtLeast[5] > 0 ? ((stepAtLeast[5] - booked) / stepAtLeast[5] * 100).toFixed(1) : 0,
+                lostCount: 0
+            }
+        ];
+
+        // Conversion rates
+        const replyRate = totalContacted > 0 ? (totalReplied / totalContacted * 100).toFixed(1) : 0;
+        const bookingRate = totalContacted > 0 ? (booked / totalContacted * 100).toFixed(1) : 0;
+        const bookingFromReplies = totalReplied > 0 ? (booked / totalReplied * 100).toFixed(1) : 0;
+
+        // Source performance
+        const sourceStats = db.prepare(`
+            SELECT
+                lead_source,
+                COUNT(*) as total,
+                SUM(CASE WHEN total_messages_received > 0 THEN 1 ELSE 0 END) as replied,
+                SUM(CASE WHEN booking_status = 'completed' THEN 1 ELSE 0 END) as booked
+            FROM leads
+            WHERE total_messages_sent > 0 AND is_ignored = 0 AND lead_source IS NOT NULL ${accountFilter}
+            GROUP BY lead_source
+            ORDER BY total DESC
+            LIMIT 10
+        `).all(...accountParam).map(row => ({
+            source: row.lead_source || 'Unknown',
+            total: row.total,
+            replied: row.replied,
+            booked: row.booked,
+            replyRate: row.total > 0 ? (row.replied / row.total * 100).toFixed(1) : 0,
+            bookingRate: row.total > 0 ? (row.booked / row.total * 100).toFixed(1) : 0
+        }));
+
+        // Identify biggest drop-off point
+        let biggestDropoff = { step: null, rate: 0, label: '' };
+        funnel.forEach((f, idx) => {
+            if (f.dropoff && parseFloat(f.dropoff) > biggestDropoff.rate) {
+                biggestDropoff = { step: f.step, rate: parseFloat(f.dropoff), label: f.label };
+            }
+        });
+
+        // Step distribution (exact count at each step for the mini-cards)
+        const stepDistribution = db.prepare(`
+            SELECT
+                CAST(conversation_step AS INTEGER) as step,
+                COUNT(*) as count
+            FROM leads
+            WHERE is_ignored = 0 AND total_messages_received > 0 ${accountFilter}
+            GROUP BY CAST(conversation_step AS INTEGER)
+            ORDER BY step
+        `).all(...accountParam);
+
+        res.json({
+            summary: {
+                totalContacted,
+                totalReplied,
+                booked,
+                notInterested,
+                failed,
+                replyRate,
+                bookingRate,
+                bookingFromReplies
+            },
+            funnel,
+            stepDistribution,
+            sourceStats,
+            insights: {
+                biggestDropoff,
+                recommendation: biggestDropoff.rate > 30
+                    ? `Attention: ${biggestDropoff.rate}% drop-off à "${biggestDropoff.label}". Revoir le script de cette étape.`
+                    : null
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/leads
 app.get('/api/leads', (req, res) => {
     try {
