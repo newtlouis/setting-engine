@@ -245,11 +245,29 @@ class BrowserSession {
   }
 
   /**
+   * Register process signal handlers to close browser gracefully on exit.
+   * Prevents Chrome profile corruption when the process is killed.
+   */
+  _registerShutdownHandlers() {
+    const gracefulClose = async (signal) => {
+      if (this._shuttingDown) return;
+      this._shuttingDown = true;
+      console.log(`\n   🛑 ${signal} received — closing browser gracefully...`);
+      await this.close();
+      process.exit(0);
+    };
+
+    this._shutdownHandler = gracefulClose;
+    process.on('SIGINT', () => gracefulClose('SIGINT'));
+    process.on('SIGTERM', () => gracefulClose('SIGTERM'));
+  }
+
+  /**
    * Close the browser session
    */
   async close() {
     if (this.context) {
-      await this.context.close();
+      await this.context.close().catch(() => {});
       this.context = null;
       this.workingPage = null;
       this.messageTabs = [];
@@ -334,6 +352,9 @@ const BrowserService = {
       slowMo,
       diagnostic
     });
+
+    // Register graceful shutdown to prevent profile corruption
+    session._registerShutdownHandlers();
 
     // Auto-login if requested
     if (autoLogin) {

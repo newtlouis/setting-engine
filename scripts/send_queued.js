@@ -119,9 +119,27 @@ async function main() {
         }
         
         if (!openResult.success) {
-            console.log(`   ❌ Failed to open DM: ${openResult.error}`);
-            await outreachQueue.markFailed(lead.username, openResult.error);
-            failedCount++;
+            const error = openResult.error || 'unknown';
+
+            // Distinguish permanent failures from retryable errors
+            const permanentErrors = ['no_contact_button', 'no_contact_button_private_account', 'public_no_contact_button', 'profile_not_found', 'account_suspended'];
+            const isPermanent = permanentErrors.some(e => error.includes(e));
+
+            if (isPermanent) {
+                console.log(`   ❌ Permanent failure: ${error}`);
+                await outreachQueue.markFailed(lead.username, error);
+                await fullUpsertLead(lead.username, account.id, {
+                  status: 'failed',
+                  notes: `Outreach failed: ${error}`
+                });
+                failedCount++;
+            } else {
+                // Retryable error (network, timing, click_did_not_open_dm, etc.)
+                // Keep in queue as pending for next batch
+                console.log(`   ⏳ Retryable error: ${error} — will retry next batch`);
+                await outreachQueue.incrementRetry(lead.username, error);
+            }
+
             if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
         }

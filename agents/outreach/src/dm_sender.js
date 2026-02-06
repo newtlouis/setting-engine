@@ -200,18 +200,21 @@ export async function goToProfile(page, username, targetUrl = null) {
 export async function checkCanContact(page) {
   // Try all possible selectors for the contact button
   const selectors = CONFIG.SELECTORS.CONTACT_BUTTON;
-  
+
   for (const selector of selectors) {
     const button = await page.$(selector).catch(() => null);
     if (button) {
       // Verify it's visible
       const isVisible = await button.isVisible().catch(() => false);
       if (isVisible) {
+        const buttonText = await button.textContent().catch(() => '?');
+        console.log(`   🔍 Contact button FOUND — selector: "${selector}" — text: "${buttonText?.trim()}"`);
         return { canContact: true, button };
       }
     }
   }
-  
+
+  console.log(`   🔍 Contact button NOT FOUND — none of ${selectors.length} selectors matched`);
   return { canContact: false };
 }
 

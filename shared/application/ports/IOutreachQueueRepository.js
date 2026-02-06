@@ -61,6 +61,16 @@ export const IOutreachQueueRepository = {
   markFailed: async (username, error) => { throw new Error('Not implemented'); },
 
   /**
+   * Increment retry count for retryable errors (keeps status pending)
+   * If max retries reached, marks as failed
+   * @param {string} username
+   * @param {string} error
+   * @param {number} [maxRetries=3]
+   * @returns {Promise<boolean>}
+   */
+  incrementRetry: async (username, error, maxRetries) => { throw new Error('Not implemented'); },
+
+  /**
    * Check if username is already in queue
    * @param {string} username
    * @returns {Promise<boolean>}

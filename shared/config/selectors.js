@@ -19,12 +19,7 @@ export const CONTACT_BUTTON = [
   'main div[role="button"]:has-text("Contacter")',
   'main div[role="button"]:has-text("Message")',
   'main button:has-text("Contacter")',
-  'main button:has-text("Message")',
-  // Generic fallbacks (avoid nav bar conflicts)
-  'div[role="button"]:has-text("Contacter")',
-  'div[role="button"]:has-text("Message")',
-  'button:has-text("Contacter")',
-  'button:has-text("Message")'
+  'main button:has-text("Message")'
 ];
 
 /**

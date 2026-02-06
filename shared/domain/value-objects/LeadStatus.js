@@ -7,27 +7,45 @@
 
 export const LeadStatus = Object.freeze({
   NEW: 'new',
+  QUEUED: 'queued',           // In outreach queue, waiting to be sent
+  OUTREACH: 'outreach',       // First message sent, waiting for reply
   CONTACTED: 'contacted',
   REPLIED: 'replied',
+  CONVERSATION: 'conversation', // Active conversation in progress
   QUALIFIED: 'qualified',
+  SCHEDULING: 'scheduling',   // Booking/scheduling in progress
   CONVERTED: 'converted',
   IGNORED: 'ignored',
-  FAILED: 'failed',    // DM failed (account not found, blocked, etc.)
-  MANUAL: 'manual'     // Needs manual intervention
+  FAILED: 'failed',           // DM failed (account not found, blocked, etc.)
+  MANUAL: 'manual',           // Needs manual intervention
+  NOT_INTERESTED: 'not_interested',
+  DISQUALIFIED: 'disqualified',
+  UNCONTACTABLE: 'uncontactable', // No message button on profile
+  ALREADY_KNOWN: 'already_known', // Existing conversation detected
+  KNOWN_CONTACT: 'known_contact'  // Known contact outside funnel
 });
 
 /**
  * Valid status transitions (state machine)
  */
 const VALID_TRANSITIONS = {
-  [LeadStatus.NEW]: [LeadStatus.CONTACTED, LeadStatus.IGNORED, LeadStatus.FAILED],
-  [LeadStatus.CONTACTED]: [LeadStatus.REPLIED, LeadStatus.IGNORED, LeadStatus.FAILED, LeadStatus.MANUAL],
-  [LeadStatus.REPLIED]: [LeadStatus.QUALIFIED, LeadStatus.IGNORED, LeadStatus.MANUAL],
-  [LeadStatus.QUALIFIED]: [LeadStatus.CONVERTED, LeadStatus.IGNORED, LeadStatus.MANUAL],
+  [LeadStatus.NEW]: [LeadStatus.QUEUED, LeadStatus.CONTACTED, LeadStatus.OUTREACH, LeadStatus.IGNORED, LeadStatus.FAILED, LeadStatus.DISQUALIFIED, LeadStatus.UNCONTACTABLE, LeadStatus.ALREADY_KNOWN],
+  [LeadStatus.QUEUED]: [LeadStatus.OUTREACH, LeadStatus.CONTACTED, LeadStatus.FAILED, LeadStatus.IGNORED],
+  [LeadStatus.OUTREACH]: [LeadStatus.CONVERSATION, LeadStatus.REPLIED, LeadStatus.NOT_INTERESTED, LeadStatus.IGNORED, LeadStatus.FAILED, LeadStatus.MANUAL],
+  [LeadStatus.CONTACTED]: [LeadStatus.CONVERSATION, LeadStatus.REPLIED, LeadStatus.NOT_INTERESTED, LeadStatus.IGNORED, LeadStatus.FAILED, LeadStatus.MANUAL],
+  [LeadStatus.REPLIED]: [LeadStatus.CONVERSATION, LeadStatus.QUALIFIED, LeadStatus.IGNORED, LeadStatus.MANUAL],
+  [LeadStatus.CONVERSATION]: [LeadStatus.QUALIFIED, LeadStatus.SCHEDULING, LeadStatus.NOT_INTERESTED, LeadStatus.IGNORED, LeadStatus.MANUAL],
+  [LeadStatus.QUALIFIED]: [LeadStatus.SCHEDULING, LeadStatus.CONVERTED, LeadStatus.IGNORED, LeadStatus.MANUAL],
+  [LeadStatus.SCHEDULING]: [LeadStatus.CONVERTED, LeadStatus.CONVERSATION, LeadStatus.IGNORED, LeadStatus.MANUAL],
   [LeadStatus.CONVERTED]: [],
   [LeadStatus.IGNORED]: [],
-  [LeadStatus.FAILED]: [LeadStatus.NEW],    // Can retry failed leads
-  [LeadStatus.MANUAL]: [LeadStatus.CONTACTED, LeadStatus.REPLIED, LeadStatus.QUALIFIED, LeadStatus.IGNORED]
+  [LeadStatus.FAILED]: [LeadStatus.NEW],
+  [LeadStatus.MANUAL]: [LeadStatus.CONTACTED, LeadStatus.CONVERSATION, LeadStatus.REPLIED, LeadStatus.QUALIFIED, LeadStatus.IGNORED],
+  [LeadStatus.NOT_INTERESTED]: [LeadStatus.CONVERSATION], // Can re-engage if they ask a question
+  [LeadStatus.DISQUALIFIED]: [],
+  [LeadStatus.UNCONTACTABLE]: [],
+  [LeadStatus.ALREADY_KNOWN]: [LeadStatus.CONVERSATION, LeadStatus.NOT_INTERESTED],
+  [LeadStatus.KNOWN_CONTACT]: [LeadStatus.CONVERSATION]
 };
 
 /**

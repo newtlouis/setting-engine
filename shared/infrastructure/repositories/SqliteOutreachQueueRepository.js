@@ -114,6 +114,30 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
       return result.changes > 0;
     },
 
+    async incrementRetry(username, error, maxRetries = 3) {
+      const db = getDb();
+
+      // Get current retry count
+      const row = db.prepare(`SELECT retry_count FROM outreach_queue WHERE username = ?`).get(username);
+      const currentRetries = (row?.retry_count || 0) + 1;
+
+      if (currentRetries >= maxRetries) {
+        // Max retries reached — mark as failed
+        console.log(`   ⛔ Max retries (${maxRetries}) reached for @${username}`);
+        return this.markFailed(username, `${error} (after ${currentRetries} retries)`);
+      }
+
+      // Increment retry count, keep status pending
+      const result = db.prepare(`
+        UPDATE outreach_queue
+        SET retry_count = ?, error = ?
+        WHERE username = ?
+      `).run(currentRetries, error, username);
+
+      console.log(`   🔄 Retry ${currentRetries}/${maxRetries} scheduled for @${username}`);
+      return result.changes > 0;
+    },
+
     async exists(username) {
       const db = getDb();
       const row = db.prepare(`
