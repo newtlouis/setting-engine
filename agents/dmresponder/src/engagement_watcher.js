@@ -459,7 +459,7 @@ export async function runEngagementWatcher(options = {}) {
                             bio: metadata.bio,
                             lead_source: lead.source,
                             dm_url: dmResult.dmUrl,
-                            funnel_step: 1,
+                            funnel_step: 2, // First message combines steps 1+2
                             notes: ctaMatch ? `CTA resource delivered: ${ctaMatch.file}` : null
                         });
                         await addMessage(username, 'assistant', finalMessage, lead.source, account.id);

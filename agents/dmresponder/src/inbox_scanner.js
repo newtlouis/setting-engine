@@ -33,7 +33,7 @@ import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 // ============================================
 const CONFIG = {
   INBOX_URL: 'https://www.instagram.com/direct/inbox/',
-  MAX_SCROLLS: 50, // Cover deep inbox (position 30+)
+  MAX_SCROLLS: 10, // Scan top conversations
   SCROLL_AMOUNT: 300, // Smaller scrolls for smooth loading
   DELAYS: {
     AFTER_NAVIGATION: 3500,
