@@ -1759,11 +1759,14 @@ app.post('/api/commands/run', async (req, res) => {
     }
     runningProcesses.clear();
 
-    // Kill any orphan Chrome processes tied to browser-data profiles
+    // Kill any orphan Chrome/Chromium processes tied to browser-data profiles
     try {
-        spawn('pkill', ['-9', '-f', 'chrome.*browser-data-'], { stdio: 'ignore', detached: true }).unref();
+        // Kill Chromium (Playwright) and Chrome processes with browser-data in args
+        spawn('pkill', ['-9', '-f', 'Chromium.*browser-data'], { stdio: 'ignore', detached: true }).unref();
+        spawn('pkill', ['-9', '-f', 'chrome.*browser-data'], { stdio: 'ignore', detached: true }).unref();
+        spawn('pkill', ['-9', '-f', 'user-data-dir.*browser-data'], { stdio: 'ignore', detached: true }).unref();
         // Small delay to let processes die
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 800));
     } catch (_) { /* ignore */ }
 
     // Validate args: allow --flags and their values (strings/numbers following a flag)
@@ -1916,8 +1919,9 @@ app.post('/api/commands/stop/:processId', (req, res) => {
             }
         } catch (_) { /* already dead */ }
 
-        // Kill any orphan Chrome processes tied to browser-data profiles
-        spawn('pkill', ['-9', '-f', 'chrome.*browser-data-'], { stdio: 'ignore', detached: true }).unref();
+        // Kill any orphan Chrome/Chromium processes tied to browser-data profiles
+        spawn('pkill', ['-9', '-f', 'Chromium.*browser-data'], { stdio: 'ignore', detached: true }).unref();
+        spawn('pkill', ['-9', '-f', 'chrome.*browser-data'], { stdio: 'ignore', detached: true }).unref();
     }, 5000);
 
     res.json({ success: true, message: 'SIGTERM sent to process group' });
