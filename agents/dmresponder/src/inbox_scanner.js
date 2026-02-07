@@ -33,11 +33,12 @@ import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 // ============================================
 const CONFIG = {
   INBOX_URL: 'https://www.instagram.com/direct/inbox/',
-  MAX_SCROLLS: 15, // Increase scrolls to cover deep inbox
+  MAX_SCROLLS: 50, // Cover deep inbox (position 30+)
+  SCROLL_AMOUNT: 300, // Smaller scrolls for smooth loading
   DELAYS: {
     AFTER_NAVIGATION: 3500,
     AFTER_CLICK: 2500,
-    AFTER_SCROLL: 1500,
+    AFTER_SCROLL: 1000, // Wait for conversations to load
     BETWEEN_CONVERSATIONS: 1500
   }
 };
@@ -71,35 +72,29 @@ async function navigateToInbox(page) {
 /**
  * Perform a single scroll action in the sidebar
  */
-async function scrollSidebarOnce(page) {
-  return await page.evaluate(() => {
-    // Find scrollable container
-    const containers = document.querySelectorAll('div[style*="overflow"]');
-    for (const container of containers) {
-      const style = window.getComputedStyle(container);
-      if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-        if (container.querySelector('img[alt*="profile" i]')) {
-          container.scrollTop += 300;
-          return true;
+async function scrollSidebarOnce(page, amount = 300) {
+  return await page.evaluate((scrollAmount) => {
+    // Find first scrollable div that contains conversations (span[title])
+    const allDivs = document.querySelectorAll('div');
+
+    for (const div of allDivs) {
+      // Check if this div is scrollable (scrollHeight > clientHeight)
+      if (div.scrollHeight > div.clientHeight + 50) {
+        // Check if it contains conversation items
+        const hasConversations = div.querySelector('span[title]');
+        if (hasConversations) {
+          const before = div.scrollTop;
+          div.scrollTop += scrollAmount;
+
+          if (div.scrollTop !== before) {
+            return { scrolled: true, method: 'conversation-container', scrollTop: div.scrollTop };
+          }
         }
       }
     }
-    
-    // Fallback
-    const firstConv = document.querySelector('div[role="button"] img[alt*="profile" i]');
-    if (firstConv) {
-      let parent = firstConv.parentElement;
-      while (parent) {
-        const style = window.getComputedStyle(parent);
-        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-          parent.scrollTop += 300;
-          return true;
-        }
-        parent = parent.parentElement;
-      }
-    }
-    return false;
-  });
+
+    return { scrolled: false, method: 'none' };
+  }, amount);
 }
 
 /**
@@ -109,50 +104,78 @@ async function getVisibleConversations(page) {
   return await page.evaluate(() => {
     const conversations = [];
     const seenNames = new Set();
-    
+
+    // System messages to ignore (not real user messages)
+    const SYSTEM_MESSAGE_PATTERNS = [
+      'Ce compte ne peut pas recevoir',
+      'This account cannot receive',
+      'A réagi',
+      'Reacted to',
+      'a partagé',
+      'shared a'
+    ];
+
     const buttons = document.querySelectorAll('div[role="button"]');
-    
+
     buttons.forEach((button) => {
-      const hasProfileImage = button.querySelector('img[alt*="profile" i], img[alt*="picture" i]');
       const nameSpan = button.querySelector('span[title]');
-      
-      if (!hasProfileImage || !nameSpan) return;
-      
+      if (!nameSpan) return;
+
       const name = nameSpan.getAttribute('title') || nameSpan.textContent || '';
       if (!name || seenNames.has(name)) return;
       seenNames.add(name);
-      
-      let isUnread = false;
-      
-      // Check for "Unread" text
-      const allSpans = button.querySelectorAll('span');
-      for (const span of allSpans) {
-        const text = span.textContent || '';
-        if (text === 'Unread' || text.includes('Unread')) {
-          isUnread = true;
-          break;
-        }
-      }
-      
-      // Check for blue dot
-      const dotIndicator = button.querySelector('span[data-visualcompletion="ignore"] + div, .x6s0dn4.x1iwo8zk');
-      if (dotIndicator) {
-        isUnread = true;
-      }
-      
-      const dirSpans = button.querySelectorAll('span[dir="auto"]');
+
+      // Get preview from dir="auto" spans
       let preview = '';
+      const dirSpans = button.querySelectorAll('span[dir="auto"]');
       if (dirSpans.length >= 2) {
         preview = dirSpans[1]?.textContent?.trim() || '';
       }
-      
+
+      // Check font-weight (600 = unread on Instagram)
+      const fontWeight = window.getComputedStyle(nameSpan).fontWeight;
+      const isBold = fontWeight === '600' || fontWeight === '700';
+
+      // Check for "Unread" text indicator
+      let hasUnreadText = false;
+      const allSpans = button.querySelectorAll('span');
+      for (const span of allSpans) {
+        const text = (span.textContent || '').trim().toLowerCase();
+        if (text === 'unread' || text === 'non lu' || text === 'non lue') {
+          hasUnreadText = true;
+          break;
+        }
+      }
+
+      // Determine if unread
+      let isUnread = false;
+
+      // Method 1: Font weight bold OR "Unread" text = definitely unread
+      if (isBold || hasUnreadText) {
+        isUnread = true;
+      }
+      // Method 2: Preview not starting with "Vous:" = they replied
+      else if (preview && !preview.startsWith('Vous:') && !preview.startsWith('You:') && !preview.startsWith('Vous :')) {
+        isUnread = true;
+      }
+
+      // Exclude system messages (not real replies)
+      if (isUnread && preview) {
+        for (const pattern of SYSTEM_MESSAGE_PATTERNS) {
+          if (preview.includes(pattern)) {
+            isUnread = false;
+            break;
+          }
+        }
+      }
+
       conversations.push({
         name,
         isUnread,
         preview: preview.substring(0, 60)
       });
     });
-    
+
     return conversations;
   });
 }
@@ -340,18 +363,31 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          // Expanded valid statuses: 'new' = manual outreach, not_interested = question-only check
-          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'not_interested'];
-          
-          if (!validStatuses.includes(leadContext.status) || leadContext.is_ignored) {
-            console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}', ignored: ${leadContext.is_ignored}) skipped.`);
+          // Valid statuses for processing (exclude not_interested, already_known)
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified'];
+          const excludedStatuses = ['not_interested', 'already_known', 'ignored', 'failed'];
+
+          if (excludedStatuses.includes(leadContext.status) || leadContext.is_ignored) {
+            console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}') excluded.`);
             skippedCount++;
             continue;
           }
 
-          // Skip booked leads and leads at conversation step 8+
-          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending' || (leadContext.funnel_step && leadContext.funnel_step >= 8)) {
-            console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}', step: ${leadContext.funnel_step}) - already booked or advanced. Skipped.`);
+          if (!validStatuses.includes(leadContext.status)) {
+            console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}') not in valid statuses.`);
+            skippedCount++;
+            continue;
+          }
+
+          // Skip booked leads and leads at funnel step 8+
+          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending') {
+            console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}') - already booked. Skipped.`);
+            skippedCount++;
+            continue;
+          }
+
+          if (leadContext.funnel_step && leadContext.funnel_step >= 8) {
+            console.log(`   ⏭️ Lead @${username} (funnel_step: ${leadContext.funnel_step}) - workflow complete. Skipped.`);
             skippedCount++;
             continue;
           }
@@ -401,33 +437,7 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
-          // --- LOGIC: RESTRICT RESPONSES FOR 'NOT INTERESTED' (question-only) ---
-          if (leadContext.status === 'not_interested') {
-             const text = (lastMsg.text || '').trim();
-             
-             // Stricter check:
-             // 1. Must contain a question mark
-             // 2. OR be a common question starter (Est-ce que, Pourquoi, Comment, ...)
-             // 3. AND must NOT be a common closing/thanking message
-             const hasQuestionMark = text.includes('?');
-             const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu'];
-             const startsWithQuestion = questionStarters.some(s => text.toLowerCase().startsWith(s));
-             
-             const closingWords = ['merci', 'thanks', 'ok', 'd\'accord', 'ca marche', 'ça marche', 'bonne soirée', 'bonne journée', 'super', 'cool'];
-             const isClosing = closingWords.some(w => text.toLowerCase().includes(w)) && text.length < 30 && !hasQuestionMark;
-
-             const isQuestion = (hasQuestionMark || startsWithQuestion) && !isClosing;
-             
-             if (!isQuestion) {
-                 console.log(`   🛑 Status is '${leadContext.status}' and message is NOT a clear question ("${text}"). Keeping status as is and IGNORING.`);
-                 // We do NOT respond. We treat it as "read and handled".
-                 continue;
-             } else {
-                 console.log(`   ✅ Status is '${leadContext.status}' BUT user asked a question ("${text}"). Generating response.`);
-             }
-          }
-
-          // 7. Generate Response (renumbered)
+          // 7. Generate Response
           console.log(`   🤖 Generating response...`);
           const response = await generateResponse({
             conversationHistory: updatedHistory,
@@ -566,7 +576,11 @@ export async function runInboxScanner(options = {}) {
       
       // Scroll for next round
       if (scrollIdx < CONFIG.MAX_SCROLLS) {
-        await scrollSidebarOnce(workingPage);
+        const scrollResult = await scrollSidebarOnce(workingPage, CONFIG.SCROLL_AMOUNT);
+        if (!scrollResult.scrolled && scrollIdx > 5) {
+          console.log(`   ⚠️ Scroll stopped working at round ${scrollIdx + 1}`);
+          break; // Stop if we can't scroll anymore
+        }
         await delay(CONFIG.DELAYS.AFTER_SCROLL);
       }
     }
