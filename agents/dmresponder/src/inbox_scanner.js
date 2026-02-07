@@ -99,9 +99,11 @@ async function scrollSidebarOnce(page, amount = 300) {
 
 /**
  * Get currently visible conversation items
+ * @param {Page} page - Playwright page
+ * @param {boolean} allReplies - If true, detect all conversations where last msg is not from us
  */
-async function getVisibleConversations(page) {
-  return await page.evaluate(() => {
+async function getVisibleConversations(page, allReplies = false) {
+  return await page.evaluate((detectAllReplies) => {
     const conversations = [];
     const seenNames = new Set();
 
@@ -150,12 +152,12 @@ async function getVisibleConversations(page) {
       // Determine if unread
       let isUnread = false;
 
-      // Method 1: Font weight bold OR "Unread" text = definitely unread
+      // Default mode: Only bold text OR "Unread" indicator (strict)
       if (isBold || hasUnreadText) {
         isUnread = true;
       }
-      // Method 2: Preview not starting with "Vous:" = they replied
-      else if (preview && !preview.startsWith('Vous:') && !preview.startsWith('You:') && !preview.startsWith('Vous :')) {
+      // --all mode: Also detect replies without "Vous:" prefix
+      else if (detectAllReplies && preview && !preview.startsWith('Vous:') && !preview.startsWith('You:') && !preview.startsWith('Vous :')) {
         isUnread = true;
       }
 
@@ -177,7 +179,7 @@ async function getVisibleConversations(page) {
     });
 
     return conversations;
-  });
+  }, allReplies);
 }
 
 /**
@@ -269,16 +271,19 @@ function findNewMessages(scrapedMessages, dbHistory) {
 
 export async function runInboxScanner(options = {}) {
   await initDB();
-  
+
   const profile = options.profile || process.env.IG_PROFILE;
+  const allReplies = options.all || options.allReplies || false;
+
   if (!profile) {
     throw new Error('Profile name is required. Use --profile <name>.');
   }
-  
+
   console.log(`\n========================================`);
   console.log(`   DM RESPONDER - INBOX SCANNER MODE`);
   console.log(`========================================`);
   console.log(`   Profile: ${profile}`);
+  console.log(`   Detection: ${allReplies ? 'All replies (--all)' : 'Unread only (bold + indicator)'}`);
   console.log(`   Strategy: Process-as-you-Scroll + Manual Review Tabs`);
   
   let browser = null;
@@ -323,7 +328,7 @@ export async function runInboxScanner(options = {}) {
     for (let scrollIdx = 0; scrollIdx <= CONFIG.MAX_SCROLLS; scrollIdx++) {
       console.log(`\n   📜 Round ${scrollIdx + 1}: Scanning visible conversations...`);
       
-      const visible = await getVisibleConversations(workingPage);
+      const visible = await getVisibleConversations(workingPage, allReplies);
       
       // Filter for actionable items: Unread AND Not Processed
       const actionable = visible.filter(c => c.isUnread && !processedNames.has(c.name));
