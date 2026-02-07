@@ -1742,12 +1742,29 @@ function findCommandDef(name) {
 }
 
 // POST /api/commands/run - Launch a command (or combo)
-app.post('/api/commands/run', (req, res) => {
+app.post('/api/commands/run', async (req, res) => {
     const { command, args = [] } = req.body;
 
     if (!command || !allowedCommands.has(command)) {
         return res.status(400).json({ error: `Unknown command: ${command}` });
     }
+
+    // Kill all existing running processes and browsers before starting new command
+    for (const [id, entry] of runningProcesses) {
+        if (entry.exitCode === null && entry.process) {
+            try {
+                process.kill(-entry.process.pid, 'SIGKILL');
+            } catch (_) { /* already dead */ }
+        }
+    }
+    runningProcesses.clear();
+
+    // Kill any orphan Chrome processes tied to browser-data profiles
+    try {
+        spawn('pkill', ['-9', '-f', 'chrome.*browser-data-'], { stdio: 'ignore', detached: true }).unref();
+        // Small delay to let processes die
+        await new Promise(r => setTimeout(r, 500));
+    } catch (_) { /* ignore */ }
 
     // Validate args: allow --flags and their values (strings/numbers following a flag)
     const sanitizedArgs = [];
