@@ -60,7 +60,7 @@ try {
 
 const COMMAND_REGISTRY = {
     Favoris: [
-        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile'] },
+        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--all'] },
         { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5 --manual' },
         { name: 'open:session', description: 'Ouvrir Instagram (session Chrome)', options: ['--profile'] },
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
@@ -88,7 +88,7 @@ const COMMAND_REGISTRY = {
         { name: 'reply:conversation', description: 'Repondre leads conversation', options: ['--profile'] },
         { name: 'reply:outreach', description: 'Repondre leads outreach', options: ['--profile'] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
-        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile'] },
+        { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--all'] },
         { name: 'respond:followers', description: 'Surveiller followers', options: ['--profile', '--show-browser'] },
         { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile', '--show-browser'] },
     ],

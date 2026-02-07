@@ -100,6 +100,14 @@ async function loadFunnelAnalytics() {
         document.getElementById('stat-reply_rate').textContent = `${data.summary.replyRate}% taux`;
         document.getElementById('stat-booked').textContent = data.summary.booked;
         document.getElementById('stat-booking_rate').textContent = `${data.summary.bookingRate}% taux`;
+
+        // Calculate contacts per booking ratio
+        const contactsPerBooking = data.summary.booked > 0
+            ? Math.ceil(data.summary.totalContacted / data.summary.booked)
+            : '-';
+        document.getElementById('stat-booking_ratio').textContent =
+            contactsPerBooking !== '-' ? `1 RDV / ${contactsPerBooking} contacts` : '-';
+
         document.getElementById('stat-not_interested').textContent = data.summary.notInterested;
 
         // Render funnel bars
