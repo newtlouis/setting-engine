@@ -69,20 +69,19 @@ Bio: {bio}
 Réponse (OUI ou NON):`,
 
         // Initial outreach templates (first contact messages)
-        follower_template: `Hello {{firstName}} 🌷
+        follower_template: `Hello {{firstName}} 🌸
 Merci pour ton abonnement, bienvenue ici !
 Je partage pas mal de choses sur l'hypersensibilité et la dépendance affective, toujours de manière simple et bienveillante.
-Est-ce que ce sont des sujets qui te parlent ou pas du tout ? 💕`,
+Est-ce que ce sont des sujets qui te parlent ou pas du tout ?`,
 
-        like_outreach_template: `Hello {{firstName}} 🌺
+        like_outreach_template: `Hello {{firstName}} 🌸
 Merci pour ton ❤️ sur mon post sur la dépendance affective.
 C'est un sujet qui touche beaucoup de personnes sensibles.
-Est-ce que ça te parle personnellement ou c'était juste le contenu qui t'a inspiré ? 💬`,
+Est-ce que ça te parle personnellement ou c'était juste le contenu qui t'a inspiré ?`,
 
         comment_outreach_template: `Coucou {{firstName}} 🌸
 Merci pour ton commentaire 🙏
-J'ai beaucoup aimé ce que tu as partagé, on sent que tu parles avec le cœur 💛
-C'est un sujet qui te touche personnellement ou plutôt quelque chose que tu observes autour de toi ? 🌷`,
+C'est un sujet qui te touche personnellement ou plutôt quelque chose que tu observes autour de toi ?`,
 
         // CTA Resource Delivery - Keywords that trigger automatic resource uploads
         cta_resources: {
@@ -91,16 +90,16 @@ C'est un sujet qui te touche personnellement ou plutôt quelque chose que tu obs
                 url: "https://www.youtube.com/watch?v=7RoB9DaQz1I",
                 message_addon: "Et voilà la ressource que tu as demandée 🌸",
                 outreach_template: `Coucou {{firstName}} 🌸
-Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
-Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
+Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource
+Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ?`
             },
             "dépendance affective": {
                 file: "",
                 url: "https://www.youtube.com/watch?v=7RoB9DaQz1I",
                 message_addon: "Et voilà la ressource que tu as demandée 🌸",
                 outreach_template: `Coucou {{firstName}} 🌸
-Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource ✨
-Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ? 💛`
+Merci pour ton commentaire ! J'ai vu que tu avais demandé la ressource
+Est-ce que le sujet de la dépendance affective te parle personnellement ou c'est plutôt par curiosité ?`
             }
         }
 
