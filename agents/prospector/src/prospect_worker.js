@@ -32,6 +32,7 @@ import { generateFirstMessage, validateMessage } from '../../outreach/src/templa
 
 // Shared utilities
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
 import { getBrowserDataDir } from '../../../shared/paths.js';
 import { checkForChallenge } from '../../../shared/pageVerification.js';
 import { delay } from '../../../shared/browser/index.js';
@@ -97,6 +98,7 @@ export async function runProspector(options = {}) {
 
   // Load profile config for qualification and messaging
   const profileConfig = await loadProfileConfig(profile);
+  const outreachConfig = loadOutreachConfig(accountId, profileConfig);
   console.log(`🧠 Loaded profile config: ${profileConfig?.niche || 'default'}`);
   console.log(`📦 Prepare Only: ${prepareOnly}`);
 
@@ -153,7 +155,7 @@ export async function runProspector(options = {}) {
   // --- SOURCE LIST PREPARATION ---
   // If the user provided a source via CLI, we start with it. 
   // Otherwise, we use the list from config.
-  let sourceList = profileConfig?.prospector?.sources || [];
+  let sourceList = outreachConfig.prospectorSources;
   if (source && !sourceList.includes(source)) {
       sourceList = [source, ...sourceList];
   } else if (source && sourceList.includes(source)) {
@@ -286,7 +288,7 @@ export async function runProspector(options = {}) {
 
              // STEP 3d: Qualify lead (if not skipped)
              if (!skipQualification) {
-               const qualificationPrompt = profileConfig?.outreach?.qualification_prompt || null;
+               const qualificationPrompt = outreachConfig.qualificationPrompt;
                const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username);
                
                if (!qualResult.qualified) {

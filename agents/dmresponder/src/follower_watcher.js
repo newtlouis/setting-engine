@@ -28,6 +28,7 @@ import { getContainer } from '../../../shared/container.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
 import path from 'path';
 
 // ============================================
@@ -143,7 +144,8 @@ export async function runFollowerWatcher(options = {}) {
         
         const profileConfig = await loadProfileConfig(profile);
         const account = await getOrCreateAccount(profile);
-        
+        const outreachConfig = loadOutreachConfig(account.id, profileConfig);
+
         // Step 2: Go to Notifications
         await goToNotifications(page);
         
@@ -241,7 +243,7 @@ export async function runFollowerWatcher(options = {}) {
 
             // 7. Qualify Lead
             console.log(`   🔍 Qualifying @${username}...`);
-            const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
+            const qualification = await qualifyLead(metadata.bio, outreachConfig.qualificationPrompt, username);
             
             if (!qualification.qualified) {
                 console.log(`   ❌ Not qualified: ${qualification.reason}`);
@@ -262,7 +264,7 @@ export async function runFollowerWatcher(options = {}) {
                 aiFirstName = await extractNameWithAI(username, metadata.fullName);
             } catch (e) {}
             
-            let messageTemplate = profileConfig.outreach?.follower_template;
+            let messageTemplate = outreachConfig.followerTemplate;
             
             let finalMessage = "";
             if (aiFirstName) {

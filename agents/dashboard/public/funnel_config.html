@@ -530,6 +530,22 @@
                 </div>
 
                 <div class="sidebar-section">
+                    <h3>Outreach</h3>
+                    <div class="nav-item" onclick="showSection('outreach')">
+                        <span class="nav-item-icon">💬</span>
+                        Templates d'Outreach
+                    </div>
+                    <div class="nav-item" onclick="showSection('cta')">
+                        <span class="nav-item-icon">🎁</span>
+                        CTA Resources
+                    </div>
+                    <div class="nav-item" onclick="showSection('sources')">
+                        <span class="nav-item-icon">🔍</span>
+                        Sources Prospection
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
                     <h3>Preview</h3>
                     <div class="nav-item" onclick="showSection('prompt')">
                         <span class="nav-item-icon">👁️</span>
@@ -594,6 +610,45 @@
                     </div>
                     <div class="section-content">
                         <div id="promptContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Outreach Templates Section -->
+                <section id="section-outreach" class="config-section">
+                    <div class="section-header">
+                        <h2>Templates d'Outreach (Premier Contact)</h2>
+                        <button class="btn-primary btn-small" onclick="saveOutreachTemplates()">Sauvegarder</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="outreachContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CTA Resources Section -->
+                <section id="section-cta" class="config-section">
+                    <div class="section-header">
+                        <h2>CTA Resources</h2>
+                        <button class="btn-secondary btn-small" onclick="addCtaResource()">+ Ajouter</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="ctaContainer">
+                            <div class="loading" style="padding: 40px;">Chargement...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Prospector Sources Section -->
+                <section id="section-sources" class="config-section">
+                    <div class="section-header">
+                        <h2>Sources de Prospection</h2>
+                        <button class="btn-secondary btn-small" onclick="addProspectorSource()">+ Ajouter</button>
+                    </div>
+                    <div class="section-content">
+                        <div id="sourcesContainer">
                             <div class="loading" style="padding: 40px;">Chargement...</div>
                         </div>
                     </div>

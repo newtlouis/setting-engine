@@ -29,6 +29,7 @@ import { getContainer } from '../../../shared/container.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
 import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
 import path from 'path';
 
 // ============================================
@@ -163,7 +164,8 @@ export async function runEngagementWatcher(options = {}) {
         
         const profileConfig = await loadProfileConfig(profile);
         const account = await getOrCreateAccount(profile);
-        
+        const outreachConfig = loadOutreachConfig(account.id, profileConfig);
+
         // 1. Go to Notifications
         await goToNotifications(page);
         
@@ -289,7 +291,7 @@ export async function runEngagementWatcher(options = {}) {
                 }
                 
                 // 7. Qualification
-                const qualification = await qualifyLead(metadata.bio, profileConfig.outreach?.qualification_prompt, username);
+                const qualification = await qualifyLead(metadata.bio, outreachConfig.qualificationPrompt, username);
                 if (!qualification.qualified) {
                     console.log(`   ❌ Not qualified: ${qualification.reason}`);
                     // Save as disqualified to avoid re-checking in future
@@ -313,15 +315,15 @@ export async function runEngagementWatcher(options = {}) {
                 let ctaMatch = null;
                 let resourceToUpload = null;
                 
-                if (lead.source === 'post_comment' && lead.text && profileConfig.outreach?.cta_resources) {
+                const ctaKeys = Object.keys(outreachConfig.ctaResources);
+                if (lead.source === 'post_comment' && lead.text && ctaKeys.length > 0) {
                     const commentText = lead.text.toLowerCase().trim();
-                    const ctaKeywords = Object.keys(profileConfig.outreach.cta_resources);
-                    
-                    for (const keyword of ctaKeywords) {
+
+                    for (const keyword of ctaKeys) {
                         // Match if comment IS the keyword (with some tolerance for emojis/spaces)
                         const cleanedComment = commentText.replace(/[^\w\sàâäéèêëïîôùûüÿçœæ]/gi, '').trim();
                         if (cleanedComment === keyword.toLowerCase() || commentText === keyword.toLowerCase()) {
-                            ctaMatch = profileConfig.outreach.cta_resources[keyword];
+                            ctaMatch = outreachConfig.ctaResources[keyword];
                             console.log(`   🎁 CTA Keyword detected: "${keyword}" -> Will deliver resource.`);
                             break;
                         }
@@ -341,9 +343,9 @@ export async function runEngagementWatcher(options = {}) {
                     // Use CTA-specific template
                     messageTemplate = ctaMatch.outreach_template;
                 } else if (lead.source === 'post_comment') {
-                    messageTemplate = profileConfig.outreach?.comment_outreach_template;
+                    messageTemplate = outreachConfig.commentTemplate;
                 } else {
-                    messageTemplate = profileConfig.outreach?.like_outreach_template;
+                    messageTemplate = outreachConfig.likeTemplate;
                 }
                 
                 let finalMessage = "";

@@ -414,6 +414,63 @@ function runMigrations() {
 
     console.log('🔄 DM Sync tables ready');
 
+    // ---------------------------------------------------------
+    // OUTREACH CONFIG TABLES (migrated from config files)
+    // ---------------------------------------------------------
+
+    // Outreach templates (first contact: follower, like, comment)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS outreach_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        template_type TEXT NOT NULL,
+        template_text TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(account_id, template_type)
+      );
+    `);
+
+    // CTA resources (keyword-triggered resource delivery)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cta_resources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        keyword TEXT NOT NULL,
+        resource_url TEXT,
+        message_addon TEXT,
+        outreach_template TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(account_id, keyword)
+      );
+    `);
+
+    // Prospector sources (hashtags and profiles to scrape)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS prospector_sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        source_value TEXT NOT NULL,
+        source_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(account_id, source_value)
+      );
+    `);
+
+    // Migration: Add qualification_prompt to account_personas
+    const personaColumns = db.prepare("PRAGMA table_info(account_personas)").all();
+    if (!personaColumns.some(col => col.name === 'qualification_prompt')) {
+      console.log('🔄 Migrating: Adding qualification_prompt to account_personas...');
+      db.exec(`ALTER TABLE account_personas ADD COLUMN qualification_prompt TEXT`);
+    }
+
+    console.log('📋 Outreach config tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }

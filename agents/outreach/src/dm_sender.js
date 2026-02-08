@@ -608,7 +608,7 @@ export async function sendDMToUserInNewTab(username, message, options = {}) {
     if (CONFIG.QUALIFICATION_ENABLED && CONFIG.OPENAI_API_KEY) {
       if (onProgress) onProgress('qualifying', username);
       
-      const customPrompt = profileConfig?.qualification_prompt || null;
+      const customPrompt = profileConfig?.qualification_prompt || profileConfig?.outreach?.qualification_prompt || null;
       if (customPrompt) console.log(`      🧠 Using custom qualification prompt from profile`);
 
       const qualification = await qualifyLead(profileData.bio, customPrompt, username);

@@ -67,6 +67,9 @@ function showEmptyState() {
     document.getElementById('personaContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
     document.getElementById('promptContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
     document.getElementById('statsContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
+    document.getElementById('outreachContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
+    document.getElementById('ctaContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
+    document.getElementById('sourcesContainer').innerHTML = document.getElementById('stagesContainer').innerHTML;
 }
 
 async function loadAllData() {
@@ -85,7 +88,10 @@ async function loadAllData() {
     // Load other data in parallel
     await Promise.all([
         loadPersona(),
-        loadStats()
+        loadStats(),
+        loadOutreachTemplates(),
+        loadCtaResources(),
+        loadProspectorSources()
     ]);
 }
 
@@ -749,6 +755,7 @@ function renderPersonaForm(data) {
     const objections = data?.objectionsScript || data?.objections_script || '';
     const knowledge = data?.knowledgeBase || data?.knowledge_base || '';
     const postBooking = data?.postBookingMessage || data?.post_booking_message || '';
+    const qualification = data?.qualificationPrompt || data?.qualification_prompt || '';
 
     container.innerHTML = `
         <div class="persona-section">
@@ -786,6 +793,12 @@ function renderPersonaForm(data) {
                 <textarea class="form-textarea" id="persona-postbooking"
                           placeholder="Message envoye apres confirmation d'un RDV...">${escapeHtml(postBooking)}</textarea>
             </div>
+            <div class="form-group full-width">
+                <label>Prompt de Qualification</label>
+                <textarea class="form-textarea" id="persona-qualification" style="min-height: 250px;"
+                          placeholder="Prompt pour qualifier les leads (concurrent vs prospect)...">${escapeHtml(qualification)}</textarea>
+                <p class="form-hint">Prompt utilise par l'IA pour determiner si un profil est un concurrent ou un lead potentiel.</p>
+            </div>
         </div>
     `;
 }
@@ -800,7 +813,8 @@ async function savePersona() {
         communication_rules: document.getElementById('persona-communication').value,
         objections_script: document.getElementById('persona-objections').value,
         knowledge_base: document.getElementById('persona-knowledge').value,
-        post_booking_message: document.getElementById('persona-postbooking').value
+        post_booking_message: document.getElementById('persona-postbooking').value,
+        qualification_prompt: document.getElementById('persona-qualification').value
     };
 
     if (!data.persona_name) {
@@ -976,6 +990,254 @@ function renderStats(data) {
             </table>
         </div>
     `;
+}
+
+// ============================================
+// OUTREACH TEMPLATES
+// ============================================
+
+let outreachTemplates = [];
+
+async function loadOutreachTemplates() {
+    if (!currentAccountId) return;
+    try {
+        const res = await fetch(`/api/outreach-templates/${currentAccountId}`);
+        outreachTemplates = await res.json();
+        renderOutreachForm();
+    } catch (e) {
+        console.error('Error loading outreach templates:', e);
+    }
+}
+
+function renderOutreachForm() {
+    const container = document.getElementById('outreachContainer');
+    const types = [
+        { type: 'follower', label: 'Nouveau Follower', placeholder: 'Message envoye quand quelqu\'un s\'abonne...' },
+        { type: 'like', label: 'Like sur un Post', placeholder: 'Message envoye quand quelqu\'un like un post...' },
+        { type: 'comment', label: 'Commentaire sur un Post', placeholder: 'Message envoye quand quelqu\'un commente...' }
+    ];
+
+    const html = types.map(t => {
+        const existing = outreachTemplates.find(ot => ot.template_type === t.type);
+        const text = existing?.template_text || '';
+        return `
+            <div class="form-group full-width" style="margin-bottom: 20px;">
+                <label>${t.label}</label>
+                <textarea class="form-textarea" id="outreach-${t.type}" style="min-height: 120px;"
+                          placeholder="${t.placeholder}">${escapeHtml(text)}</textarea>
+                <p class="form-hint">Utilisez {{firstName}} pour inserer le prenom du prospect.</p>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="persona-section">${html}</div>`;
+}
+
+async function saveOutreachTemplates() {
+    if (!currentAccountId) return;
+
+    const types = ['follower', 'like', 'comment'];
+    try {
+        for (const type of types) {
+            const text = document.getElementById(`outreach-${type}`).value;
+            if (text.trim()) {
+                await fetch('/api/outreach-templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_id: currentAccountId, template_type: type, template_text: text })
+                });
+            }
+        }
+        showToast('Templates d\'outreach sauvegardes', 'success');
+        await loadOutreachTemplates();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+// ============================================
+// CTA RESOURCES
+// ============================================
+
+let ctaResources = [];
+
+async function loadCtaResources() {
+    if (!currentAccountId) return;
+    try {
+        const res = await fetch(`/api/cta-resources?account_id=${currentAccountId}`);
+        ctaResources = await res.json();
+        renderCtaTable();
+    } catch (e) {
+        console.error('Error loading CTA resources:', e);
+    }
+}
+
+function renderCtaTable() {
+    const container = document.getElementById('ctaContainer');
+
+    if (ctaResources.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🎁</div>
+                <h3>Aucune CTA Resource</h3>
+                <p>Ajoutez des mots-cles qui declenchent l'envoi automatique de ressources.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Mot-cle</th>
+                        <th>URL Resource</th>
+                        <th>Message</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${ctaResources.map(r => `
+                        <tr>
+                            <td><strong>${escapeHtml(r.keyword)}</strong></td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.resource_url || '')}</td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.message_addon || '')}</td>
+                            <td>
+                                <button class="btn-small btn-secondary" onclick="editCtaResource(${r.id})">Editer</button>
+                                <button class="btn-small" style="color: var(--error);" onclick="deleteCtaResource(${r.id})">Suppr</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function addCtaResource() {
+    const keyword = prompt('Mot-cle CTA (ex: "sereine"):');
+    if (!keyword) return;
+    const url = prompt('URL de la ressource (ex: lien YouTube):') || '';
+    const addon = prompt('Message accompagnant la ressource:') || '';
+
+    try {
+        await fetch('/api/cta-resources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: currentAccountId, keyword, resource_url: url, message_addon: addon })
+        });
+        showToast('CTA resource ajoutee', 'success');
+        await loadCtaResources();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+async function editCtaResource(id) {
+    const resource = ctaResources.find(r => r.id === id);
+    if (!resource) return;
+
+    const keyword = prompt('Mot-cle:', resource.keyword);
+    if (!keyword) return;
+    const url = prompt('URL resource:', resource.resource_url || '');
+    const addon = prompt('Message addon:', resource.message_addon || '');
+
+    try {
+        await fetch(`/api/cta-resources/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keyword, resource_url: url, message_addon: addon })
+        });
+        showToast('CTA resource modifiee', 'success');
+        await loadCtaResources();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+async function deleteCtaResource(id) {
+    if (!confirm('Supprimer cette CTA resource ?')) return;
+    try {
+        await fetch(`/api/cta-resources/${id}`, { method: 'DELETE' });
+        showToast('CTA resource supprimee', 'success');
+        await loadCtaResources();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+// ============================================
+// PROSPECTOR SOURCES
+// ============================================
+
+let prospectorSources = [];
+
+async function loadProspectorSources() {
+    if (!currentAccountId) return;
+    try {
+        const res = await fetch(`/api/prospector-sources?account_id=${currentAccountId}`);
+        prospectorSources = await res.json();
+        renderSourcesList();
+    } catch (e) {
+        console.error('Error loading prospector sources:', e);
+    }
+}
+
+function renderSourcesList() {
+    const container = document.getElementById('sourcesContainer');
+
+    if (prospectorSources.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <h3>Aucune source</h3>
+                <p>Ajoutez des hashtags (#dependanceaffective) ou des profils (@username) a scraper.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const tags = prospectorSources.map(s => `
+        <span class="source-tag" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 20px; margin: 4px;">
+            <span>${escapeHtml(s.source_value)}</span>
+            <button onclick="deleteProspectorSource(${s.id})" style="background: none; border: none; color: var(--error); cursor: pointer; font-size: 14px; padding: 0;">✕</button>
+        </span>
+    `).join('');
+
+    container.innerHTML = `
+        <div style="padding: 20px;">
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">${prospectorSources.length} source(s) configuree(s). Prefixez avec # pour un hashtag ou @ pour un profil.</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">${tags}</div>
+        </div>
+    `;
+}
+
+async function addProspectorSource() {
+    const value = prompt('Source (ex: #dependanceaffective ou @username):');
+    if (!value) return;
+
+    try {
+        await fetch('/api/prospector-sources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: currentAccountId, source_value: value })
+        });
+        showToast('Source ajoutee', 'success');
+        await loadProspectorSources();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+async function deleteProspectorSource(id) {
+    try {
+        await fetch(`/api/prospector-sources/${id}`, { method: 'DELETE' });
+        showToast('Source supprimee', 'success');
+        await loadProspectorSources();
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
 }
 
 // ============================================

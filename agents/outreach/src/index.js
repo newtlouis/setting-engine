@@ -16,6 +16,7 @@ import { getBrowserDataDir } from '../../../shared/paths.js';
 import { generateFirstMessage, validateMessage } from './templates.js';
 import { initBrowser, batchSendDMs, closeBrowser, waitForUserToFinish, getOpenMessageTabs } from './dm_sender.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
 import { getContainer } from '../../../shared/container.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -289,6 +290,12 @@ export async function runOutreach(options = {}) {
             if (profileConfig && profileConfig.niche) {
                 console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
             }
+        }
+
+        // Enrich profileConfig with DB-sourced qualification prompt
+        const outreachConfig = loadOutreachConfig(accountId, profileConfig);
+        if (outreachConfig.qualificationPrompt && profileConfig) {
+            profileConfig.qualification_prompt = outreachConfig.qualificationPrompt;
         }
 
         /* STEP 1: Get Candidates */

@@ -987,7 +987,7 @@ app.patch('/api/personas/:accountId', async (req, res) => {
             return res.status(404).json({ error: 'Persona not found' });
         }
 
-        const allowedFields = ['persona_name', 'niche', 'communication_rules', 'objections_script', 'knowledge_base', 'post_booking_message'];
+        const allowedFields = ['persona_name', 'niche', 'communication_rules', 'objections_script', 'knowledge_base', 'post_booking_message', 'qualification_prompt'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
 
         if (fields.length === 0) {
@@ -1609,24 +1609,191 @@ app.post('/api/knowledge-base/generate-embeddings', async (req, res) => {
     }
 });
 
-// GET /api/outreach-templates - Get outreach templates for scenario testing
+// ============================================
+// OUTREACH CONFIG API (templates, CTA, sources)
+// ============================================
+
+// GET /api/outreach-templates/:accountId - Get outreach templates from DB (fallback to config)
+app.get('/api/outreach-templates/:accountId', async (req, res) => {
+    try {
+        const accountId = parseInt(req.params.accountId);
+        const templates = db.prepare(
+            'SELECT * FROM outreach_templates WHERE account_id = ? ORDER BY template_type'
+        ).all(accountId);
+        res.json(templates);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Legacy route for scenario testing (kept for backward compat)
 app.get('/api/outreach-templates', async (req, res) => {
     try {
-        const { profile } = req.query;
+        const { profile, account_id } = req.query;
+        if (account_id) {
+            const templates = db.prepare(
+                'SELECT * FROM outreach_templates WHERE account_id = ?'
+            ).all(parseInt(account_id));
+            const map = {};
+            templates.forEach(t => { map[t.template_type] = t.template_text; });
+            return res.json({ follower: map.follower || '', like: map.like || '', comment: map.comment || '' });
+        }
         const profileName = profile || 'melanie';
         const profileConfig = await loadProfileConfig(profileName);
-        
         if (!profileConfig || !profileConfig.outreach) {
             return res.status(404).json({ error: 'Profile config not found' });
         }
-        
         res.json({
             follower: profileConfig.outreach.follower_template || '',
             like: profileConfig.outreach.like_outreach_template || '',
             comment: profileConfig.outreach.comment_outreach_template || ''
         });
     } catch (err) {
-        console.error('Template error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/outreach-templates - Create or update outreach template (upsert)
+app.post('/api/outreach-templates', async (req, res) => {
+    try {
+        const { account_id, template_type, template_text } = req.body;
+        if (!account_id || !template_type || !template_text) {
+            return res.status(400).json({ error: 'account_id, template_type, and template_text are required' });
+        }
+        db.prepare(`
+            INSERT INTO outreach_templates (account_id, template_type, template_text)
+            VALUES (?, ?, ?)
+            ON CONFLICT(account_id, template_type) DO UPDATE SET template_text = ?, updated_at = datetime('now')
+        `).run(parseInt(account_id), template_type, template_text, template_text);
+
+        const template = db.prepare(
+            'SELECT * FROM outreach_templates WHERE account_id = ? AND template_type = ?'
+        ).get(parseInt(account_id), template_type);
+        res.json(template);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/outreach-templates/:id
+app.delete('/api/outreach-templates/:id', async (req, res) => {
+    try {
+        db.prepare('DELETE FROM outreach_templates WHERE id = ?').run(parseInt(req.params.id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- CTA Resources ---
+
+// GET /api/cta-resources?account_id=X
+app.get('/api/cta-resources', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+        if (!account_id) return res.status(400).json({ error: 'account_id required' });
+        const resources = db.prepare(
+            'SELECT * FROM cta_resources WHERE account_id = ? ORDER BY keyword'
+        ).all(parseInt(account_id));
+        res.json(resources);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/cta-resources
+app.post('/api/cta-resources', async (req, res) => {
+    try {
+        const { account_id, keyword, resource_url, message_addon, outreach_template } = req.body;
+        if (!account_id || !keyword) {
+            return res.status(400).json({ error: 'account_id and keyword are required' });
+        }
+        const result = db.prepare(`
+            INSERT INTO cta_resources (account_id, keyword, resource_url, message_addon, outreach_template)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(parseInt(account_id), keyword, resource_url || null, message_addon || null, outreach_template || null);
+        const created = db.prepare('SELECT * FROM cta_resources WHERE id = ?').get(result.lastInsertRowid);
+        res.json(created);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/cta-resources/:id
+app.patch('/api/cta-resources/:id', async (req, res) => {
+    try {
+        const allowedFields = ['keyword', 'resource_url', 'message_addon', 'outreach_template', 'is_active'];
+        const fields = Object.keys(req.body).filter(k => allowedFields.includes(k));
+        if (fields.length === 0) return res.status(400).json({ error: 'No valid fields' });
+
+        const setClause = fields.map(f => `${f} = ?`).join(', ');
+        const values = fields.map(f => req.body[f]);
+        db.prepare(`UPDATE cta_resources SET ${setClause}, updated_at = datetime('now') WHERE id = ?`)
+            .run(...values, parseInt(req.params.id));
+
+        const updated = db.prepare('SELECT * FROM cta_resources WHERE id = ?').get(parseInt(req.params.id));
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/cta-resources/:id
+app.delete('/api/cta-resources/:id', async (req, res) => {
+    try {
+        db.prepare('DELETE FROM cta_resources WHERE id = ?').run(parseInt(req.params.id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- Prospector Sources ---
+
+// GET /api/prospector-sources?account_id=X
+app.get('/api/prospector-sources', async (req, res) => {
+    try {
+        const { account_id } = req.query;
+        if (!account_id) return res.status(400).json({ error: 'account_id required' });
+        const sources = db.prepare(
+            'SELECT * FROM prospector_sources WHERE account_id = ? ORDER BY source_order'
+        ).all(parseInt(account_id));
+        res.json(sources);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/prospector-sources
+app.post('/api/prospector-sources', async (req, res) => {
+    try {
+        const { account_id, source_value } = req.body;
+        if (!account_id || !source_value) {
+            return res.status(400).json({ error: 'account_id and source_value are required' });
+        }
+        // Get next order
+        const maxOrder = db.prepare(
+            'SELECT MAX(source_order) as max_order FROM prospector_sources WHERE account_id = ?'
+        ).get(parseInt(account_id));
+        const nextOrder = (maxOrder?.max_order ?? -1) + 1;
+
+        const result = db.prepare(`
+            INSERT INTO prospector_sources (account_id, source_value, source_order)
+            VALUES (?, ?, ?)
+        `).run(parseInt(account_id), source_value, nextOrder);
+        const created = db.prepare('SELECT * FROM prospector_sources WHERE id = ?').get(result.lastInsertRowid);
+        res.json(created);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/prospector-sources/:id
+app.delete('/api/prospector-sources/:id', async (req, res) => {
+    try {
+        db.prepare('DELETE FROM prospector_sources WHERE id = ?').run(parseInt(req.params.id));
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
