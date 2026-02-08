@@ -21,6 +21,7 @@ export {
 // Interactions
 export {
   delay,
+  typeFast,
   typeHumanLike,
   typeIntoSelector,
   gotoWithRetry

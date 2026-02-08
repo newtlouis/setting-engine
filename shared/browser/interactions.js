@@ -21,6 +21,31 @@ export async function delay(ms, max = null) {
 }
 
 /**
+ * Paste text instantly into an input field (fast mode)
+ * Uses clipboard to paste instead of typing character by character
+ *
+ * @param {Page} page - Playwright page object
+ * @param {string} text - Text to paste
+ */
+export async function typeFast(page, text) {
+  // Use evaluate to set value directly via DOM + dispatch events
+  await page.evaluate((txt) => {
+    const input = document.activeElement;
+    if (input && (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT' || input.isContentEditable || input.getAttribute('contenteditable') === 'true')) {
+      // For contenteditable elements (Instagram uses these)
+      if (input.isContentEditable || input.getAttribute('contenteditable') === 'true') {
+        input.textContent = txt;
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, data: txt }));
+      } else {
+        input.value = txt;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  }, text);
+  await delay(100, 200);
+}
+
+/**
  * Type text into an input field in a human-like manner
  * Unified implementation from dm_sender.js (best version with emoji support)
  *

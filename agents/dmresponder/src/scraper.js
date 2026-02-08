@@ -12,7 +12,7 @@ import dotenv from 'dotenv';
 import { createInterface } from 'readline';
 import { applyStealthToPage } from '../../../shared/stealth.js';
 import { verifyProfilePage, checkForChallenge } from '../../../shared/pageVerification.js';
-import { BrowserService, delay, typeHumanLike, gotoWithRetry } from '../../../shared/browser/index.js';
+import { BrowserService, delay, typeFast, typeHumanLike, gotoWithRetry } from '../../../shared/browser/index.js';
 import { CONTACT_BUTTON, MESSAGE_INPUT } from '../../../shared/config/selectors.js';
 
 dotenv.config();
@@ -228,24 +228,32 @@ async function findMessageInput(page) {
 
 /**
  * Type message without sending
+ * @param {Page} page - Playwright page
+ * @param {string} message - Message to type
+ * @param {Object} options - Options
+ * @param {boolean} options.fast - If true, paste instantly instead of typing letter by letter
  */
-async function typeMessageOnly(page, message) {
+async function typeMessageOnly(page, message, options = {}) {
   try {
     const input = await findMessageInput(page);
-    
+
     if (!input) {
       return { success: false, error: 'message_input_not_found' };
     }
-    
+
     await input.click();
     await delay(300, 500);
-    
-    await typeHumanLike(page, message);
-    
+
+    if (options.fast) {
+      await typeFast(page, message);
+    } else {
+      await typeHumanLike(page, message);
+    }
+
     await delay(300, 500);
-    
+
     return { success: true };
-    
+
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -525,19 +533,21 @@ export async function openDMAndScrape(lead) {
 
 /**
  * Type a message in an already-open DM tab
- * 
+ *
  * @param {Page} tab - Playwright page with DM open
  * @param {string} message - Message to type
+ * @param {Object} options - Options
+ * @param {boolean} options.fast - If true, paste instantly instead of typing letter by letter
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function typeInOpenTab(tab, message) {
-  console.log(`      Typing message...`);
-  const typeResult = await typeMessageOnly(tab, message);
-  
+export async function typeInOpenTab(tab, message, options = {}) {
+  console.log(`      Typing message${options.fast ? ' (fast mode)' : ''}...`);
+  const typeResult = await typeMessageOnly(tab, message, options);
+
   if (typeResult.success) {
     console.log(`      ✅ Message typed! Waiting for manual send.`);
   }
-  
+
   return typeResult;
 }
 

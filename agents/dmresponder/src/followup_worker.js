@@ -62,12 +62,13 @@ async function getStaleThreads(db, accountId, hours = 24) {
 }
 
 export async function runFollowupWatcher(options = {}) {
-    const { hours = 24, limit = 10, profile, dryRun = false } = options;
+    const { hours = 24, limit = 10, profile, dryRun = false, fast = true } = options;
 
     if (!profile) throw new Error('Profile is required');
 
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
     console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
+    console.log(`   Typing mode: ${fast ? 'FAST (paste)' : 'slow (human-like)'}`);
 
     // Initialize via container
     const container = await getContainer();
@@ -232,7 +233,7 @@ export async function runFollowupWatcher(options = {}) {
             console.log(`   Message: "${message}"\n`);
 
             // 7. Type & Register
-            await typeInOpenTab(openTab, message);
+            await typeInOpenTab(openTab, message, { fast });
             registerOpenTab(thread.username, openTab, message);
 
             // 8. Update DB

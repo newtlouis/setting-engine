@@ -65,7 +65,7 @@ const COMMAND_REGISTRY = {
         { name: 'open:session', description: 'Ouvrir Instagram (session Chrome)', options: ['--profile'] },
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
-        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
+        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser', '--slow'] },
         { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
     ],
     Collection: [
@@ -87,7 +87,7 @@ const COMMAND_REGISTRY = {
         { name: 'reply:auto', description: 'Cycle auto de reponses', options: ['--profile'] },
         { name: 'reply:conversation', description: 'Repondre leads conversation', options: ['--profile'] },
         { name: 'reply:outreach', description: 'Repondre leads outreach', options: ['--profile'] },
-        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser'] },
+        { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser', '--slow'] },
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--all'] },
         { name: 'respond:followers', description: 'Surveiller followers', options: ['--profile', '--show-browser'] },
         { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile', '--show-browser'] },
