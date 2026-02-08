@@ -31,6 +31,58 @@ async function getCurrentUserUri(token) {
 }
 
 /**
+ * Get end of current week (Sunday 23:59:59)
+ */
+function getEndOfWeek(date) {
+    const end = new Date(date);
+    const day = end.getDay();
+    const daysUntilSunday = day === 0 ? 0 : 7 - day;
+    end.setDate(end.getDate() + daysUntilSunday);
+    end.setHours(23, 59, 59, 999);
+    return end;
+}
+
+/**
+ * Pick primary (2 slots from first 2 days) and backup (3 more) from a list of slots
+ */
+function pickPrimaryAndBackup(slots) {
+    if (slots.length === 0) return { primary: [], backup: [] };
+
+    // Group by day
+    const slotsByDay = {};
+    slots.forEach(slot => {
+        const dateStr = slot.start_time.split('T')[0];
+        if (!slotsByDay[dateStr]) slotsByDay[dateStr] = [];
+        slotsByDay[dateStr].push(slot);
+    });
+
+    const sortedDays = Object.keys(slotsByDay).sort();
+
+    // Primary: latest slot from each of the first 2 days
+    const primary = [];
+    for (let i = 0; i < Math.min(2, sortedDays.length); i++) {
+        const day = sortedDays[i];
+        const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
+        primary.push(sortedTimes[0]);
+    }
+
+    // Backup: up to 3 more slots
+    const backup = [];
+    const usedIds = new Set(primary.map(s => s.start_time));
+    for (const day of sortedDays) {
+        const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
+        for (const slot of sortedTimes) {
+            if (!usedIds.has(slot.start_time) && backup.length < 3) {
+                backup.push(slot);
+                usedIds.add(slot.start_time);
+            }
+        }
+    }
+
+    return { primary, backup };
+}
+
+/**
  * Fetch upcoming available slots for a profile
  * 
  * @param {string} profileName 
@@ -61,67 +113,39 @@ export async function fetchAvailability(profileName) {
             if (firstEvent) eventTypeUri = firstEvent.uri;
         }
 
-        if (!eventTypeUri) return [];
+        if (!eventTypeUri) return { thisWeek: { primary: [], backup: [] }, nextWeek: { primary: [], backup: [] } };
 
-        // Step 2: Fetch available slots
+        // Step 2: Fetch available slots (2 separate calls, API limits to 7 days each)
         const now = new Date();
-        const startTime = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
-        const endTime = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+        const endOfThisWeek = getEndOfWeek(now);
+
+        // Call 1: This week
+        const thisWeekStart = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+        const thisWeekEnd = endOfThisWeek.toISOString();
+
+        // Call 2: Next week
+        const nextWeekStart = new Date(endOfThisWeek.getTime() + 1000).toISOString();
+        const nextWeekEnd = new Date(endOfThisWeek.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
         console.log(`[Calendly] Fetching slots for event URI: ${eventTypeUri}`);
 
-        const slotsResponse = await axios.get(`${CALENDLY_BASE_URL}/event_type_available_times`, {
-            params: {
-                event_type: eventTypeUri, // Error said 'event_type' is missing, so let's use that key with full URI
-                start_time: startTime,
-                end_time: endTime
-            },
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const fetchSlots = async (start, end) => {
+            const resp = await axios.get(`${CALENDLY_BASE_URL}/event_type_available_times`, {
+                params: { event_type: eventTypeUri, start_time: start, end_time: end },
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return (resp.data.collection || []).map(s => ({ start_time: s.start_time, status: 'available' }));
+        };
 
-        // The response contains 'collection' of available times
-        const allSlots = (slotsResponse.data.collection || []).map(slot => ({
-            start_time: slot.start_time,
-            status: "available"
-        }));
+        const [thisWeekSlots, nextWeekSlots] = await Promise.all([
+            fetchSlots(thisWeekStart, thisWeekEnd),
+            fetchSlots(nextWeekStart, nextWeekEnd)
+        ]);
 
-        if (allSlots.length === 0) return { primary: [], backup: [] };
-
-        // --- Logic: Group by Day and Sort by latest time ---
-        const slotsByDay = {}; // { '2026-02-04': [slot1, slot2], ... }
-        
-        allSlots.forEach(slot => {
-            const dateStr = slot.start_time.split('T')[0];
-            if (!slotsByDay[dateStr]) slotsByDay[dateStr] = [];
-            slotsByDay[dateStr].push(slot);
-        });
-
-        const sortedDays = Object.keys(slotsByDay).sort(); // Sorted by date asc
-        
-        // Pick primary: One latest slot from each of the first 2 days
-        const primary = [];
-        for (let i = 0; i < Math.min(2, sortedDays.length); i++) {
-            const day = sortedDays[i];
-            const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time)); // Latest first
-            primary.push(sortedTimes[0]);
-        }
-
-        // Pick backup: Up to 3 more slots from remaining availability
-        const backup = [];
-        const usedIds = new Set(primary.map(s => s.start_time));
-        
-        // Loop through days again to fill backup
-        for (const day of sortedDays) {
-            const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
-            for (const slot of sortedTimes) {
-                if (!usedIds.has(slot.start_time) && backup.length < 3) {
-                    backup.push(slot);
-                    usedIds.add(slot.start_time);
-                }
-            }
-        }
-
-        return { primary, backup };
+        return {
+            thisWeek: pickPrimaryAndBackup(thisWeekSlots),
+            nextWeek: pickPrimaryAndBackup(nextWeekSlots)
+        };
 
     } catch (error) {
         console.error(`[Calendly] Error fetching availability for ${profileName}:`, error.response?.data || error.message);

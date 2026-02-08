@@ -219,26 +219,40 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       try {
           const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
           const profileName = profileConfig?.profile_name || 'default';
-          const { primary, backup } = await fetchAvailability(profileName);
-          
-          if (primary && primary.length > 0) {
-              const formatSlot = (s) => {
-                  const d = new Date(s.start_time);
-                  return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-              };
+          const availability = await fetchAvailability(profileName);
 
-              const primaryText = primary.map(formatSlot).join(', ');
-              const backupText = backup.map(formatSlot).join(', ');
-              
+          const formatSlot = (s) => {
+              const d = new Date(s.start_time);
+              return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+          };
+
+          const hasThisWeek = availability.thisWeek?.primary?.length > 0;
+          const hasNextWeek = availability.nextWeek?.primary?.length > 0;
+
+          if (hasThisWeek || hasNextWeek) {
               contextDescription += `\n\nDISPONIBILITÉS CALENDLY RÉELLES :\n`;
-              contextDescription += `- PROPOSITION PRIMAIRE (À proposer d'abord) : ${primaryText}\n`;
-              if (backupText) {
-                  contextDescription += `- PROPOSITION DE SECOURS (Si elle refuse les premiers) : ${backupText}\n`;
+
+              if (hasThisWeek) {
+                  contextDescription += `\nCETTE SEMAINE :\n`;
+                  contextDescription += `- PROPOSITION PRIMAIRE : ${availability.thisWeek.primary.map(formatSlot).join(', ')}\n`;
+                  if (availability.thisWeek.backup.length > 0) {
+                      contextDescription += `- PROPOSITION DE SECOURS : ${availability.thisWeek.backup.map(formatSlot).join(', ')}\n`;
+                  }
               }
-              contextDescription += `\nINSTRUCTIONS DE TRANSITION :\n`;
-              contextDescription += `- Si le lead a accepté le principe de l'appel mais n'a pas encore choisi de créneau -> Tu es à [STEP_6]. Propose les créneaux PRIMAIRES.\n`;
-              contextDescription += `- Si le lead a validé un créneau mais n'a pas encore donné son EMAIL/TÉLÉPHONE -> Tu es à [STEP_7]. Demande ses coordonnées.\n`;
-              contextDescription += `- Si le lead a donné ses coordonnées -> Le rdv va être booké. Ton message doit être la confirmation chaleureuse [STEP_8].\n`;
+
+              if (hasNextWeek) {
+                  contextDescription += `\nSEMAINE PROCHAINE :\n`;
+                  contextDescription += `- PROPOSITION PRIMAIRE : ${availability.nextWeek.primary.map(formatSlot).join(', ')}\n`;
+                  if (availability.nextWeek.backup.length > 0) {
+                      contextDescription += `- PROPOSITION DE SECOURS : ${availability.nextWeek.backup.map(formatSlot).join(', ')}\n`;
+                  }
+              }
+
+              contextDescription += `\nINSTRUCTIONS :\n`;
+              contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
+              contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
+              contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> [STEP_8]. Confirmation chaleureuse.\n`;
           }
       } catch (e) {
           console.error("[Engine] Failed to fetch Calendly availability:", e.message);
