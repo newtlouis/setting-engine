@@ -55,8 +55,9 @@ export async function fetchAvailability(profileName) {
                 params: { user: userUri, active: true },
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            // Pick the first active event type as default
-            const firstEvent = response.data.collection[0];
+            // Prioritize R1 (Diagnostic) call, same logic as createBooking
+            const r1 = response.data.collection.find(et => et.slug.includes('r1') || et.slug.includes('diagnostic'));
+            const firstEvent = r1 || response.data.collection[0];
             if (firstEvent) eventTypeUri = firstEvent.uri;
         }
 
