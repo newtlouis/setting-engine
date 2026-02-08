@@ -99,7 +99,7 @@ export async function runProspector(options = {}) {
   // Load profile config for qualification and messaging
   const profileConfig = await loadProfileConfig(profile);
   const outreachConfig = loadOutreachConfig(accountId, profileConfig);
-  console.log(`🧠 Loaded profile config: ${profileConfig?.niche || 'default'}`);
+  console.log(`🧠 Niche: ${outreachConfig.niche || 'default'}`);
   console.log(`📦 Prepare Only: ${prepareOnly}`);
 
   if (source) {
@@ -327,7 +327,7 @@ export async function runProspector(options = {}) {
                 };
                 
                 const messageResult = generateFirstMessage(leadForTemplate, [comment], {
-                  niche: profileConfig?.niche || 'personal development',
+                  niche: outreachConfig.niche || 'personal development',
                   isSimple: true,
                   profileConfig,
                   forceFirstName: nameToUse

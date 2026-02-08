@@ -25,9 +25,9 @@ export function loadOutreachConfig(accountId, profileConfig) {
     const templateMap = {};
     for (const t of dbTemplates) templateMap[t.template_type] = t.template_text;
 
-    // 2. Qualification prompt from account_personas
+    // 2. Persona data from account_personas
     const persona = db.prepare(
-        'SELECT qualification_prompt FROM account_personas WHERE account_id = ?'
+        'SELECT qualification_prompt, niche, post_booking_message FROM account_personas WHERE account_id = ?'
     ).get(accountId);
 
     // 3. CTA resources
@@ -55,6 +55,8 @@ export function loadOutreachConfig(accountId, profileConfig) {
         likeTemplate: templateMap.like || profileConfig?.outreach?.like_outreach_template || null,
         commentTemplate: templateMap.comment || profileConfig?.outreach?.comment_outreach_template || null,
         qualificationPrompt: persona?.qualification_prompt || profileConfig?.outreach?.qualification_prompt || null,
+        niche: persona?.niche || profileConfig?.niche || null,
+        postBookingMessage: persona?.post_booking_message || profileConfig?.post_booking_message || null,
         ctaResources: dbCta.length > 0 ? ctaFromDb : (profileConfig?.outreach?.cta_resources || {}),
         prospectorSources: dbSources.length > 0
             ? dbSources.map(s => s.source_value)

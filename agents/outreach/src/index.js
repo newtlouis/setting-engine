@@ -287,14 +287,14 @@ export async function runOutreach(options = {}) {
         let profileConfig = {};
         if (profile) {
             profileConfig = await loadProfileConfig(profile) || {};
-            if (profileConfig.niche) {
-                console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
-            }
         }
 
-        // Enrich profileConfig with DB-sourced qualification prompt
+        // Load outreach config from DB (with config file fallback)
         const outreachConfig = loadOutreachConfig(accountId, profileConfig);
-        if (outreachConfig.qualificationPrompt && profileConfig) {
+        if (outreachConfig.niche) {
+            console.log(`🧠 Using Niche strategy: ${outreachConfig.niche}`);
+        }
+        if (outreachConfig.qualificationPrompt) {
             profileConfig.qualification_prompt = outreachConfig.qualificationPrompt;
         }
 

@@ -24,6 +24,7 @@ import {
   getOrCreateAccount
 } from './db_integration.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
+import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
 import { runInboxScanner } from './inbox_scanner.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -152,8 +153,9 @@ export async function runCronWatcher(options = {}) {
     
     // Load Profile Config
     const profileConfig = await loadProfileConfig(profile);
-    if (profileConfig && profileConfig.niche) {
-        console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
+    const outreachConfig = loadOutreachConfig(accountId, profileConfig);
+    if (outreachConfig.niche) {
+        console.log(`🧠 Using Niche strategy: ${outreachConfig.niche}`);
     }
 
     // Step 2: Process each thread
