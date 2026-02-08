@@ -214,11 +214,11 @@ Pas de vente, pas de piège 🌸 juste un moment pour toi. Tu serais dispo ces p
 
     6: `[STEP_6] – PROPOSITION DES CRÉNEAUX
 Objectif : Obtenir un créneau précis.
-
-"Génial 🌸 Pour cette semaine, je peux te proposer :
-- [Créneau 1]
-- [Créneau 2]
-Qu'est-ce qui t'arrangerait le mieux ? 🌷"
+Instructions :
+1. Utilise UNIQUEMENT les créneaux listés dans la section "DISPONIBILITÉS CALENDLY RÉELLES" du contexte. N'invente JAMAIS de créneaux.
+2. Propose d'abord les deux créneaux "PROPOSITION PRIMAIRE".
+3. Si la personne refuse, propose les créneaux "PROPOSITION DE SECOURS".
+4. Une fois qu'elle a validé un créneau précis, passe immédiatement à l'étape 7.
 
 **RÈGLE :** Si elle donne juste un jour sans heure, demande TOUJOURS "Vers quelle heure ?"`,
 
