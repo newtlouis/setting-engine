@@ -168,7 +168,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   let systemPrompt = SYSTEM_PROMPT;
 
   // Try to get prompt from database first (if accountId is available)
-  const accountId = leadContext?.account_id || profileConfig?.account_id;
+  const accountId = leadContext?.account_id || profileConfig?.account_id || null;
   if (accountId) {
     const dbPrompt = await getPromptFromDatabase(accountId);
     if (dbPrompt) {
@@ -218,7 +218,18 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   if (currentStep >= 5) {
       try {
           const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
-          const profileName = profileConfig?.profile_name || 'default';
+          // Get profile name from DB account or config fallback
+          let profileName = profileConfig?.profile_name || 'default';
+          if (profileName === 'default' && accountId) {
+              try {
+                  const { getDb } = await import('../../../agents/collector/src/db/core.js');
+                  const db = getDb();
+                  if (db) {
+                      const acc = db.prepare('SELECT name FROM accounts WHERE id = ?').get(accountId);
+                      if (acc) profileName = acc.name;
+                  }
+              } catch (e) {}
+          }
           const availability = await fetchAvailability(profileName);
 
           const formatSlot = (s) => {

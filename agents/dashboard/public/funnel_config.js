@@ -1086,68 +1086,82 @@ function renderCtaTable() {
         return;
     }
 
-    container.innerHTML = `
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Mot-cle</th>
-                        <th>URL Resource</th>
-                        <th>Message</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${ctaResources.map(r => `
-                        <tr>
-                            <td><strong>${escapeHtml(r.keyword)}</strong></td>
-                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.resource_url || '')}</td>
-                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.message_addon || '')}</td>
-                            <td>
-                                <button class="btn-small btn-secondary" onclick="editCtaResource(${r.id})">Editer</button>
-                                <button class="btn-small" style="color: var(--error);" onclick="deleteCtaResource(${r.id})">Suppr</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+    container.innerHTML = ctaResources.map(r => `
+        <div class="stage-card" id="cta-card-${r.id}">
+            <div class="stage-header" style="cursor: default;">
+                <div class="stage-title">
+                    <h3>${escapeHtml(r.keyword)}</h3>
+                    <span>${r.resource_url ? 'URL configuree' : 'Pas d\'URL'}</span>
+                </div>
+                <div class="stage-actions">
+                    <button class="btn-small btn-secondary" onclick="toggleCtaEdit(${r.id})">Editer</button>
+                    <button class="btn-small" style="color: var(--error);" onclick="deleteCtaResource(${r.id})">Suppr</button>
+                </div>
+            </div>
+            <div class="stage-body" id="cta-edit-${r.id}">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label>Mot-cle</label>
+                        <input type="text" id="cta-keyword-${r.id}" value="${escapeHtml(r.keyword)}" class="form-input" />
+                    </div>
+                    <div class="form-group">
+                        <label>URL Resource</label>
+                        <input type="text" id="cta-url-${r.id}" value="${escapeHtml(r.resource_url || '')}" class="form-input" placeholder="https://..." />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Message accompagnant la ressource</label>
+                    <textarea id="cta-addon-${r.id}" class="form-textarea" rows="4" placeholder="Ex: Tiens, je t'envoie cette video qui pourrait t'aider...">${escapeHtml(r.message_addon || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Template de premier message (outreach)</label>
+                    <textarea id="cta-template-${r.id}" class="form-textarea" rows="4" placeholder="Ex: Salut {{firstName}}, j'ai vu ton commentaire...">${escapeHtml(r.outreach_template || '')}</textarea>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="btn btn-primary" onclick="saveCtaResource(${r.id})">Sauvegarder</button>
+                    <button class="btn btn-secondary" onclick="toggleCtaEdit(${r.id})">Annuler</button>
+                </div>
+            </div>
         </div>
-    `;
+    `).join('');
 }
 
 async function addCtaResource() {
     const keyword = prompt('Mot-cle CTA (ex: "sereine"):');
     if (!keyword) return;
-    const url = prompt('URL de la ressource (ex: lien YouTube):') || '';
-    const addon = prompt('Message accompagnant la ressource:') || '';
 
     try {
         await fetch('/api/cta-resources', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: currentAccountId, keyword, resource_url: url, message_addon: addon })
+            body: JSON.stringify({ account_id: currentAccountId, keyword })
         });
-        showToast('CTA resource ajoutee', 'success');
+        showToast('CTA resource ajoutee — cliquez Editer pour completer', 'success');
         await loadCtaResources();
     } catch (e) {
         showToast('Erreur: ' + e.message, 'error');
     }
 }
 
-async function editCtaResource(id) {
-    const resource = ctaResources.find(r => r.id === id);
-    if (!resource) return;
+function toggleCtaEdit(id) {
+    const edit = document.getElementById(`cta-edit-${id}`);
+    edit.classList.toggle('expanded');
+}
 
-    const keyword = prompt('Mot-cle:', resource.keyword);
-    if (!keyword) return;
-    const url = prompt('URL resource:', resource.resource_url || '');
-    const addon = prompt('Message addon:', resource.message_addon || '');
+async function saveCtaResource(id) {
+    const keyword = document.getElementById(`cta-keyword-${id}`).value.trim();
+    if (!keyword) { showToast('Le mot-cle est requis', 'error'); return; }
 
     try {
         await fetch(`/api/cta-resources/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keyword, resource_url: url, message_addon: addon })
+            body: JSON.stringify({
+                keyword,
+                resource_url: document.getElementById(`cta-url-${id}`).value.trim(),
+                message_addon: document.getElementById(`cta-addon-${id}`).value.trim(),
+                outreach_template: document.getElementById(`cta-template-${id}`).value.trim()
+            })
         });
         showToast('CTA resource modifiee', 'success');
         await loadCtaResources();
@@ -1184,6 +1198,8 @@ async function loadProspectorSources() {
     }
 }
 
+let dragSrcIndex = null;
+
 function renderSourcesList() {
     const container = document.getElementById('sourcesContainer');
 
@@ -1198,19 +1214,102 @@ function renderSourcesList() {
         return;
     }
 
-    const tags = prospectorSources.map(s => `
-        <span class="source-tag" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 20px; margin: 4px;">
-            <span>${escapeHtml(s.source_value)}</span>
-            <button onclick="deleteProspectorSource(${s.id})" style="background: none; border: none; color: var(--error); cursor: pointer; font-size: 14px; padding: 0;">✕</button>
-        </span>
+    // Sort by source_order
+    prospectorSources.sort((a, b) => (a.source_order ?? 0) - (b.source_order ?? 0));
+
+    const rows = prospectorSources.map((s, i) => `
+        <div class="source-row" draggable="true" data-index="${i}" data-id="${s.id}"
+             style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; cursor: grab; transition: opacity 0.2s, border-color 0.2s;">
+            <span style="cursor: grab; color: var(--text-secondary); font-size: 16px; user-select: none;">⠿</span>
+            <span class="template-order">${i + 1}</span>
+            <span style="flex: 1; font-size: 14px;">${escapeHtml(s.source_value)}</span>
+            <button onclick="deleteProspectorSource(${s.id})" class="btn-small" style="color: var(--error);">Suppr</button>
+        </div>
     `).join('');
 
     container.innerHTML = `
         <div style="padding: 20px;">
-            <p style="color: var(--text-secondary); margin-bottom: 16px;">${prospectorSources.length} source(s) configuree(s). Prefixez avec # pour un hashtag ou @ pour un profil.</p>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">${tags}</div>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                ${prospectorSources.length} source(s) configuree(s). Glissez-deposez pour changer l'ordre de priorite.
+            </p>
+            <div id="sourcesDragList" style="display: flex; flex-direction: column; gap: 6px;">
+                ${rows}
+            </div>
         </div>
     `;
+
+    // Attach drag events
+    const list = document.getElementById('sourcesDragList');
+    list.querySelectorAll('.source-row').forEach(row => {
+        row.addEventListener('dragstart', onSourceDragStart);
+        row.addEventListener('dragover', onSourceDragOver);
+        row.addEventListener('dragenter', onSourceDragEnter);
+        row.addEventListener('dragleave', onSourceDragLeave);
+        row.addEventListener('drop', onSourceDrop);
+        row.addEventListener('dragend', onSourceDragEnd);
+    });
+}
+
+function onSourceDragStart(e) {
+    dragSrcIndex = parseInt(e.currentTarget.dataset.index);
+    e.currentTarget.style.opacity = '0.4';
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function onSourceDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function onSourceDragEnter(e) {
+    e.currentTarget.style.borderColor = 'var(--accent)';
+}
+
+function onSourceDragLeave(e) {
+    e.currentTarget.style.borderColor = 'var(--border)';
+}
+
+function onSourceDrop(e) {
+    e.preventDefault();
+    const targetIndex = parseInt(e.currentTarget.dataset.index);
+    e.currentTarget.style.borderColor = 'var(--border)';
+
+    if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
+
+    // Reorder array
+    const [moved] = prospectorSources.splice(dragSrcIndex, 1);
+    prospectorSources.splice(targetIndex, 0, moved);
+
+    // Update local source_order so re-render keeps the new order
+    prospectorSources.forEach((s, i) => s.source_order = i);
+
+    // Re-render immediately
+    renderSourcesList();
+
+    // Save new order to backend
+    saveSourcesOrder();
+}
+
+function onSourceDragEnd(e) {
+    e.currentTarget.style.opacity = '1';
+    dragSrcIndex = null;
+    // Reset all borders
+    document.querySelectorAll('.source-row').forEach(r => r.style.borderColor = 'var(--border)');
+}
+
+async function saveSourcesOrder() {
+    try {
+        const ordered_ids = prospectorSources.map(s => s.id);
+        const res = await fetch('/api/prospector-sources/reorder', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ordered_ids })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        showToast('Ordre sauvegarde', 'success');
+    } catch (e) {
+        showToast('Erreur sauvegarde ordre: ' + e.message, 'error');
+    }
 }
 
 async function addProspectorSource() {

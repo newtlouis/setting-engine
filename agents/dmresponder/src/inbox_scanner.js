@@ -317,8 +317,23 @@ export async function runInboxScanner(options = {}) {
     }
 
     const profileConfig = await loadProfileConfig(profile);
-    if (profileConfig?.niche) {
-      console.log(`   🧠 Using niche strategy: ${profileConfig.niche}`);
+
+    // Load persona data from DB (niche, post_booking_message)
+    let personaData = null;
+    try {
+      const { getDb } = await import('../../../agents/collector/src/db/core.js');
+      const db = getDb();
+      if (db) {
+        const acc = db.prepare('SELECT id FROM accounts WHERE name = ?').get(profile);
+        if (acc) {
+          personaData = db.prepare('SELECT niche, post_booking_message FROM account_personas WHERE account_id = ?').get(acc.id);
+        }
+      }
+    } catch (e) {}
+
+    const niche = personaData?.niche || profileConfig?.niche;
+    if (niche) {
+      console.log(`   🧠 Using niche strategy: ${niche}`);
     }
     
     await navigateToInbox(workingPage);
@@ -532,7 +547,7 @@ export async function runInboxScanner(options = {}) {
                           const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
                           const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
-                          const template = profileConfig.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}} !";
+                          const template = personaData?.post_booking_message || profileConfig?.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}} !";
                           finalMessage = template
                               .replace('{{day}}', day)
                               .replace('{{hour}}', hour);

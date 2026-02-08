@@ -65,6 +65,7 @@ export async function getLeadWithContext(username, accountId = null) {
     const context = {
       username: lead.username,
       profile_url: lead.profileUrl,
+      account_id: lead.accountId,
 
       // Profile data
       followers_count: 0,

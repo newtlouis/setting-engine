@@ -284,10 +284,10 @@ export async function runOutreach(options = {}) {
         const fetchLimit = remaining + Math.ceil(remaining * 0.5) + 2;
 
         /* LOAD PROFILE CONFIG */
-        let profileConfig = null;
+        let profileConfig = {};
         if (profile) {
-            profileConfig = await loadProfileConfig(profile);
-            if (profileConfig && profileConfig.niche) {
+            profileConfig = await loadProfileConfig(profile) || {};
+            if (profileConfig.niche) {
                 console.log(`🧠 Using Niche strategy: ${profileConfig.niche}`);
             }
         }

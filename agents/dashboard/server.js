@@ -1798,6 +1798,24 @@ app.delete('/api/prospector-sources/:id', async (req, res) => {
     }
 });
 
+// PUT /api/prospector-sources/reorder
+app.put('/api/prospector-sources/reorder', async (req, res) => {
+    try {
+        const { ordered_ids } = req.body;
+        if (!Array.isArray(ordered_ids)) return res.status(400).json({ error: 'ordered_ids array required' });
+
+        const stmt = db.prepare('UPDATE prospector_sources SET source_order = ?, updated_at = datetime(\'now\') WHERE id = ?');
+        const updateAll = db.transaction((ids) => {
+            ids.forEach((id, index) => stmt.run(index, id));
+        });
+        updateAll(ordered_ids);
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============================================
 // DM SYNC & FEEDBACK LOOP API
 // ============================================
