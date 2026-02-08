@@ -24,17 +24,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Finds threads that need a follow-up.
- * Criteria:
- * - Status is 'contacted', 'replied', or 'qualified' (active conversation)
- * - Last message was from 'assistant'
- * - Last message was sent > X hours ago
- * - Has a valid funnel_step for follow-up
+ * Finds threads that are candidates for follow-up.
+ * Returns all threads where the last message is from 'assistant' and at least 1h old.
+ * The per-stage followup_delay_hours is applied later in the filtering loop.
  */
-async function getStaleThreads(db, accountId, hours = 24) {
-    const cutoffDate = new Date(Date.now() - (hours * 60 * 60 * 1000)).toISOString();
+async function getStaleThreads(db, accountId) {
+    // Minimal 1h cutoff to exclude very recent messages (format matches SQLite datetime)
+    const minCutoff = new Date(Date.now() - (1 * 60 * 60 * 1000))
+        .toISOString().replace('T', ' ').slice(0, 19);
 
-    // Query finding leads where the most recent message is from 'assistant' and older than cutoff
     const sql = `
         WITH LastMessages AS (
             SELECT lead_id, role, sent_at,
@@ -58,16 +56,16 @@ async function getStaleThreads(db, accountId, hours = 24) {
         LIMIT 500
     `;
 
-    return db.prepare(sql).all(accountId, cutoffDate);
+    return db.prepare(sql).all(accountId, minCutoff);
 }
 
 export async function runFollowupWatcher(options = {}) {
-    const { hours = 24, limit = 10, profile, dryRun = false, fast = true } = options;
+    const { limit = 10, profile, dryRun = false, fast = true } = options;
 
     if (!profile) throw new Error('Profile is required');
 
     console.log(`🚀 Starting Follow-up Watcher for profile: ${profile}`);
-    console.log(`   Criteria: Last msg from Assistant > ${hours}h ago.`);
+    console.log(`   Delay: per-stage followup_delay_hours from dashboard config.`);
     console.log(`   Typing mode: ${fast ? 'FAST (paste)' : 'slow (human-like)'}`);
 
     // Initialize via container
@@ -91,8 +89,8 @@ export async function runFollowupWatcher(options = {}) {
         stagesByOrder[stage.stageOrder] = stage;
     }
 
-    // 1. Find Stale Threads
-    const threads = await getStaleThreads(db, accountId, hours);
+    // 1. Find candidate threads (minimal 1h filter, per-stage delay applied below)
+    const threads = await getStaleThreads(db, accountId);
 
     if (threads.length === 0) {
         console.log('✅ No stale threads found needing follow-up.');
@@ -116,6 +114,16 @@ export async function runFollowupWatcher(options = {}) {
         const stage = stagesByOrder[funnelStep];
         if (!stage) {
             console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): No stage configured.`);
+            continue;
+        }
+
+        // Check per-stage followup delay (from dashboard config)
+        const delayHours = stage.followupDelayHours || 24;
+        const delayCutoff = new Date(Date.now() - (delayHours * 60 * 60 * 1000))
+            .toISOString().replace('T', ' ').slice(0, 19);
+        if (t.last_msg_at > delayCutoff) {
+            const hoursAgo = ((Date.now() - new Date(t.last_msg_at + 'Z').getTime()) / (1000 * 60 * 60)).toFixed(1);
+            console.log(`   Skipping @${t.username} (Funnel step ${funnelStep}): Last msg ${hoursAgo}h ago, stage requires ${delayHours}h.`);
             continue;
         }
 
