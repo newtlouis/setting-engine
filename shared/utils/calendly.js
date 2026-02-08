@@ -10,6 +10,22 @@ import { normalizeProfileName } from '../credentials.js';
 const CALENDLY_BASE_URL = 'https://api.calendly.com';
 
 /**
+ * Normalize phone to international format (E.164).
+ * Converts French local numbers (06/07) to +336/+337.
+ */
+function normalizePhone(phone) {
+    if (!phone) return null;
+    let cleaned = phone.replace(/[\s.\-()]/g, '');
+    if (cleaned.startsWith('0') && cleaned.length === 10) {
+        cleaned = '+33' + cleaned.slice(1);
+    }
+    if (!cleaned.startsWith('+')) {
+        cleaned = '+' + cleaned;
+    }
+    return cleaned;
+}
+
+/**
  * Gets Calendly configuration for a specific profile.
  */
 function getCalendlyConfig(profileName) {
@@ -193,7 +209,7 @@ export async function createBooking(profileName, { startTime, email, name, phone
             invitee: {
                 email: email,
                 name: name,
-                text_reminder_number: phone || null,
+                text_reminder_number: normalizePhone(phone) || null,
                 timezone: "Europe/Paris"
             }
         };
