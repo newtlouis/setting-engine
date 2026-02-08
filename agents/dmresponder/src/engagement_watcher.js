@@ -349,8 +349,9 @@ export async function runEngagementWatcher(options = {}) {
                 let finalMessage = "";
                 
                 if (aiFirstName) {
-                    // NEW PATTERN: Just "[Name] ?"
-                    finalMessage = `${aiFirstName} ?`;
+                    // NEW PATTERN: Just "[Name] ?" (Pascal case)
+                    const normalizedName = aiFirstName.charAt(0).toUpperCase() + aiFirstName.slice(1).toLowerCase();
+                    finalMessage = `${normalizedName} ?`;
                 } else {
                     // Handle {{firstName}} placeholder
                     if (!messageTemplate || messageTemplate.length < 10) {

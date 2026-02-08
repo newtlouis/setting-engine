@@ -25,6 +25,16 @@ import {
 } from '../value-objects/Username.js';
 
 /**
+ * Normalize a first name to Pascal case (first letter uppercase, rest lowercase).
+ * @param {string|null} name
+ * @returns {string|null}
+ */
+function toPascalCaseName(name) {
+  if (!name || typeof name !== 'string') return name;
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+/**
  * Lead Entity Class
  */
 export class Lead {
@@ -36,7 +46,7 @@ export class Lead {
 
     // Profile
     this.fullName = data.full_name || data.fullName || null;
-    this.firstName = data.first_name || data.firstName || this._extractFirstName();
+    this.firstName = toPascalCaseName(data.first_name || data.firstName || this._extractFirstName());
     this.bio = data.bio || null;
     this.email = data.email || null;
     this.profileUrl = data.profile_url || data.profileUrl || buildProfileUrl(this.username);

@@ -266,8 +266,9 @@ export async function runFollowerWatcher(options = {}) {
             
             let finalMessage = "";
             if (aiFirstName) {
-                // NEW PATTERN: Just "[Name] ?"
-                finalMessage = `${aiFirstName} ?`;
+                // NEW PATTERN: Just "[Name] ?" (Pascal case)
+                const normalizedName = aiFirstName.charAt(0).toUpperCase() + aiFirstName.slice(1).toLowerCase();
+                finalMessage = `${normalizedName} ?`;
             } else {
                 if (!messageTemplate || messageTemplate.length < 5) {
                     messageTemplate = "Hello ! Merci pour ton follow, bienvenue ici 🌸";
