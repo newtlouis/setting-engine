@@ -253,9 +253,12 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
               contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
               contextDescription += `- Si le lead a donné ses coordonnées -> [STEP_8]. Confirmation chaleureuse.\n`;
+          } else {
+              contextDescription += `\n\n⚠️ AUCUN CRÉNEAU CALENDLY DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
           }
       } catch (e) {
           console.error("[Engine] Failed to fetch Calendly availability:", e.message);
+          contextDescription += `\n\n⚠️ AUCUN CRÉNEAU CALENDLY DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
       }
   }
 
