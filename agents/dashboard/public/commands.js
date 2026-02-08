@@ -85,8 +85,9 @@ function renderCommands(registry) {
     let html = '';
 
     for (const [category, commands] of Object.entries(registry)) {
+        const isFav = category.toLowerCase() === 'favoris';
         html += `<div class="cmd-category">`;
-        html += `<div class="cmd-category-title">${escapeHtml(category)}</div>`;
+        html += `<div class="cmd-category-title">${isFav ? '⭐ ' : ''}${escapeHtml(category)}</div>`;
 
         for (const cmd of commands) {
             // Hide --profile from displayed options (injected automatically)
@@ -103,7 +104,7 @@ function renderCommands(registry) {
                 : '';
 
             html += `
-                <div class="cmd-card">
+                <div class="cmd-card${isFav ? ' cmd-fav' : ''}">
                     <div class="cmd-card-header">
                         <span class="cmd-name">${escapeHtml(cmd.name)}</span>
                     </div>
