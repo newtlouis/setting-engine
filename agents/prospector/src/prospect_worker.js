@@ -239,6 +239,7 @@ export async function runProspector(options = {}) {
             for (const comment of comments) {
               const username = comment.username;
               if (!username) continue;
+              if (username.toLowerCase() === 'reels') continue;
              
              // Skip duplicates in this session
              if (uniqueUsernames.has(username)) continue;
