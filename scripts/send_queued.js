@@ -24,7 +24,7 @@ import {
   waitForUserToFinish,
   goToDirectDM
 } from '../agents/dmresponder/src/scraper.js';
-import { fullUpsertLead, addMessage } from '../agents/dmresponder/src/db_integration.js';
+import { fullUpsertLead, addMessage, getConversationHistory } from '../agents/dmresponder/src/db_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,6 +140,15 @@ async function main() {
                 await outreachQueue.incrementRetry(lead.username, error);
             }
 
+            if (manual && currentPage !== page) await currentPage.close().catch(() => {});
+            continue;
+        }
+
+        // Safety check: skip if conversation already exists in DB
+        const existingMessages = await getConversationHistory(lead.username, account.id);
+        if (existingMessages && existingMessages.length > 0) {
+            console.log(`   ⏭️  Skipping @${lead.username}: conversation already exists (${existingMessages.length} messages)`);
+            await outreachQueue.markSent(lead.username);
             if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
         }

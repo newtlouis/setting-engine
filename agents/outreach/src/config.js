@@ -11,14 +11,14 @@ import { SELECTORS as SHARED_SELECTORS } from '../../../shared/config/selectors.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure .env is loaded from root or agent folder in monorepo environment
-const rootEnvPath = path.resolve(__dirname, '../../../.env');
-const agentEnvPath = path.resolve(__dirname, '../../.env');
+// Ensure .env is loaded from agent folder or root in monorepo environment
+const ownEnvPath = path.resolve(__dirname, '../.env');          // agents/outreach/.env
+const rootEnvPath = path.resolve(__dirname, '../../../.env');   // project root/.env
 
-if (fs.existsSync(rootEnvPath)) {
+if (fs.existsSync(ownEnvPath)) {
+  dotenv.config({ path: ownEnvPath });
+} else if (fs.existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath });
-} else if (fs.existsSync(agentEnvPath)) {
-  dotenv.config({ path: agentEnvPath });
 } else {
   dotenv.config(); // Fallback to current working directory
 }
