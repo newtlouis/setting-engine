@@ -83,27 +83,14 @@ async function scanForNewFollowers(page, options = {}) {
             return selectors.FOLLOW_TEXT.some(t => text.toLowerCase().includes(t));
         };
 
-        // Helper: find nearest section heading
+        // Helper: find nearest section heading (only role="heading", no bold span fallback)
         const findSectionHeading = (element) => {
             let current = element;
             while (current) {
                 let sib = current.previousElementSibling;
                 while (sib) {
-                    // Check the element itself and its children for headings
                     const heading = sib.matches?.('[role="heading"]') ? sib : sib.querySelector?.('[role="heading"]');
                     if (heading) return heading.innerText?.trim().toLowerCase();
-                    // Also check for bold/large text that acts as section header
-                    const spans = sib.querySelectorAll?.('span');
-                    if (spans) {
-                        for (const span of spans) {
-                            const fw = window.getComputedStyle(span).fontWeight;
-                            const fs = parseFloat(window.getComputedStyle(span).fontSize);
-                            if ((parseInt(fw) >= 600 || fw === 'bold') && fs >= 14) {
-                                const txt = span.textContent?.trim().toLowerCase();
-                                if (txt && txt.length < 30) return txt;
-                            }
-                        }
-                    }
                     sib = sib.previousElementSibling;
                 }
                 current = current.parentElement;
