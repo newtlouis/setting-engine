@@ -414,7 +414,7 @@ export async function runInboxScanner(options = {}) {
           }
           
           // Valid statuses for processing (exclude not_interested, already_known)
-          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified'];
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling'];
           const excludedStatuses = ['not_interested', 'already_known', 'ignored', 'failed'];
 
           if (excludedStatuses.includes(leadContext.status) || leadContext.is_ignored) {
