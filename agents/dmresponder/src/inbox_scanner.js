@@ -560,11 +560,14 @@ export async function runInboxScanner(options = {}) {
               } else {
                   try {
                       const { createBooking } = await import('../../../shared/utils/calendly.js');
+                      // Pass recent conversation as hints for phone country detection
+                      const recentText = updatedHistory.slice(-10).map(m => m.text).join(' ');
                       const bookingResult = await createBooking(profile, {
                           startTime: bookingIntent.slot,
                           email: bookingIntent.email,
                           name: leadContext.fullName || username,
-                          phone: bookingIntent.phone || null
+                          phone: bookingIntent.phone || null,
+                          conversationHints: recentText
                       });
 
                       if (bookingResult.success) {

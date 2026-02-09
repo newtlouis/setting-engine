@@ -13,11 +13,15 @@ const CALENDLY_BASE_URL = 'https://api.calendly.com';
  * Normalize phone to international format (E.164).
  * Converts French local numbers (06/07) to +336/+337.
  */
-function normalizePhone(phone) {
+function normalizePhone(phone, conversationHints = '') {
     if (!phone) return null;
     let cleaned = phone.replace(/[\s.\-()]/g, '');
     if (cleaned.startsWith('0') && cleaned.length === 10) {
-        cleaned = '+33' + cleaned.slice(1);
+        // Detect country from conversation context or phone pattern
+        const hints = conversationHints.toLowerCase();
+        const isBelgian = hints.includes('belge') || hints.includes('belgique') || hints.includes('belgium')
+            || /^04[5-9]/.test(cleaned); // Belgian mobile: 045x-049x
+        cleaned = (isBelgian ? '+32' : '+33') + cleaned.slice(1);
     }
     if (!cleaned.startsWith('+')) {
         cleaned = '+' + cleaned;
@@ -174,7 +178,7 @@ export async function fetchAvailability(profileName) {
  * Note: New Calendly API v2 'Scheduling API' uses POST /invitees
  * for direct programmatic booking. Requires Standard+ plans.
  */
-export async function createBooking(profileName, { startTime, email, name, phone }) {
+export async function createBooking(profileName, { startTime, email, name, phone, conversationHints }) {
     const { token, eventTypeUrl } = getCalendlyConfig(profileName);
     if (!token) throw new Error("No Calendly token found.");
 
@@ -209,7 +213,7 @@ export async function createBooking(profileName, { startTime, email, name, phone
             invitee: {
                 email: email,
                 name: name,
-                text_reminder_number: normalizePhone(phone) || null,
+                text_reminder_number: normalizePhone(phone, conversationHints) || null,
                 timezone: "Europe/Paris"
             }
         };
