@@ -22,9 +22,10 @@ import {
   typeInOpenTab,
   registerOpenTab,
   waitForUserToFinish,
-  goToDirectDM
+  goToDirectDM,
+  scrapeConversationMessages
 } from '../agents/dmresponder/src/scraper.js';
-import { fullUpsertLead, addMessage, getConversationHistory } from '../agents/dmresponder/src/db_integration.js';
+import { fullUpsertLead, addMessage } from '../agents/dmresponder/src/db_integration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,10 +145,10 @@ async function main() {
             continue;
         }
 
-        // Safety check: skip if conversation already exists in DB
-        const existingMessages = await getConversationHistory(lead.username, account.id);
+        // Safety check: scrape visible messages in the DM thread
+        const existingMessages = await scrapeConversationMessages(currentPage);
         if (existingMessages && existingMessages.length > 0) {
-            console.log(`   ⏭️  Skipping @${lead.username}: conversation already exists (${existingMessages.length} messages)`);
+            console.log(`   ⏭️  Skipping @${lead.username}: conversation already has ${existingMessages.length} message(s) on Instagram`);
             await outreachQueue.markSent(lead.username);
             if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
