@@ -34,12 +34,12 @@ import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.j
 // ============================================
 const CONFIG = {
   INBOX_URL: 'https://www.instagram.com/direct/inbox/',
-  MAX_SCROLLS: 10, // Scan top conversations
+  MAX_SCROLLS: 15, // Scan top conversations
   SCROLL_AMOUNT: 300, // Smaller scrolls for smooth loading
   DELAYS: {
     AFTER_NAVIGATION: 3500,
     AFTER_CLICK: 2500,
-    AFTER_SCROLL: 1000, // Wait for conversations to load
+    AFTER_SCROLL: 1500, // Wait for conversations to load after scroll
     BETWEEN_CONVERSATIONS: 1500
   }
 };
@@ -135,11 +135,37 @@ async function getVisibleConversations(page, allReplies = false) {
         preview = dirSpans[1]?.textContent?.trim() || '';
       }
 
-      // Check font-weight (600 = unread on Instagram)
-      const fontWeight = window.getComputedStyle(nameSpan).fontWeight;
-      const isBold = fontWeight === '600' || fontWeight === '700';
+      // --- UNREAD DETECTION (multiple strategies) ---
 
-      // Check for "Unread" text indicator
+      // 1. Check font-weight of name span (bold = unread)
+      const fontWeight = parseInt(window.getComputedStyle(nameSpan).fontWeight, 10);
+      const isBold = fontWeight >= 600;
+
+      // 2. Check font-weight of preview text too
+      let isPreviewBold = false;
+      if (dirSpans.length >= 2) {
+        const previewWeight = parseInt(window.getComputedStyle(dirSpans[1]).fontWeight, 10);
+        isPreviewBold = previewWeight >= 600;
+      }
+
+      // 3. Check for blue dot indicator (small circle with blue background)
+      let hasBlueDot = false;
+      const allElements = button.querySelectorAll('div, span');
+      for (const el of allElements) {
+        const style = window.getComputedStyle(el);
+        const bg = style.backgroundColor;
+        const w = parseInt(style.width, 10);
+        const h = parseInt(style.height, 10);
+        const radius = style.borderRadius;
+        // Blue dot: small element (6-14px), circular, blue-ish background
+        if (w >= 6 && w <= 14 && h >= 6 && h <= 14 && radius === '50%' &&
+            (bg.includes('0, 149, 246') || bg.includes('0, 100, 224') || bg.includes('rgb(0,'))) {
+          hasBlueDot = true;
+          break;
+        }
+      }
+
+      // 4. Check for "Unread" / "Non lu" text indicator
       let hasUnreadText = false;
       const allSpans = button.querySelectorAll('span');
       for (const span of allSpans) {
@@ -150,11 +176,15 @@ async function getVisibleConversations(page, allReplies = false) {
         }
       }
 
+      // 5. Check aria-label on the button itself
+      const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+      const hasUnreadAria = ariaLabel.includes('unread') || ariaLabel.includes('non lu');
+
       // Determine if unread
       let isUnread = false;
 
-      // Default mode: Only bold text OR "Unread" indicator (strict)
-      if (isBold || hasUnreadText) {
+      // Default mode: Any unread indicator
+      if (isBold || isPreviewBold || hasBlueDot || hasUnreadText || hasUnreadAria) {
         isUnread = true;
       }
       // --all mode: Also detect replies without "Vous:" prefix
