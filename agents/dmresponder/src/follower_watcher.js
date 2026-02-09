@@ -51,65 +51,123 @@ const CONFIG = {
  */
 async function scanForNewFollowers(page, options = {}) {
     console.log('   Scanning notifications...');
-    
+
     return await page.evaluate((args) => {
         const { selectors, trackWeek } = args;
         const results = [];
-        
-        // Handle both straight and curly apostrophes
-        const sectionsToTrack = ['nouveau', 'aujourd\'hui', 'aujourd’hui', 'hier', 'today', 'yesterday', 'new'];
+        const seenUsernames = new Set();
+
+        // Sections to filter (recent notifications only)
+        const sectionsToTrack = ['nouveau', 'aujourd\'hui', 'aujourd\u2019hui', 'hier', 'today', 'yesterday', 'new'];
         if (trackWeek) {
             sectionsToTrack.push('cette semaine', 'this week');
         }
-        
-        // Find all notification containers
-        const allItems = Array.from(document.querySelectorAll('div[data-pressable-container="true"]'));
-        console.log(`Debug Context: Found ${allItems.length} total notification items.`);
-        
-        for (const item of allItems) {
-            const text = item.innerText || '';
-            const isFollow = selectors.FOLLOW_TEXT.some(t => text.toLowerCase().includes(t));
-            
-            if (isFollow) {
-                // Find section name by searching for the "nearest" preceding heading
-                let sectionName = "";
-                let current = item;
-                
-                // Helper to check for heading text
-                const findHeadingBefore = (element) => {
-                    let prev = element;
-                    while (prev) {
-                        let sib = prev.previousElementSibling;
-                        while (sib) {
-                            const heading = sib.matches('[role="heading"]') ? sib : sib.querySelector('[role="heading"]');
-                            if (heading) return heading.innerText?.trim().toLowerCase();
-                            sib = sib.previousElementSibling;
-                        }
-                        prev = prev.parentElement;
-                        if (prev?.matches('main') || prev?.id === 'mount_0_0') break;
-                    }
-                    return "";
-                };
+        // Sections to EXCLUDE (too old)
+        const sectionsToExclude = ['le mois dernier', 'last month', 'il y a plus', 'ce mois-ci', 'this month'];
+        if (!trackWeek) {
+            sectionsToExclude.push('cette semaine', 'this week');
+        }
 
-                sectionName = findHeadingBefore(item);
-                const isTargetSection = sectionName && sectionsToTrack.some(t => sectionName.includes(t));
-                
-                if (isTargetSection) {
-                    const link = item.querySelector('a[href^="/"]');
-                    if (link) {
-                        const href = link.getAttribute('href');
-                        const username = href.replace(/\//g, '').split('?')[0];
-                        if (username && !['explore', 'direct', 'reels', 'p', 'stories'].includes(username)) {
-                            results.push({
-                                username,
-                                text: text.substring(0, 50) + '...'
-                            });
+        // Helper: extract username from a notification element
+        const extractUsername = (item) => {
+            const link = item.querySelector('a[href^="/"]');
+            if (!link) return null;
+            const href = link.getAttribute('href');
+            const username = href.replace(/\//g, '').split('?')[0];
+            if (!username || ['explore', 'direct', 'reels', 'p', 'stories', 'notifications'].includes(username)) return null;
+            return username;
+        };
+
+        // Helper: check if text contains follow indicator
+        const isFollowNotification = (text) => {
+            return selectors.FOLLOW_TEXT.some(t => text.toLowerCase().includes(t));
+        };
+
+        // Helper: find nearest section heading
+        const findSectionHeading = (element) => {
+            let current = element;
+            while (current) {
+                let sib = current.previousElementSibling;
+                while (sib) {
+                    // Check the element itself and its children for headings
+                    const heading = sib.matches?.('[role="heading"]') ? sib : sib.querySelector?.('[role="heading"]');
+                    if (heading) return heading.innerText?.trim().toLowerCase();
+                    // Also check for bold/large text that acts as section header
+                    const spans = sib.querySelectorAll?.('span');
+                    if (spans) {
+                        for (const span of spans) {
+                            const fw = window.getComputedStyle(span).fontWeight;
+                            const fs = parseFloat(window.getComputedStyle(span).fontSize);
+                            if ((parseInt(fw) >= 600 || fw === 'bold') && fs >= 14) {
+                                const txt = span.textContent?.trim().toLowerCase();
+                                if (txt && txt.length < 30) return txt;
+                            }
                         }
                     }
+                    sib = sib.previousElementSibling;
+                }
+                current = current.parentElement;
+                if (current?.matches?.('main') || current?.id === 'mount_0_0') break;
+            }
+            return "";
+        };
+
+        // Strategy 1: data-pressable-container (original)
+        let allItems = Array.from(document.querySelectorAll('div[data-pressable-container="true"]'));
+
+        // Strategy 2: role=listitem fallback
+        if (allItems.length === 0) {
+            allItems = Array.from(document.querySelectorAll('div[role="listitem"]'));
+        }
+
+        // Strategy 3: notification-like divs with links and follow text
+        if (allItems.length === 0) {
+            const mainEl = document.querySelector('main') || document.body;
+            const allLinks = Array.from(mainEl.querySelectorAll('a[href^="/"]'));
+            for (const link of allLinks) {
+                // Walk up to find a reasonable container (max 5 levels)
+                let container = link.parentElement;
+                for (let i = 0; i < 5; i++) {
+                    if (!container) break;
+                    const text = container.innerText || '';
+                    if (isFollowNotification(text) && text.length < 300) {
+                        allItems.push(container);
+                        break;
+                    }
+                    container = container.parentElement;
                 }
             }
         }
-        
+
+        console.log(`[FollowerScan] Found ${allItems.length} notification items.`);
+
+        for (const item of allItems) {
+            const text = item.innerText || '';
+            if (!isFollowNotification(text)) continue;
+
+            const username = extractUsername(item);
+            if (!username || seenUsernames.has(username)) continue;
+
+            // Check section
+            const sectionName = findSectionHeading(item);
+
+            // Exclude old sections
+            const isExcluded = sectionName && sectionsToExclude.some(t => sectionName.includes(t));
+            if (isExcluded) continue;
+
+            // Accept if: target section found, OR no section detected (safer than rejecting)
+            const isTargetSection = !sectionName || sectionsToTrack.some(t => sectionName.includes(t));
+            if (!isTargetSection) continue;
+
+            seenUsernames.add(username);
+            results.push({
+                username,
+                section: sectionName || '(unknown)',
+                text: text.substring(0, 50) + '...'
+            });
+        }
+
+        console.log(`[FollowerScan] Detected ${results.length} follow notifications.`);
         return results;
     }, { selectors: CONFIG.NOTIFICATION_SELECTORS, trackWeek: options.trackWeek });
 }
@@ -164,6 +222,9 @@ export async function runFollowerWatcher(options = {}) {
         // Step 3: Scan for followers
         const newFollowers = await scanForNewFollowers(page, { trackWeek: options.trackWeek });
         console.log(`   Found ${newFollowers.length} potential new follower(s).`);
+        if (newFollowers.length > 0) {
+            newFollowers.forEach(f => console.log(`      - @${f.username} [${f.section}]`));
+        }
         
         if (newFollowers.length === 0) {
             console.log('   ✅ No new followers found in recent notifications.');
