@@ -379,7 +379,7 @@ export async function scrapeConversationMessages(page) {
         // Skip category-style text (e.g. "Publicité/marketing", "Coach/thérapeute")
         if (/^[A-ZÀ-Ü][a-zà-ü]+\/[a-zà-ü]+$/i.test(text)) continue;
         // Skip Instagram URLs and web links displayed as text
-        if (text.includes('instagram.com/') || text.includes('www.') || text.match(/^https?:\/\//)) continue;
+        if (text.includes('instagram.com/') || text.includes('www.') || text.includes('youtube.com/') || text.match(/^https?:\/\//)) continue;
         // Skip if inside a textbox (message input)
         if (el.closest('[role="textbox"]')) continue;
         // Skip navigation/sidebar elements
@@ -426,18 +426,30 @@ export async function scrapeConversationMessages(page) {
         console.log('      ⚠️ No messages found but not empty state. Attempting scroll up...');
         await page.mouse.wheel(0, -500);
         await delay(1500);
-        // Retry once
+        // Retry once with same filters as main block
         const retry = await page.evaluate(() => {
           const result = [];
           const windowWidth = window.innerWidth;
           const SKIP_TEXTS = ['Message...', 'Votre message', 'Seen', 'Vu', 'Active now', 'En ligne',
             'Envoyer', 'Send', 'Envoyez un message', 'Say hi', 'Aucun message', 'No messages'];
+          const SKIP_LABELS = ['suivre', 'follow', 'message', 'appel', 'call', 'vidéo', 'video',
+            'plus', 'more', 'artiste', 'artist', 'coach', 'auteur', 'auteur(ice)', 'auteure',
+            'créateur', 'creator', 'musicien', 'musician', 'blogueur', 'blogger',
+            'entrepreneur', 'photographe', 'photographer', 'thérapeute', 'therapist',
+            'influenceur', 'influencer', 'consultant', 'designer', 'gamer',
+            'journaliste', 'journalist', 'sportif', 'athlete', 'écrivain', 'writer'];
           const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
           for (const el of dirAutoElements) {
             let text = el.innerText?.trim();
             if (!text || text.length < 1) continue;
             if (SKIP_TEXTS.some(s => text === s || text.startsWith(s))) continue;
+            const textLower = text.toLowerCase();
+            if (SKIP_LABELS.some(l => textLower === l || textLower === l.replace("'", "\u2019"))) continue;
+            if (/^[A-ZÀ-Ü][a-zà-ü]+\/[a-zà-ü]+$/i.test(text)) continue;
+            if (text.includes('instagram.com/') || text.includes('www.') || text.includes('youtube.com/') || text.match(/^https?:\/\//)) continue;
             if (el.closest('[role="textbox"]') || el.closest('[role="navigation"]') || el.closest('[role="tablist"]')) continue;
+            if (el.closest('a[href]') && !el.closest('[role="gridcell"]')) continue;
+            if (el.closest('header')) continue;
             const rect = el.getBoundingClientRect();
             const isUser = (rect.left / windowWidth) < 0.5;
             result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text' });
