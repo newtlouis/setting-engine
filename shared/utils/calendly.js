@@ -11,18 +11,29 @@ const CALENDLY_BASE_URL = 'https://api.calendly.com';
 
 /**
  * Normalize phone to international format (E.164).
- * Converts French local numbers (06/07) to +336/+337.
+ * Supports French (+33), Belgian (+32) and Canadian (+1) numbers.
  */
 function normalizePhone(phone, conversationHints = '') {
     if (!phone) return null;
     let cleaned = phone.replace(/[\s.\-()]/g, '');
+    const hints = conversationHints.toLowerCase();
+    const isCanadian = hints.includes('canada') || hints.includes('canadien') || hints.includes('canadienne')
+        || hints.includes('québec') || hints.includes('quebec') || hints.includes('montréal')
+        || hints.includes('montreal') || hints.includes('toronto') || hints.includes('ottawa');
+
     if (cleaned.startsWith('0') && cleaned.length === 10) {
-        // Detect country from conversation context or phone pattern
-        const hints = conversationHints.toLowerCase();
+        // European local format (0X XX XX XX XX)
         const isBelgian = hints.includes('belge') || hints.includes('belgique') || hints.includes('belgium')
             || /^04[5-9]/.test(cleaned); // Belgian mobile: 045x-049x
         cleaned = (isBelgian ? '+32' : '+33') + cleaned.slice(1);
+    } else if (isCanadian && cleaned.length === 10 && !cleaned.startsWith('0')) {
+        // Canadian local format (514 555 1234 → +15145551234)
+        cleaned = '+1' + cleaned;
+    } else if (isCanadian && cleaned.length === 11 && cleaned.startsWith('1')) {
+        // Canadian with country code but no + (1 514 555 1234)
+        cleaned = '+' + cleaned;
     }
+
     if (!cleaned.startsWith('+')) {
         cleaned = '+' + cleaned;
     }
