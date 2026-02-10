@@ -339,12 +339,12 @@ export async function uploadFileInDM(page, filePath) {
  */
 export async function scrapeConversationMessages(page) {
   try {
-    // Wait a bit for messages to load - slightly longer to be safe
-    await delay(1500, 2500);
-    
+    // Wait for messages to load
+    await delay(2000, 3000);
+
     // Check for "Empty Folder" / "Say hi" state first
     const isEmptyState = await page.evaluate(() => {
-        const main = document.querySelector('div[role="main"]');
+        const main = document.querySelector('[role="main"]') || document.querySelector('section');
         if (!main) return false;
         const text = main.innerText;
         return text.includes('Say hi to') || text.includes('Envoyez un message à') || text.includes('No messages') || text.includes('Aucun message');
@@ -352,89 +352,86 @@ export async function scrapeConversationMessages(page) {
 
     const messages = await page.evaluate(() => {
       const result = [];
-      
-      // Strategy 1: Find all message containers using the "Double tap to like" button (Most reliable for DM)
-      let messageElements = Array.from(document.querySelectorAll('[role="button"][aria-label*="Double tap"], [role="button"][aria-label*="J’aime"], [role="button"][aria-label*="Like"]'));
-      
-      // Strategy 2: If no buttons found, look for generic message rows
-      if (messageElements.length === 0) {
-          // Fallback: look for typical message container structures
-          // Note: This is riskier as class names change, but 'div[role="row"]' is sometimes used
-          messageElements = Array.from(document.querySelectorAll('div[role="row"]'));
-      }
+      const windowWidth = window.innerWidth;
 
-      messageElements.forEach(container => {
-        // Find the text content inside this message
-        // Usually in a div with dir="auto"
-        const textElement = container.querySelector('div[dir="auto"]');
-        let text = textElement?.innerText?.trim();
-        let messageType = 'text';
+      // UI text to skip
+      const SKIP_TEXTS = ['Message...', 'Votre message', 'Seen', 'Vu', 'Active now', 'En ligne',
+        'Envoyer', 'Send', 'Envoyez un message', 'Say hi', 'Aucun message', 'No messages'];
 
-        // ----- VOICE NOTE DETECTION -----
-        // Check for common voice note indicators: waveform, play button, timer
-        const hasWaveform = container.querySelector('svg clipPath[id*="waveform"]');
-        const hasPlayButton = container.querySelector('div[role="button"][aria-label*="Lire" i], div[role="button"][aria-label*="Play" i]');
-        const hasVoiceTimer = container.querySelector('div[role="timer"]');
-        
-        if (hasWaveform || hasPlayButton || hasVoiceTimer) {
-          text = "[Vocal]";
-          messageType = 'voice_note';
-        }
+      // Find all div[dir="auto"] as message candidates
+      const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
 
-        if (!text || text.length < 1) return;
-        
+      for (const el of dirAutoElements) {
+        let text = el.innerText?.trim();
+        if (!text || text.length < 1) continue;
+
         // Skip UI elements
-        if (text.includes('Message...') || text.includes('Votre message')) return;
-        if (text === 'Seen' || text === 'Vu' || text === 'Active now' || text === 'En ligne') return;
-        if (text === 'Envoyer' || text === 'Send') return;
-        
-        // ----- ROLE DETECTION -----
-        // Key insight: Messages FROM the prospect have a profile link as a SIBLING
-        // at some parent level. We need to check siblings, not child search.
-        
-        let isUser = false;
-        
-        // Walk up parents and at each level, check SIBLINGS for profile link
-        let currentEl = container;
-        for (let depth = 0; depth < 8; depth++) {
-          const parent = currentEl.parentElement;
-          if (!parent) break;
-          
-          // Check siblings of currentEl (not children of parent which includes currentEl)
-          const siblings = Array.from(parent.children);
-          for (const sibling of siblings) {
-            if (sibling === currentEl) continue; // Skip self
-            
-            // Check if this sibling contains a profile link
-            const profileLink = sibling.querySelector('a[aria-label*="Open the profile page"], a[href^="/"][role="link"] img');
-            if (profileLink) {
-              isUser = true;
-              break;
-            }
+        if (SKIP_TEXTS.some(s => text === s || text.startsWith(s))) continue;
+        // Skip if inside a textbox (message input)
+        if (el.closest('[role="textbox"]')) continue;
+        // Skip navigation/sidebar elements
+        if (el.closest('[role="navigation"]') || el.closest('[role="tablist"]')) continue;
+
+        // Voice note detection: check parent containers
+        let messageType = 'text';
+        let container = el.parentElement;
+        for (let d = 0; d < 5; d++) {
+          if (!container) break;
+          const hasWaveform = container.querySelector('svg clipPath[id*="waveform"]');
+          const hasTimer = container.querySelector('[role="timer"]');
+          if (hasWaveform || hasTimer) {
+            text = "[Vocal]";
+            messageType = 'voice_note';
+            break;
           }
-          
-          if (isUser) break;
-          currentEl = parent;
+          container = container.parentElement;
         }
-        
+
+        // Role detection via horizontal position
+        // User messages (from prospect): left-aligned (leftRatio < 0.5)
+        // Assistant messages (from us): right-aligned (leftRatio > 0.5)
+        const rect = el.getBoundingClientRect();
+        const leftRatio = rect.left / windowWidth;
+        const isUser = leftRatio < 0.5;
+
         result.push({
           role: isUser ? 'user' : 'assistant',
-          text: text,
+          text,
           type: messageType
         });
-      });
-      
+      }
+
       return result;
     });
 
-    // If we found nothing but it's NOT an empty state, try one last scroll up
+    // If we found nothing but it's NOT an empty state, try scrolling up
     if (messages.length === 0 && !isEmptyState) {
         console.log('      ⚠️ No messages found but not empty state. Attempting scroll up...');
         await page.mouse.wheel(0, -500);
-        await delay(1000);
-        // (You could recursively call scrape here, but let's keep it simple and just return empty so we don't hang)
+        await delay(1500);
+        // Retry once
+        const retry = await page.evaluate(() => {
+          const result = [];
+          const windowWidth = window.innerWidth;
+          const SKIP_TEXTS = ['Message...', 'Votre message', 'Seen', 'Vu', 'Active now', 'En ligne',
+            'Envoyer', 'Send', 'Envoyez un message', 'Say hi', 'Aucun message', 'No messages'];
+          const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
+          for (const el of dirAutoElements) {
+            let text = el.innerText?.trim();
+            if (!text || text.length < 1) continue;
+            if (SKIP_TEXTS.some(s => text === s || text.startsWith(s))) continue;
+            if (el.closest('[role="textbox"]') || el.closest('[role="navigation"]') || el.closest('[role="tablist"]')) continue;
+            const rect = el.getBoundingClientRect();
+            const isUser = (rect.left / windowWidth) < 0.5;
+            result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text' });
+          }
+          return result;
+        });
+        if (retry.length > 0) {
+          messages.push(...retry);
+        }
     }
-    
+
     // Deduplicate consecutive identical messages
     const deduped = [];
     for (const msg of messages) {
@@ -443,9 +440,9 @@ export async function scrapeConversationMessages(page) {
         deduped.push(msg);
       }
     }
-    
+
     console.log(`      Scraped ${deduped.length} messages from conversation`);
-    
+
     // Log preview for debugging - show roles clearly
     if (deduped.length > 0) {
       console.log(`      Preview (last 3):`);
@@ -455,9 +452,9 @@ export async function scrapeConversationMessages(page) {
         console.log(`        ${icon} [${m.role}] ${preview}`);
       });
     }
-    
+
     return deduped;
-    
+
   } catch (error) {
     console.error('      Error scraping messages:', error.message);
     return [];
