@@ -354,9 +354,15 @@ export async function scrapeConversationMessages(page) {
       const result = [];
       const windowWidth = window.innerWidth;
 
-      // UI text to skip
+      // UI text to skip (exact match or startsWith)
       const SKIP_TEXTS = ['Message...', 'Votre message', 'Seen', 'Vu', 'Active now', 'En ligne',
         'Envoyer', 'Send', 'Envoyez un message', 'Say hi', 'Aucun message', 'No messages'];
+
+      // UI button labels to skip (exact match, case-insensitive)
+      const SKIP_LABELS = ['suivre', 'follow', 'suivre en retour', 'follow back', 'suivi(e)',
+        'abonné(e)', 's\'abonner', 'subscribe', 'message', 'appeler', 'call',
+        'bloquer', 'block', 'signaler', 'report', 'restreindre', 'restrict',
+        'publicité', 'marketing', 'artiste', 'créateur', 'entrepreneur'];
 
       // Find all div[dir="auto"] as message candidates
       const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
@@ -367,10 +373,21 @@ export async function scrapeConversationMessages(page) {
 
         // Skip UI elements
         if (SKIP_TEXTS.some(s => text === s || text.startsWith(s))) continue;
+        // Skip button labels and profile categories
+        const textLower = text.toLowerCase();
+        if (SKIP_LABELS.some(l => textLower === l || textLower === l.replace("'", "\u2019"))) continue;
+        // Skip category-style text (e.g. "Publicité/marketing", "Coach/thérapeute")
+        if (/^[A-ZÀ-Ü][a-zà-ü]+\/[a-zà-ü]+$/i.test(text)) continue;
+        // Skip Instagram URLs and web links displayed as text
+        if (text.includes('instagram.com/') || text.includes('www.') || text.match(/^https?:\/\//)) continue;
         // Skip if inside a textbox (message input)
         if (el.closest('[role="textbox"]')) continue;
         // Skip navigation/sidebar elements
         if (el.closest('[role="navigation"]') || el.closest('[role="tablist"]')) continue;
+        // Skip if inside a link (profile header links, follow buttons, etc.)
+        if (el.closest('a[href]') && !el.closest('[role="gridcell"]')) continue;
+        // Skip if inside a header element
+        if (el.closest('header')) continue;
 
         // Voice note detection: check parent containers
         let messageType = 'text';
