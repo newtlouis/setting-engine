@@ -195,6 +195,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
         .filter(m => m.role === 'user')
         .pop()?.text || '';
 
+      console.log(`[Engine] RAG lookup for: "${lastProspectMessage}" (step: ${leadContext?.funnel_step})`);
       if (lastProspectMessage) {
         const ragResults = await ragRetriever.retrieve({
           prospectMessage: lastProspectMessage,
@@ -202,10 +203,17 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
           accountId
         });
 
+        console.log(`[Engine] RAG results: ${ragResults.relevantKnowledge.length} semantic, ${ragResults.keywordMatches.length} keyword`);
+        if (ragResults.keywordMatches.length > 0) {
+          ragResults.keywordMatches.forEach(km => console.log(`[Engine] RAG keyword match: #${km.id} via "${km.matchedKeyword}"`));
+        }
+
         if (ragRetriever.hasRelevantResults(ragResults)) {
           const ragContext = ragRetriever.formatForPrompt(ragResults);
           contextDescription += `\n\n${ragContext}`;
-          console.log(`[Engine] RAG enriched context with ${ragResults.relevantKnowledge.length} knowledge entries`);
+          console.log(`[Engine] RAG injected ${ragResults.relevantKnowledge.length} entries into prompt`);
+        } else {
+          console.log(`[Engine] RAG: no relevant results found`);
         }
       }
     } catch (e) {

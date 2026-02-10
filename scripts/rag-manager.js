@@ -160,7 +160,10 @@ async function generateEmbeddings(accountId) {
 
   for (let i = 0; i < withoutEmbedding.length; i += batchSize) {
     const batch = withoutEmbedding.slice(i, i + batchSize);
-    const texts = batch.map(e => `${e.situation} ${e.content}`);
+    const texts = batch.map(e => {
+      const keywords = e.triggerKeywords ? (Array.isArray(e.triggerKeywords) ? e.triggerKeywords : JSON.parse(e.trigger_keywords || '[]')) : [];
+      return `${e.situation || ''} ${keywords.join(' ')}`;
+    });
 
     try {
       const embeddings = await getEmbeddings(texts);
@@ -221,7 +224,7 @@ async function addEntry(accountId, category, content, situation = null, keywords
   const knowledgeRepo = container.repositories.knowledge;
 
   // Generate embedding
-  const textForEmbedding = `${situation || ''} ${content}`;
+  const textForEmbedding = `${situation || ''} ${keywords || ''}`;
   const embedding = await getEmbedding(textForEmbedding);
 
   const entry = await knowledgeRepo.save({
