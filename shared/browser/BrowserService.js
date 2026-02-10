@@ -43,6 +43,24 @@ class BrowserSession {
     this.messageTabs = [];      // Raw pages for backward compat
     this.registeredTabs = [];   // Tabs with metadata {username, page, message, timestamp}
     this._isLoggedIn = false;
+    this._browserDialogDetected = false;
+
+    // Register browser-level dialog listener (alert/confirm/prompt)
+    // These can block script execution, so we auto-dismiss them
+    this.workingPage.on('dialog', async (dialog) => {
+      const type = dialog.type();
+      const message = dialog.message();
+      console.log(`🚨 Browser dialog detected: [${type}] "${message}"`);
+      console.log(`   → Auto-dismissing to prevent script blockage`);
+      
+      this._browserDialogDetected = true;
+      
+      try {
+        await dialog.dismiss();
+      } catch (e) {
+        // Already dismissed or dialog closed
+      }
+    });
   }
 
   /**
@@ -226,7 +244,17 @@ class BrowserSession {
    * @returns {Promise<boolean>} True if challenge persists
    */
   async checkForChallenge() {
+    // Reset browser dialog flag before check
+    this._browserDialogDetected = false;
     return await checkForChallenge(this.workingPage);
+  }
+
+  /**
+   * Check if a browser-level dialog was detected since last check
+   * @returns {boolean}
+   */
+  wasBrowserDialogDetected() {
+    return this._browserDialogDetected;
   }
 
   /**

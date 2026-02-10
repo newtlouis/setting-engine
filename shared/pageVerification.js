@@ -3,6 +3,13 @@
  * 
  * Verifies that the browser is on the expected page and no CAPTCHA/challenge
  * is present. If verification fails, blocks execution and waits for user input.
+ * 
+ * Multi-layer detection:
+ *  1. URL-based (challenge, checkpoint, login redirect, suspended)
+ *  2. Text-based (suspicious activity, action blocked, rate limit, captcha text FR+EN)
+ *  3. Instagram dialog/modal detection (unknown blocking dialogs)
+ *  4. Error page detection (404, blank page, page not found)
+ *  5. Auto-dismiss of known popups (cookies, notifications) before blocking
  */
 
 import { createInterface } from 'readline';
@@ -34,20 +41,265 @@ function delay(ms) {
 }
 
 /**
- * Check if page shows CAPTCHA or challenge
+ * Try to auto-dismiss known Instagram popups (cookies, notifications, save login).
+ * Returns true if a popup was dismissed (caller may want to re-check the page).
+ * 
+ * @param {Page} page - Playwright page
+ * @returns {Promise<boolean>} True if a popup was auto-dismissed
+ */
+async function tryDismissKnownPopups(page) {
+  let dismissed = false;
+
+  try {
+    // 1. Cookie consent popup
+    const cookieDismissed = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const cookieBtn = buttons.find(btn => {
+        const t = btn.textContent?.toLowerCase() || '';
+        return (
+          t.includes('allow all cookies') ||
+          t.includes('autoriser tous les cookies') ||
+          t.includes('decline optional cookies') ||
+          t.includes('uniquement les cookies essentiels') ||
+          t.includes('tout accepter') ||
+          t.includes('accepter') ||
+          t.includes('accept all')
+        );
+      });
+      if (cookieBtn) { cookieBtn.click(); return true; }
+      return false;
+    });
+    if (cookieDismissed) {
+      console.log('   🍪 Popup cookies auto-fermé');
+      dismissed = true;
+      await delay(1000);
+    }
+
+    // 2. "Turn on Notifications?" / "Save Login Info?" popup — click "Not Now"
+    const notifDismissed = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const notNowBtn = buttons.find(btn => {
+        const t = btn.textContent?.trim()?.toLowerCase() || '';
+        return (t === 'not now' || t === 'pas maintenant');
+      });
+      if (notNowBtn) { notNowBtn.click(); return true; }
+      return false;
+    });
+    if (notifDismissed) {
+      console.log('   🔔 Popup notifications/login auto-fermé');
+      dismissed = true;
+      await delay(1000);
+    }
+  } catch (e) {
+    // Ignore — page might have navigated
+  }
+
+  return dismissed;
+}
+
+/**
+ * Check if a visible dialog is a known safe Instagram dialog (DM, likers, followers, etc.)
+ * These should NOT be treated as blocking challenges.
+ * 
+ * @param {Page} page - Playwright page
+ * @returns {Promise<boolean>} True if the visible dialog is a known safe dialog
+ */
+async function isKnownSafeDialog(page) {
+  try {
+    return await page.evaluate(() => {
+      const dialogs = document.querySelectorAll('div[role="dialog"]');
+      for (const dialog of dialogs) {
+        // Check if dialog is actually visible
+        const rect = dialog.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+
+        const text = dialog.innerText?.toLowerCase() || '';
+        const html = dialog.innerHTML || '';
+
+        // DM popup: has a message textbox
+        if (dialog.querySelector('[contenteditable="true"][role="textbox"]') ||
+            dialog.querySelector('[data-lexical-editor="true"]')) {
+          return true;
+        }
+
+        // Likers/Followers/Following list: has a scrollable user list
+        if (dialog.querySelector('a[role="link"][href*="/"]') &&
+            dialog.querySelectorAll('a[role="link"]').length > 2) {
+          return true;
+        }
+
+        // Post detail dialog: has an article element
+        if (dialog.querySelector('article')) {
+          return true;
+        }
+
+        // Share dialog
+        if (html.includes('shareDialog') || text.includes('share') || text.includes('partager')) {
+          // Only if it also has sharing UI elements
+          if (dialog.querySelector('input[type="text"]') || 
+              dialog.querySelectorAll('button').length > 3) {
+            return true;
+          }
+        }
+
+        // Emoji picker or media picker
+        if (dialog.querySelector('[aria-label*="emoji" i]') ||
+            dialog.querySelector('[aria-label*="gif" i]')) {
+          return true;
+        }
+      }
+      return false;
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Detect if an unknown blocking Instagram dialog/modal is visible.
+ * Excludes known safe dialogs (DM, likers, followers, post detail, etc.).
+ * 
+ * @param {Page} page - Playwright page
+ * @returns {Promise<{isBlocking: boolean, reason?: string}>}
+ */
+async function detectBlockingDialog(page) {
+  try {
+    // Check if any dialog is visible at all
+    const hasVisibleDialog = await page.evaluate(() => {
+      const dialogs = document.querySelectorAll('div[role="dialog"]');
+      for (const dialog of dialogs) {
+        const rect = dialog.getBoundingClientRect();
+        if (rect.width > 100 && rect.height > 100) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!hasVisibleDialog) {
+      return { isBlocking: false };
+    }
+
+    // Check if it's a known safe dialog
+    if (await isKnownSafeDialog(page)) {
+      return { isBlocking: false };
+    }
+
+    // Unknown dialog detected — check its content for challenge indicators
+    const dialogInfo = await page.evaluate(() => {
+      const dialogs = document.querySelectorAll('div[role="dialog"]');
+      for (const dialog of dialogs) {
+        const rect = dialog.getBoundingClientRect();
+        if (rect.width <= 100 || rect.height <= 100) continue;
+        
+        const text = dialog.innerText?.toLowerCase() || '';
+        // Truncate for logging
+        return text.substring(0, 200);
+      }
+      return null;
+    });
+
+    if (dialogInfo) {
+      // Check if dialog text contains challenge-like content
+      const challengeIndicators = [
+        'suspicious', 'blocked', 'confirm', 'verify', 'captcha', 'robot',
+        'humain', 'human', 'identity', 'identité', 'security', 'sécurité',
+        'automated', 'automatisé', 'restrict', 'restreint', 'unusual',
+        'try again', 'réessayer', 'limit', 'too fast', 'trop rapide'
+      ];
+
+      for (const indicator of challengeIndicators) {
+        if (dialogInfo.includes(indicator)) {
+          return { isBlocking: true, reason: `Blocking dialog with challenge text: "${indicator}" — content: "${dialogInfo.substring(0, 100)}..."` };
+        }
+      }
+
+      // Even without challenge keywords, an unknown modal is suspicious
+      // Log it but don't block (to avoid false positives on new Instagram features)
+      console.log(`   ⚠️  Unknown dialog detected (non-bloquant): "${dialogInfo.substring(0, 80)}..."`);
+    }
+
+    return { isBlocking: false };
+  } catch (e) {
+    return { isBlocking: false };
+  }
+}
+
+/**
+ * Detect if the page is an error page (404, blank, "sorry this page isn't available")
+ * 
+ * @param {Page} page - Playwright page
+ * @returns {Promise<{isError: boolean, reason?: string}>}
+ */
+async function detectErrorPage(page) {
+  try {
+    const result = await page.evaluate(() => {
+      const title = document.title?.toLowerCase() || '';
+      const bodyText = document.body?.innerText?.toLowerCase() || '';
+      const bodyLength = bodyText.trim().length;
+
+      // Completely blank page (< 50 chars visible)
+      if (bodyLength < 50) {
+        return { isError: true, reason: 'Page appears blank (< 50 chars)' };
+      }
+
+      // Title-based detection
+      if (title.includes('page not found') || title.includes('page introuvable') || title === '404') {
+        return { isError: true, reason: `Error page title: "${title}"` };
+      }
+
+      // Instagram-specific error messages
+      const errorPatterns = [
+        'sorry, this page isn\'t available',
+        'désolé, cette page n\'est pas disponible',
+        'the link you followed may be broken',
+        'le lien que vous avez suivi est peut-être rompu',
+        'content isn\'t available',
+        'contenu n\'est pas disponible'
+      ];
+
+      for (const pattern of errorPatterns) {
+        if (bodyText.includes(pattern)) {
+          return { isError: true, reason: `Error page text: "${pattern}"` };
+        }
+      }
+
+      return { isError: false };
+    });
+
+    return result;
+  } catch (e) {
+    return { isError: false };
+  }
+}
+
+/**
+ * Check if page shows CAPTCHA, challenge, blocking popup, or unexpected state.
+ * 
+ * Multi-layer detection (ordered by speed and specificity):
+ *  1. URL-based detection (fastest)
+ *  2. Login redirect detection  
+ *  3. Text-based detection (body text, headers)
+ *  4. Instagram dialog/modal detection
+ *  5. Error page detection
+ * 
+ * Before blocking, attempts to auto-dismiss known popups (cookies, notifications).
+ * 
  * @param {Page} page - Playwright page
  * @returns {Promise<{isChallenge: boolean, reason?: string}>}
  */
 async function detectChallenge(page) {
   const url = page.url();
   
-  // 1. Robust URL-based detection
+  // ── Layer 1: URL-based detection (instant, no DOM access) ──
   const challengeUrls = [
     '/challenge/',
     '/checkpoint/',
     '/accounts/suspended/',
     '/accounts/login/two_factor',
-    'instagram.com/logging_out'
+    'instagram.com/logging_out',
+    '/accounts/onetap/',          // "Was it you?" verification
+    '/privacy/checks/',           // Privacy/identity checks
   ];
   
   for (const pattern of challengeUrls) {
@@ -56,25 +308,46 @@ async function detectChallenge(page) {
     }
   }
   
-  // 2. Text-based detection - more restrictive to avoid false positives in content
+  // ── Layer 2: Login redirect detection ──
+  // Session expired mid-script → redirected to login page
+  if (url.includes('/accounts/login') && !url.includes('two_factor')) {
+    return { isChallenge: true, reason: 'Redirected to login page (session expired?)' };
+  }
+
+  // ── Layer 3: Text-based detection ──
   const challengePatterns = [
+    // English
     'suspicious activity',
     'confirm your identity',
-    'confirmer votre identité',
-    'activité suspecte',
     'try again later',
     'action blocked',
     'we limit how often',
     'verify it\'s you',
     'help us confirm',
+    'confirm that you are a human',
+    'verify that you are human',
+    'we restrict certain activity',
+    'temporarily blocked',
+    'your account has been temporarily locked',
+    'unusual activity',
+    'automated behavior',
+    'please wait a few minutes',
+    'you\'re temporarily blocked',
+    // French
+    'activité suspecte',
+    'confirmer votre identité',
+    'réessayer plus tard',
+    'action bloquée',
     'confirmez que vous êtes un humain',
     'vérifiez que vous êtes humain',
-    'confirm that you are a human',
-    'verify that you are human'
+    'nous restreignons certaines activités',
+    'temporairement bloqué',
+    'votre compte a été temporairement verrouillé',
+    'activité inhabituelle',
+    'comportement automatisé',
+    'patientez quelques minutes',
+    'vous êtes temporairement bloqué',
   ];
-  
-  // We exclude common words like "challenge", "verify", "robot" from general text search
-  // because they are too common in post captions/comments.
   
   try {
     // Check main headings or body text but ignore content-heavy areas like articles/comments
@@ -82,7 +355,7 @@ async function detectChallenge(page) {
       // Create a clone of the body to manipulate it safely
       const bodyClone = document.body.cloneNode(true);
       
-      // CRITICAL FIX: Remove script, style, and noscript tags first!
+      // Remove script, style, and noscript tags first
       // innerText on detached nodes can include script content (like JSON blobs), causing false positives.
       const scripts = bodyClone.querySelectorAll('script, style, noscript, iframe, svg');
       scripts.forEach(el => el.remove());
@@ -100,25 +373,70 @@ async function detectChallenge(page) {
       }
     }
     
-    // Check for explicit "Help Us Confirm It's You" or similar challenge headers
+    // Check for challenge headers (h1, h2)
     const headerChallenge = await page.evaluate(() => {
-      const h2s = Array.from(document.querySelectorAll('h2'));
-      const challengeTitles = ['help us confirm', 'votre compte', 'suspicious activity', 'verify'];
-      return h2s.find(h2 => {
-        const text = h2.innerText.toLowerCase();
-        // For H2, we can be slightly more liberal but still careful
-        return challengeTitles.some(title => text.includes(title)) && text.length < 50;
+      const headers = Array.from(document.querySelectorAll('h1, h2'));
+      const challengeTitles = [
+        'help us confirm', 'votre compte', 'suspicious activity', 'verify',
+        'confirm', 'blocked', 'bloqué', 'security check', 'vérification'
+      ];
+      const found = headers.find(h => {
+        const text = h.innerText?.toLowerCase() || '';
+        return challengeTitles.some(title => text.includes(title)) && text.length < 60;
       });
+      return found ? found.innerText : null;
     });
     
     if (headerChallenge) {
-      return { isChallenge: true, reason: 'Challenge header detected' };
+      return { isChallenge: true, reason: `Challenge header detected: "${headerChallenge}"` };
+    }
+
+    // ── Layer 4: Iframe-based CAPTCHA detection ──
+    // Some CAPTCHAs (reCAPTCHA, hCaptcha, Arkose/FunCaptcha) are loaded in iframes
+    const hasCaptchaIframe = await page.evaluate(() => {
+      const iframes = Array.from(document.querySelectorAll('iframe'));
+      const captchaSources = [
+        'recaptcha', 'hcaptcha', 'captcha', 'arkoselabs', 'funcaptcha',
+        'challenges.cloudflare', 'turnstile'
+      ];
+      return iframes.some(iframe => {
+        const src = (iframe.src || '').toLowerCase();
+        const title = (iframe.title || '').toLowerCase();
+        return captchaSources.some(s => src.includes(s) || title.includes(s));
+      });
+    });
+
+    if (hasCaptchaIframe) {
+      return { isChallenge: true, reason: 'CAPTCHA iframe detected (reCAPTCHA/hCaptcha/Arkose)' };
     }
 
   } catch (e) {
     // Ignore evaluation errors
   }
   
+  // ── Layer 5: Try auto-dismiss known popups before checking for blocking dialogs ──
+  const wasDismissed = await tryDismissKnownPopups(page);
+  if (wasDismissed) {
+    // A known popup was dismissed — no need to block
+    return { isChallenge: false };
+  }
+
+  // ── Layer 6: Unknown blocking dialog detection ──
+  const dialogResult = await detectBlockingDialog(page);
+  if (dialogResult.isBlocking) {
+    return { isChallenge: true, reason: dialogResult.reason };
+  }
+  
+  // ── Layer 7: Error page detection ──
+  const errorResult = await detectErrorPage(page);
+  if (errorResult.isError) {
+    // Error pages are logged but not blocking (they're handled by page validators)
+    // Exception: if we're on a totally blank page, that's suspicious
+    if (errorResult.reason.includes('blank')) {
+      return { isChallenge: true, reason: errorResult.reason };
+    }
+  }
+
   return { isChallenge: false };
 }
 
