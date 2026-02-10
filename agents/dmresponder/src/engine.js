@@ -223,8 +223,13 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   }
 
   // Inject Calendly Availability if in booking stage (Step 5+)
+  // Also check conversation context: if last assistant message proposed a call, we need slots
   const currentStep = leadContext?.funnel_step || 0;
-  if (currentStep >= 5) {
+  const lastAssistantMsg = conversationHistory.filter(m => m.role === 'assistant').pop()?.text?.toLowerCase() || '';
+  const callProposed = lastAssistantMsg.includes('30 min') || lastAssistantMsg.includes('appel') || lastAssistantMsg.includes('se call') || lastAssistantMsg.includes('on prenne');
+  const needsSlots = currentStep >= 5 || callProposed;
+  console.log(`[Engine] Calendly check: step=${currentStep}, callProposed=${callProposed}, needsSlots=${needsSlots}`);
+  if (needsSlots) {
       try {
           const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
           // Get profile name from DB account or config fallback
