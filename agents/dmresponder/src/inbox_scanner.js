@@ -587,7 +587,8 @@ export async function runInboxScanner(options = {}) {
 
                           console.log(`   📝 Confirmation message: "${finalMessage}"`);
                       } else {
-                          console.log(`   ⚠️ Calendly API returned failure: ${bookingResult.message}`);
+                          console.log(`   ⚠️ Calendly booking FAILED: ${bookingResult.error}`);
+                          if (bookingResult.details) console.log(`   📋 Details:`, JSON.stringify(bookingResult.details));
                           bookingStatus = 'failed';
                           // Keep original message, don't confirm what didn't happen
                       }

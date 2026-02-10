@@ -21,22 +21,31 @@ function normalizePhone(phone, conversationHints = '') {
         || hints.includes('québec') || hints.includes('quebec') || hints.includes('montréal')
         || hints.includes('montreal') || hints.includes('toronto') || hints.includes('ottawa');
 
+    let detectedCountry = 'unknown';
+
     if (cleaned.startsWith('0') && cleaned.length === 10) {
         // European local format (0X XX XX XX XX)
         const isBelgian = hints.includes('belge') || hints.includes('belgique') || hints.includes('belgium')
             || /^04[5-9]/.test(cleaned); // Belgian mobile: 045x-049x
+        detectedCountry = isBelgian ? 'Belgium (+32)' : 'France (+33)';
         cleaned = (isBelgian ? '+32' : '+33') + cleaned.slice(1);
     } else if (isCanadian && cleaned.length === 10 && !cleaned.startsWith('0')) {
         // Canadian local format (514 555 1234 → +15145551234)
+        detectedCountry = 'Canada (+1)';
         cleaned = '+1' + cleaned;
     } else if (isCanadian && cleaned.length === 11 && cleaned.startsWith('1')) {
         // Canadian with country code but no + (1 514 555 1234)
+        detectedCountry = 'Canada (+1)';
         cleaned = '+' + cleaned;
+    } else if (cleaned.startsWith('+')) {
+        detectedCountry = 'already international';
     }
 
     if (!cleaned.startsWith('+')) {
         cleaned = '+' + cleaned;
     }
+
+    console.log(`[Calendly] Phone: "${phone}" → ${cleaned} (${detectedCountry})`);
     return cleaned;
 }
 
