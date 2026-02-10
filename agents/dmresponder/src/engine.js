@@ -260,6 +260,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               }
 
               contextDescription += `\nINSTRUCTIONS :\n`;
+              contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne tente JAMAIS de convertir toi-même vers un autre fuseau horaire. Si le prospect mentionne être dans un autre pays/fuseau, précise simplement "(heure de Paris)" à côté des créneaux proposés.\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
               contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
