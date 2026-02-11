@@ -25,10 +25,16 @@ export async function qualifyLead(bio, customPrompt = null, username = 'unknown'
     return { qualified: true, reason: 'no_api_key' };
   }
   
-  // Handle empty/missing bio
+  // Handle empty/missing/too-short bio (a single word like a city name is not a real bio)
   if (!bio || bio.trim().length === 0) {
     console.log('   ℹ️  No bio found - proceeding with outreach');
     return { qualified: true, reason: 'no_bio' };
+  }
+
+  const wordCount = bio.trim().split(/\s+/).length;
+  if (wordCount <= 2) {
+    console.log(`   ℹ️  Bio too short to qualify ("${bio.trim()}") - proceeding with outreach`);
+    return { qualified: true, reason: 'bio_too_short' };
   }
   
   try {
