@@ -315,7 +315,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   const data = {
     model: 'gpt-4o', // Or 'gpt-3.5-turbo' for faster, cheaper responses
     messages: messages,
-    temperature: 0.7, // A bit of creativity
+    temperature: 0.3, // Low for consistent tag usage, enough for natural tone
     max_tokens: 1024,
     top_p: 1,
     frequency_penalty: 0,
@@ -329,7 +329,34 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     const rawContent = response.data.choices[0].message.content.trim();
     try {
         const json = JSON.parse(rawContent);
-        return { message: json.message, step_used: json.step_used, booking_intent: json.booking_intent || null };
+        let message = json.message;
+
+        // Safety net: detect closing messages missing [NOT_INTERESTED] tag
+        if (message && !message.includes('[NOT_INTERESTED]')) {
+          const closingPatterns = [
+            'si jamais tu changes d\'avis',
+            'si tu changes d\'avis',
+            'n\'hésite pas à revenir',
+            'prends soin de toi',
+            'belle journée',
+            'bonne continuation',
+            'pas de souci',
+          ];
+          const lowerMsg = message.toLowerCase();
+          const looksLikeClosing = closingPatterns.some(p => lowerMsg.includes(p));
+
+          // Also check if the last user message was a refusal
+          const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
+          const refusalPatterns = ['non merci', 'non ça va', 'pas intéress', 'ça m\'intéresse pas', 'non c\'est bon', 'pas pour moi'];
+          const userRefused = refusalPatterns.some(p => lastUserMsg.includes(p));
+
+          if (looksLikeClosing && userRefused) {
+            message = '[NOT_INTERESTED] ' + message;
+            console.log('[Engine] Safety net: added [NOT_INTERESTED] tag to closing message');
+          }
+        }
+
+        return { message, step_used: json.step_used, booking_intent: json.booking_intent || null };
     } catch (e) {
         // Fallback if model fails JSON (rare with JSON mode)
         console.warn("LLM didn't output valid JSON, falling back to raw text.");

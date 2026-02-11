@@ -527,8 +527,8 @@ export function compareMessages(leadId, scrapedMessages) {
 function normalizeMessage(text) {
   return text
     .toLowerCase()
-    .replace(/\s+/g, ' ')
     .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
