@@ -349,19 +349,16 @@ export async function runEngagementWatcher(options = {}) {
                 }
                 
                 let finalMessage = "";
-                
+
+                if (!messageTemplate || messageTemplate.length < 10) {
+                    messageTemplate = "Hello ! Merci pour ton interaction sur mon dernier post 🌸";
+                }
+
                 if (aiFirstName) {
-                    // NEW PATTERN: Just "[Name] ?" (Pascal case)
                     const normalizedName = aiFirstName.charAt(0).toUpperCase() + aiFirstName.slice(1).toLowerCase();
-                    finalMessage = `${normalizedName} ?`;
+                    finalMessage = messageTemplate.replace(/{{firstName}}/g, normalizedName).replace(/\s+/g, ' ').trim();
                 } else {
-                    // Handle {{firstName}} placeholder
-                    if (!messageTemplate || messageTemplate.length < 10) {
-                        messageTemplate = "Hello ! Merci pour ton interaction sur mon dernier post 🌸";
-                    }
-                    // Remove {{firstName}} and clean up formatting
                     finalMessage = messageTemplate.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
-                    // If it started with "Hello !" (now that name is gone), make sure it's capitalized correctly
                     if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
                 }
                 

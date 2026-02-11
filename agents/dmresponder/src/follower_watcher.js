@@ -315,14 +315,15 @@ export async function runFollowerWatcher(options = {}) {
             let messageTemplate = outreachConfig.followerTemplate;
             
             let finalMessage = "";
+
+            if (!messageTemplate || messageTemplate.length < 5) {
+                messageTemplate = "Hello ! Merci pour ton follow, bienvenue ici 🌸";
+            }
+
             if (aiFirstName) {
-                // NEW PATTERN: Just "[Name] ?" (Pascal case)
                 const normalizedName = aiFirstName.charAt(0).toUpperCase() + aiFirstName.slice(1).toLowerCase();
-                finalMessage = `${normalizedName} ?`;
+                finalMessage = messageTemplate.replace(/{{firstName}}/g, normalizedName).replace(/\s+/g, ' ').trim();
             } else {
-                if (!messageTemplate || messageTemplate.length < 5) {
-                    messageTemplate = "Hello ! Merci pour ton follow, bienvenue ici 🌸";
-                }
                 finalMessage = messageTemplate.replace(/{{firstName}}/g, '').replace(/\s+/g, ' ').trim();
                 if (finalMessage.startsWith('!')) finalMessage = "Hello " + finalMessage;
             }
