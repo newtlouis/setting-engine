@@ -347,10 +347,14 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
 
           // Also check if the last user message was a refusal
           const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
-          const refusalPatterns = ['non merci', 'non ça va', 'pas intéress', 'ça m\'intéresse pas', 'non c\'est bon', 'pas pour moi'];
+          const refusalPatterns = ['non merci', 'non ça va', 'pas intéress', 'ça m\'intéresse pas', 'non c\'est bon', 'pas pour moi', 'juste par curiosité', 'par curiosité', 'pas besoin', 'c\'est bon merci', 'je gère', 'ça ira'];
           const userRefused = refusalPatterns.some(p => lastUserMsg.includes(p));
 
-          if (looksLikeClosing && userRefused) {
+          // Also detect strong closing: LLM itself decided to close (multiple closing signals)
+          const strongClosingPatterns = ['tu sais où me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
+          const strongClosing = looksLikeClosing && strongClosingPatterns.some(p => lowerMsg.includes(p));
+
+          if ((looksLikeClosing && userRefused) || strongClosing) {
             message = '[NOT_INTERESTED] ' + message;
             console.log('[Engine] Safety net: added [NOT_INTERESTED] tag to closing message');
           }
