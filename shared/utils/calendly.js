@@ -13,7 +13,7 @@ const CALENDLY_BASE_URL = 'https://api.calendly.com';
  * Normalize phone to international format (E.164).
  * Supports French (+33), Belgian (+32) and Canadian (+1) numbers.
  */
-function normalizePhone(phone, conversationHints = '') {
+export function normalizePhone(phone, conversationHints = '') {
     if (!phone) return null;
     let cleaned = phone.replace(/[\s.\-()]/g, '');
     const hints = conversationHints.toLowerCase();
@@ -253,6 +253,7 @@ export async function createBooking(profileName, { startTime, email, name, phone
             success: true,
             message: "Rendez-vous confirmé !",
             booking_url: response.data.resource?.uri || eventTypeUri,
+            event_uri: response.data.resource?.event || null,
             prefilled_info: { name, email, phone, startTime }
         };
 
@@ -265,11 +266,86 @@ export async function createBooking(profileName, { startTime, email, name, phone
         // to avoid user-facing errors if we can just give them the link.
         // Actually, the user wants to KNOW if it worked.
         
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: errorData?.message || error.message,
             details: errorData?.details,
             fallback_url: `https://calendly.com/login/redirect?return_to=${encodeURIComponent(eventTypeUrl || '')}`
         };
     }
+}
+
+/**
+ * Cancel a scheduled event via Calendly API v2.
+ *
+ * @param {string} profileName - Profile name for token lookup
+ * @param {string} eventUri - Full URI of the scheduled event (from createBooking().event_uri)
+ * @param {string} [reason] - Optional cancellation reason
+ * @returns {Promise<Object>} { success: true } or { success: false, error: "..." }
+ */
+export async function cancelBooking(profileName, eventUri, reason = undefined) {
+    const { token } = getCalendlyConfig(profileName);
+    if (!token) throw new Error("No Calendly token found.");
+    if (!eventUri) throw new Error("No event URI provided for cancellation.");
+
+    try {
+        const body = {};
+        if (reason) body.reason = reason;
+
+        console.log(`[Calendly] Cancelling event: ${eventUri}`);
+
+        await axios.post(`${eventUri}/cancellation`, body, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        console.log(`[Calendly] Event cancelled successfully`);
+        return { success: true };
+
+    } catch (error) {
+        const errorData = error.response?.data;
+        console.error(`[Calendly] Cancel Error:`, JSON.stringify(errorData, null, 2));
+
+        return {
+            success: false,
+            error: errorData?.message || error.message,
+            details: errorData?.details
+        };
+    }
+}
+
+/**
+ * Reschedule a booking: cancel the old event and create a new one.
+ *
+ * @param {string} profileName
+ * @param {Object} params
+ * @param {string} params.oldEventUri - URI of the event to cancel
+ * @param {string} params.startTime - New slot ISO timestamp
+ * @param {string} params.email
+ * @param {string} params.name
+ * @param {string} [params.phone]
+ * @param {string} [params.conversationHints]
+ * @returns {Promise<Object>} New booking result with rescheduled flag
+ */
+export async function rescheduleBooking(profileName, { oldEventUri, startTime, email, name, phone, conversationHints }) {
+    // 1. Cancel old event
+    const cancelResult = await cancelBooking(profileName, oldEventUri, 'Reprogrammé par le prospect');
+    if (!cancelResult.success) {
+        return {
+            success: false,
+            error: `Impossible d'annuler l'ancien RDV: ${cancelResult.error}`,
+            cancelResult
+        };
+    }
+
+    // 2. Brief pause to avoid Calendly rate limiting after cancel
+    await new Promise(r => setTimeout(r, 4000));
+
+    // 3. Create new booking
+    const newBooking = await createBooking(profileName, { startTime, email, name, phone, conversationHints });
+
+    return {
+        ...newBooking,
+        rescheduled: true,
+        cancelledEventUri: oldEventUri
+    };
 }
