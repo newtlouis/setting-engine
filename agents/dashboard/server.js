@@ -67,6 +67,7 @@ const COMMAND_REGISTRY = {
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--show-browser', '--slow'] },
         { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
+        { name: 'test:e2e', description: 'Test E2E LLM (real API)', options: [] },
     ],
     Collection: [
         { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max', '--show-browser'] },

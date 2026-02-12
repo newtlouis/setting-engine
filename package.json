@@ -41,7 +41,9 @@
         "backup:remote": "npm run backup -- --upload",
         "restore": "node agents/collector/scripts/restore.js",
         "restore:remote": "node agents/collector/scripts/restore.js --remote",
-        "analyze:steps": "cd agents/collector && npm run analyze:steps --"
+        "analyze:steps": "cd agents/collector && npm run analyze:steps --",
+        "test:e2e": "cd agents/dmresponder && npm run test:e2e",
+        "dm-sync": "cd agents/dmresponder && npm run cron -- --inbox"
     },
     "author": "Louis",
     "license": "ISC",
