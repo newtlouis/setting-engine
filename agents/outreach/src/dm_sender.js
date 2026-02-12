@@ -218,6 +218,116 @@ export async function checkCanContact(page) {
   return { canContact: false };
 }
 
+// Track follows per session to respect Instagram limits
+let followCountThisSession = 0;
+const MAX_FOLLOWS_PER_SESSION = 50;
+
+/**
+ * Reset the follow counter (call at start of each session)
+ */
+export function resetFollowCounter() {
+  followCountThisSession = 0;
+}
+
+/**
+ * Get current follow count for this session
+ */
+export function getFollowCount() {
+  return followCountThisSession;
+}
+
+/**
+ * Attempt to unlock DM by following the profile
+ * Instagram allows DM if both users follow each other
+ * 
+ * @param {Page} page - Playwright page on profile
+ * @param {string} username - Username for logging
+ * @returns {Promise<{unlocked: boolean, followed: boolean, error?: string}>}
+ */
+export async function tryFollowToUnlockDM(page, username) {
+  try {
+    console.log(`   🔧 Tentative de déblocage DM : follow @${username}...`);
+    
+    // Check follow limit
+    if (followCountThisSession >= MAX_FOLLOWS_PER_SESSION) {
+      console.log(`   🛑 Limite de follows atteinte (${MAX_FOLLOWS_PER_SESSION}). Skipping follow.`);
+      return { unlocked: false, followed: false, error: 'follow_limit_reached' };
+    }
+    
+    // 1. Check if already following
+    const alreadyFollowing = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+      return buttons.some(b => {
+        const text = b.textContent?.trim().toLowerCase() || '';
+        return text === 'following' || text === 'abonné' || text === 'abonné(e)' || 
+               text === 'message' || text === 'contacter';
+      });
+    });
+    
+    if (alreadyFollowing) {
+      console.log(`   ℹ️  Déjà abonné à @${username} mais toujours pas de bouton Contacter`);
+      return { unlocked: false, followed: false, error: 'already_following_no_dm' };
+    }
+    
+    // 2. Find and click the "Follow" / "Suivre" / "Suivre en retour" button
+    const followClicked = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const followBtn = buttons.find(b => {
+        const text = b.textContent?.trim().toLowerCase() || '';
+        return text === 'follow' || 
+               text === 'suivre' || 
+               text === "s'abonner" || 
+               text === 'follow back' || 
+               text === 'suivre en retour';
+      });
+      
+      if (followBtn) {
+        followBtn.click();
+        return true;
+      }
+      return false;
+    });
+    
+    if (!followClicked) {
+      console.log(`   ⚠️  Bouton "Suivre" introuvable sur @${username}`);
+      return { unlocked: false, followed: false, error: 'follow_button_not_found' };
+    }
+    
+    followCountThisSession++;
+    console.log(`   ✅ Abonnement à @${username} effectué`);
+    console.log(`   📊 Follows cette session: ${followCountThisSession}/${MAX_FOLLOWS_PER_SESSION}`);
+    
+    await delay(2000, 3000); // Wait for Instagram to process
+    
+    // 3. Reload the page to see the "Contacter" button
+    console.log(`   🔄 Rechargement de la page...`);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await delay(2000, 3000);
+    
+    // Check for challenge after reload
+    if (await checkForChallenge(page)) {
+      console.log(`   ⚠️  Challenge détecté après reload - retour nécessaire`);
+      return { unlocked: false, followed: true, error: 'challenge_after_reload' };
+    }
+    
+    // 4. Re-check the "Contacter" button
+    const { canContact } = await checkCanContact(page);
+    
+    if (canContact) {
+      console.log(`   🎉 Bouton "Contacter" maintenant disponible !`);
+      return { unlocked: true, followed: true };
+    } else {
+      console.log(`   ❌ Bouton "Contacter" toujours absent même après follow`);
+      console.log(`   ℹ️  Le lead doit peut-être accepter notre demande d'abonnement d'abord`);
+      return { unlocked: false, followed: true, error: 'still_no_contact_after_follow' };
+    }
+    
+  } catch (error) {
+    console.error(`   ⚠️  Erreur lors du follow: ${error.message}`);
+    return { unlocked: false, followed: false, error: error.message };
+  }
+}
+
 /**
  * Scrape profile data (bio, full name) from Instagram profile page
  * Uses the same robust logic as the Collector agent
