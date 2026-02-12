@@ -139,6 +139,25 @@ const SCENARIOS = [
     hardAssertions: {}
   },
   {
+    name: 'Past issue - no longer concerned (step 2)',
+    initialStep: 1,
+    userMessages: [
+      {
+        text: 'Oui',
+        expectedStepRange: [2, 2],
+        expectNotInterested: false,
+      },
+      {
+        text: "Non c'est pas ce que j'ai été longtemps dépendant affective et je sais que c'est vraiment une galère et parfois je vois des textes et des choses qui me font vibrer",
+        expectedStepRange: [2, 3],
+        expectNotInterested: true,
+      },
+    ],
+    hardAssertions: {
+      mustHaveNotInterested: true,
+    }
+  },
+  {
     name: 'Objection prix (step 5)',
     initialStep: 1,
     userMessages: [
@@ -408,9 +427,23 @@ describe('E2E LLM Evaluation', {
     }
   });
 
-  // Scenario 4: Price objection
-  test('Price objection handling', { timeout: 60_000 }, async () => {
+  // Scenario 4: Past issue - no longer concerned
+  test('Past issue - no longer concerned', { timeout: 60_000 }, async () => {
     const scenario = SCENARIOS[3];
+    const { results } = await runScenario(scenario);
+    const report = printScenarioReport(scenario.name, results);
+
+    const hasNI = results.some(r => r.notInterested);
+    assert.ok(hasNI, 'Should detect NOT_INTERESTED when user talks about past dependency ("j\'ai été")');
+
+    for (const r of results) {
+      assert.ok(r.cleanMessage, 'Response should not be empty');
+    }
+  });
+
+  // Scenario 5: Price objection
+  test('Price objection handling', { timeout: 60_000 }, async () => {
+    const scenario = SCENARIOS[4];
     const { results } = await runScenario(scenario);
     const report = printScenarioReport(scenario.name, results);
 
