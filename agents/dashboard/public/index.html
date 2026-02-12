@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Base Variables (Premium Dark) */
         :root {
@@ -694,90 +695,36 @@
             </div>
         </div>
 
-        <!-- Section Header with Search -->
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 20px;">
-            <h2 style="font-size: 20px; font-weight: 700; margin: 0;">Leads Management</h2>
-            <div class="search-container">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="searchInput" class="search-input" placeholder="Rechercher par username..."
-                    oninput="onSearchInput()">
-            </div>
-        </div>
-
-        <div class="controls" style="flex-wrap: wrap;">
-            <button class="btn-filter" onclick="loadLeads('all')">All</button>
-            <button class="btn-filter active" onclick="loadLeads('new')">New</button>
-            <button class="btn-filter" onclick="loadLeads('contacted')">Contacted</button>
-            <button class="btn-filter" onclick="loadLeads('conversation')">Conversation</button>
-
-            <!-- Step 5 Sub-filters -->
-            <div
-                style="display: flex; gap: 4px; background: rgba(88, 166, 255, 0.1); padding: 4px; border-radius: 6px; border: 1px solid rgba(88, 166, 255, 0.2);">
-                <button class="btn-filter" onclick="loadLeads('step5_new')" style="border:none; background:none;">Etape
-                    5: New</button>
-                <button class="btn-filter" onclick="loadLeads('step5_confirmed')"
-                    style="border:none; background:none;">Etape 5: Confirmed</button>
-                <button class="btn-filter" onclick="loadLeads('step5_old')" style="border:none; background:none;">Etape
-                    5: Old</button>
+        <!-- Velocity Section -->
+        <div style="margin-bottom: 32px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2 style="font-size: 16px; margin: 0; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    Velocity
+                </h2>
+                <div style="display: flex; gap: 4px; background: var(--bg-card); padding: 4px; border-radius: 6px; border: 1px solid var(--border);">
+                    <button class="btn-filter velocity-period" data-days="7" onclick="loadVelocity(7)" style="padding: 6px 12px; font-size: 12px;">7j</button>
+                    <button class="btn-filter velocity-period active" data-days="30" onclick="loadVelocity(30)" style="padding: 6px 12px; font-size: 12px;">30j</button>
+                    <button class="btn-filter velocity-period" data-days="90" onclick="loadVelocity(90)" style="padding: 6px 12px; font-size: 12px;">90j</button>
+                </div>
             </div>
 
-            <button class="btn-filter" onclick="loadLeads('manual')">Manual</button>
-            <button class="btn-filter" onclick="loadLeads('booked')">Booked</button>
-            <button class="btn-filter" onclick="loadLeads('not_interested')">Not Interested</button>
-            <button class="btn-filter" onclick="loadLeads('failed')">Failed</button>
-        </div>
-
-        <!-- Data Table -->
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 40px;">
-                            <input type="checkbox" id="selectAllLeads" onchange="toggleSelectAll(this.checked)"
-                                style="cursor: pointer;">
-                        </th>
-                        <th>Lead</th>
-                        <th>Status</th>
-                        <th>Step</th>
-                        <th>Type</th>
-                        <th>Source</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="leadsTableBody">
-                    <tr>
-                        <td colspan="5" class="loading">Loading data...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Bulk Action Toolbar (Floating at bottom) -->
-    <div id="bulkActionBar"
-        style="display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 900; align-items: center; gap: 20px;">
-        <div style="font-weight: 600; color: var(--accent);">
-            <span id="selectedCount">0</span> selected
-        </div>
-        <div style="display: flex; gap: 12px;">
-            <button onclick="showBulkIgnoreConfirm()" class="btn-modal btn-confirm"
-                style="padding: 6px 16px; font-size: 13px;">Ignore All Selected</button>
-            <button onclick="clearSelection()" class="btn-modal btn-cancel"
-                style="padding: 6px 16px; font-size: 13px;">Cancel</button>
-        </div>
-    </div>
-
-    <!-- Confirmation Modal -->
-    <div class="modal-overlay" id="confirmModal">
-        <div class="modal-content">
-            <div class="modal-title" id="modalTitle">Ignore Lead?</div>
-            <div class="modal-text" id="modalText">
-                This lead will be hidden from the dashboard and ignored by all agents (Outreach & DM Responder).
+            <!-- Line Chart: Evolution -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                <canvas id="velocityChart" height="100"></canvas>
             </div>
-            <div class="modal-actions">
-                <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="btn-modal btn-confirm" id="modalConfirmBtn">Ignore Lead</button>
+
+            <!-- Two columns: Source Bar Chart + Source Table -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                    <h3 style="font-size: 14px; margin: 0 0 16px 0; color: var(--text-secondary);">Performance par source</h3>
+                    <canvas id="sourceChart" height="200"></canvas>
+                </div>
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;">
+                    <h3 style="font-size: 14px; margin: 0 0 16px 0; color: var(--text-secondary);">Detail par source</h3>
+                    <div id="velocitySourceTable">
+                        <div style="color: var(--text-secondary); font-size: 13px;">Chargement...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
