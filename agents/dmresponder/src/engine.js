@@ -345,18 +345,20 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
             'pas de souci',
           ];
           const lowerMsg = message.toLowerCase();
-          const looksLikeClosing = closingPatterns.some(p => lowerMsg.includes(p));
+          const closingMatchCount = closingPatterns.filter(p => lowerMsg.includes(p)).length;
+          const looksLikeClosing = closingMatchCount >= 1;
 
           // Also check if the last user message was a refusal
           const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
           const refusalPatterns = ['non merci', 'non ça va', 'pas intéress', 'ça m\'intéresse pas', 'non c\'est bon', 'pas pour moi', 'juste par curiosité', 'par curiosité', 'pas besoin', 'c\'est bon merci', 'je gère', 'ça ira', 'j\'ai été', 'j\'étais', 'c\'est du passé', 'c\'est plus le cas', 'plus maintenant'];
           const userRefused = refusalPatterns.some(p => lastUserMsg.includes(p));
 
-          // Also detect strong closing: LLM itself decided to close (multiple closing signals)
+          // Strong closing: LLM itself decided to close (2+ closing signals = definitive closing)
           const strongClosingPatterns = ['tu sais où me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
           const strongClosing = looksLikeClosing && strongClosingPatterns.some(p => lowerMsg.includes(p));
+          const multipleClosingSignals = closingMatchCount >= 2;
 
-          if ((looksLikeClosing && userRefused) || strongClosing) {
+          if ((looksLikeClosing && userRefused) || strongClosing || multipleClosingSignals) {
             message = '[NOT_INTERESTED] ' + message;
             console.log('[Engine] Safety net: added [NOT_INTERESTED] tag to closing message');
           }
