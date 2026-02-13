@@ -365,19 +365,23 @@ app.get('/api/analytics/velocity', (req, res) => {
         const accountParam = account_id ? [parseInt(account_id)] : [];
         const daysInt = parseInt(days);
 
-        // Daily stats
+        // Daily stats: "contacted" = date of FIRST message sent to each lead
         const daily = db.prepare(`
-            SELECT
-                DATE(l.created_at) as date,
+            SELECT first_contact_day as date,
                 COUNT(*) as contacted,
                 SUM(CASE WHEN l.status = 'not_interested' THEN 1 ELSE 0 END) as not_interested,
                 SUM(CASE WHEN l.booking_status = 'completed' THEN 1 ELSE 0 END) as booked
-            FROM leads l
-            WHERE l.total_messages_sent > 0
-              AND l.is_ignored = 0
-              AND l.created_at >= DATE('now', '-' || ? || ' days')
+            FROM (
+                SELECT c.lead_id, DATE(MIN(c.sent_at)) as first_contact_day
+                FROM conversations c
+                WHERE c.role = 'assistant'
+                GROUP BY c.lead_id
+            ) fc
+            JOIN leads l ON l.id = fc.lead_id
+            WHERE l.is_ignored = 0
+              AND first_contact_day >= DATE('now', '-' || ? || ' days')
               ${accountFilter}
-            GROUP BY DATE(l.created_at)
+            GROUP BY first_contact_day
             ORDER BY date ASC
         `).all(daysInt, ...accountParam);
 
