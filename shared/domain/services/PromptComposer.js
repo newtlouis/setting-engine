@@ -173,7 +173,8 @@ C'est plutôt personnel ou par curiosité ? 😊"
 **DÉTECTION DÉSINTÉRÊT (CRITIQUE) :** Si la réponse indique que le sujet ne les concerne PAS personnellement :
 - "Pas spécialement", "Pas vraiment", "Non pas trop", "Je connais le sujet mais c'est pas mon cas"
 - "Ah bon", "Pas trop", "Je vais bien merci", "Non ça va"
-- Toute réponse qui montre que la personne n'est PAS notre cible (elle connaît le sujet mais n'en souffre pas)
+- "Je m'intéresse à plein de choses", "Par curiosité", "C'est juste un intérêt", "Je sais pas trop", "Pas forcément personnel"
+- Toute réponse vague/évasive qui montre que la personne n'est PAS personnellement concernée (simple curiosité, intérêt général)
 → Utilise [NOT_INTERESTED] et clôture POLIMENT avec un message du style :
 "Pas de souci, merci pour ta réponse ! 🌸 Si jamais le sujet te parle un jour, n'hésite pas. Belle journée à toi ✨"`,
 
