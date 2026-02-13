@@ -264,7 +264,7 @@ export async function runProspector(options = {}) {
              if (!profileResult.success) {
                console.log(`   ❌ Could not open profile: ${profileResult.error}`);
                stats.leadsFailed++;
-               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', profileResult.error);
+               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', profileResult.error, null, null, null, currentSourceRaw);
                continue;
              }
 
@@ -279,7 +279,7 @@ export async function runProspector(options = {}) {
              if (!contactCheck.canContact) {
                console.log(`   🔒 @${username}: No Contact button`);
                stats.leadsSkipped++;
-               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', 'private_account_no_contact');
+               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', 'private_account_no_contact', null, null, null, currentSourceRaw);
                continue;
              }
 
@@ -295,7 +295,7 @@ export async function runProspector(options = {}) {
                if (!qualResult.qualified) {
                  console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
                  stats.leadsSkipped++;
-                 saveLeadToDb(username, comment, accountId, 'failed', 'competitor');
+                 saveLeadToDb(username, comment, accountId, 'failed', 'competitor', null, null, null, currentSourceRaw);
                  await delay(1000, 2000);
                  continue;
                }
@@ -359,7 +359,7 @@ export async function runProspector(options = {}) {
                   
                   if (queueResult) {
                       console.log(`   📦 Queued @${username} for later sending.`);
-                      saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName);
+                      saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw);
                       stats.leadsContacted++;
                       console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
                   } else {
@@ -382,7 +382,7 @@ export async function runProspector(options = {}) {
                      stats.leadsContacted++;
 
                      // Save to database
-                     saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl, aiFirstName);
+                     saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl, aiFirstName, currentSourceRaw);
                                           // Record conversation
                       const lead = dbFunctions.getLeadByUsername(username, accountId);
                       if (lead) {
@@ -392,20 +392,20 @@ export async function runProspector(options = {}) {
                    } else if (sendResult.skipped) {
                      if (sendResult.existingConversation) {
                        console.log(`   ⏭️  @${username}: Conversation existante détectée - Marqué comme 'already_known'.`);
-                       saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl, aiFirstName);
+                       saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl, aiFirstName, currentSourceRaw);
                      } else if (sendResult.isCompetitor) {
                         // This should have been caught by qualifyLead, but safety check
                        console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
-                       saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData, null, aiFirstName);
+                       saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData, null, aiFirstName, currentSourceRaw);
                      } else {
                        console.log(`   ⏭️  @${username}: Lead ignoré (${sendResult.error || 'raison inconnue'})`);
-                       saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData, null, aiFirstName);
+                       saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData, null, aiFirstName, currentSourceRaw);
                      }
                      stats.leadsSkipped++;
                    } else {
                      console.log(`   ❌ Failed to send: ${sendResult.error}`);
                      stats.leadsFailed++;
-                     saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, null, null, aiFirstName);
+                     saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, null, null, aiFirstName, currentSourceRaw);
                    }
               }
 
@@ -471,7 +471,7 @@ export async function runProspector(options = {}) {
 /**
  * Helper to save lead to database
  */
-function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null) {
+function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null, sourceTag = null) {
   try {
     // Insert or update lead
     const lead = dbFunctions.getLeadByUsername(username, accountId);
@@ -489,7 +489,7 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
         profileData?.fullName || null,
         profileData?.bio || null,
         dmUrl || null,
-        comment.post_url || 'prospect',
+        sourceTag || 'prospect',
         firstName || null,
         failReason ? `Failed: ${failReason}` : null
       );
