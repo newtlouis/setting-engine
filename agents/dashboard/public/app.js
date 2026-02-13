@@ -355,33 +355,77 @@ function renderSourceChart(bySource) {
     });
 }
 
+let sourceTableData = [];
+let sourceTableSort = { col: 'rate', asc: false };
+
 function renderVelocitySourceTable(bySource) {
     const container = document.getElementById('velocitySourceTable');
     if (!container) return;
 
-    if (!bySource || bySource.length === 0) {
+    if (bySource) sourceTableData = bySource;
+
+    if (!sourceTableData || sourceTableData.length === 0) {
         container.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Aucune donnee</div>';
         return;
     }
 
+    // Compute sortable values
+    const rows = sourceTableData.map(src => ({
+        source: src.source_group || src.source || 'unknown',
+        contacted: src.contacted,
+        replied: src.replied,
+        rate: src.contacted > 0 ? src.replied / src.contacted * 100 : 0,
+        booked: src.booked,
+        bookingRate: src.contacted > 0 ? src.booked / src.contacted * 100 : 0
+    }));
+
+    // Sort
+    const { col, asc } = sourceTableSort;
+    rows.sort((a, b) => {
+        const va = typeof a[col] === 'string' ? a[col].toLowerCase() : a[col];
+        const vb = typeof b[col] === 'string' ? b[col].toLowerCase() : b[col];
+        if (va < vb) return asc ? -1 : 1;
+        if (va > vb) return asc ? 1 : -1;
+        return 0;
+    });
+
+    const arrow = (c) => sourceTableSort.col === c ? (sourceTableSort.asc ? ' ▲' : ' ▼') : '';
+    const thStyle = 'cursor: pointer; user-select: none;';
+
     let html = `
         <table class="source-table">
-            <thead><tr><th>Source</th><th>Contactes</th><th>Repondu</th><th>Taux</th><th>RDV</th></tr></thead>
+            <thead><tr>
+                <th style="${thStyle}" onclick="sortSourceTable('source')">Source${arrow('source')}</th>
+                <th style="${thStyle}" onclick="sortSourceTable('contacted')">Contactes${arrow('contacted')}</th>
+                <th style="${thStyle}" onclick="sortSourceTable('replied')">Repondu${arrow('replied')}</th>
+                <th style="${thStyle}" onclick="sortSourceTable('rate')">Taux de reponse${arrow('rate')}</th>
+                <th style="${thStyle}" onclick="sortSourceTable('booked')">RDV${arrow('booked')}</th>
+                <th style="${thStyle}" onclick="sortSourceTable('bookingRate')">Taux RDV${arrow('bookingRate')}</th>
+            </tr></thead>
             <tbody>
     `;
-    bySource.forEach(src => {
-        const source = src.source_group || src.source || 'unknown';
-        const replyRate = src.contacted > 0 ? (src.replied / src.contacted * 100).toFixed(1) : '0.0';
+    rows.forEach(r => {
         html += `
             <tr>
-                <td style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${source}">${source}</td>
-                <td>${src.contacted}</td>
-                <td>${src.replied}</td>
-                <td><span style="color: ${parseFloat(replyRate) > 10 ? 'var(--success)' : 'var(--text-secondary)'};">${replyRate}%</span></td>
-                <td>${src.booked}</td>
+                <td style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.source}">${r.source}</td>
+                <td>${r.contacted}</td>
+                <td>${r.replied}</td>
+                <td><span style="color: ${r.rate > 10 ? 'var(--success)' : 'var(--text-secondary)'};">${r.rate.toFixed(1)}%</span></td>
+                <td>${r.booked}</td>
+                <td><span style="color: ${r.bookingRate > 3 ? 'var(--success)' : 'var(--text-secondary)'};">${r.bookingRate.toFixed(1)}%</span></td>
             </tr>
         `;
     });
     html += '</tbody></table>';
     container.innerHTML = html;
+}
+
+function sortSourceTable(col) {
+    if (sourceTableSort.col === col) {
+        sourceTableSort.asc = !sourceTableSort.asc;
+    } else {
+        sourceTableSort.col = col;
+        sourceTableSort.asc = false;
+    }
+    renderVelocitySourceTable(null);
 }
