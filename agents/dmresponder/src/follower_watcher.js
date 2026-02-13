@@ -293,18 +293,12 @@ export async function runFollowerWatcher(options = {}) {
                     return false;
                 });
                 if (followedBack) {
-                    console.log(`   ✅ Followed back @${username}.`);
+                    console.log(`   ✅ Followed back @${username}. Will retry next run.`);
                     await new Promise(r => setTimeout(r, 1500));
                 } else {
                     console.log(`   ⚠️ No "Suivre en retour" button found for @${username}.`);
                 }
-                await fullUpsertLead(username, account.id, {
-                    status: 'uncontactable',
-                    full_name: metadata.fullName,
-                    bio: metadata.bio,
-                    lead_source: 'new_follower',
-                    notes: followedBack ? 'Followed back, no message button.' : 'No message button found on profile.'
-                });
+                // Don't save to DB — next run will re-check and contact if accepted
                 continue;
             }
 
