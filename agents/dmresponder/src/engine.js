@@ -248,7 +248,8 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
 
           const formatSlot = (s) => {
               const d = new Date(s.start_time);
-              return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+              const readable = d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+              return `${readable} [ISO:${s.start_time}]`;
           };
 
           const hasThisWeek = availability.thisWeek?.primary?.length > 0;
@@ -274,7 +275,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               }
 
               contextDescription += `\nINSTRUCTIONS :\n`;
-              contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne tente JAMAIS de convertir toi-même vers un autre fuseau horaire. Si le prospect mentionne être dans un autre pays/fuseau, précise simplement "(heure de Paris)" à côté des créneaux proposés.\n`;
+              contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne précise PAS "heure de Paris" dans ton message SAUF si le prospect a mentionné être dans un autre pays/fuseau (Canada, Belgique, etc.). Dans ce cas seulement, ajoute "(heure de Paris)".\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
               contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
@@ -303,6 +304,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   }
   "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4, 5, 6, 7, 8 ou 9).
   "booking_intent" ne doit être rempli QUE si tu as TOUTES les informations (créneau choisi, email, téléphone) pour valider le RDV. Sinon, mets null.
+  ⚠️ Pour le champ "slot" : copie EXACTEMENT la valeur ISO entre crochets [ISO:...] du créneau choisi. N'essaie JAMAIS de construire l'ISO toi-même.
   `;
 
 

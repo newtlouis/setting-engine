@@ -589,8 +589,36 @@ export async function runInboxScanner(options = {}) {
                       } else {
                           console.log(`   ⚠️ Calendly booking FAILED: ${bookingResult.error}`);
                           if (bookingResult.details) console.log(`   📋 Details:`, JSON.stringify(bookingResult.details));
+
+                          // Re-fetch availability and propose alternatives
+                          try {
+                              const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
+                              const freshAvailability = await fetchAvailability(profile);
+                              const allSlots = [
+                                  ...(freshAvailability.thisWeek?.primary || []),
+                                  ...(freshAvailability.thisWeek?.backup || []),
+                                  ...(freshAvailability.nextWeek?.primary || []),
+                                  ...(freshAvailability.nextWeek?.backup || [])
+                              ];
+
+                              if (allSlots.length > 0) {
+                                  const formatAlt = (s) => {
+                                      const d = new Date(s.start_time);
+                                      return d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+                                  };
+                                  const alternatives = allSlots.slice(0, 3).map(formatAlt);
+                                  finalMessage = `Oups, ce créneau n'est plus dispo 😅 Voici d'autres possibilités :\n${alternatives.map(a => `- ${a}`).join('\n')}\nEst-ce qu'un de ces créneaux te conviendrait ? 🌸`;
+                                  console.log(`   🔄 Proposing ${alternatives.length} alternative slots`);
+                              } else {
+                                  finalMessage = `Oups, ce créneau n'est plus disponible 😅 Est-ce que tu aurais d'autres disponibilités cette semaine ? Je regarde de mon côté aussi 🌸`;
+                              }
+                          } catch (altErr) {
+                              console.error(`   ⚠️ Could not fetch alternatives:`, altErr.message);
+                              finalMessage = `Oups, ce créneau n'est plus disponible 😅 Est-ce que tu aurais d'autres disponibilités ? 🌸`;
+                          }
+
                           bookingStatus = 'failed';
-                          // Keep original message, don't confirm what didn't happen
+                          newStatus = 'scheduling';
                       }
                   } catch (e) {
                       console.error(`   ❌ Booking API error (attempt ${bookingAttempts}):`, e.message);
