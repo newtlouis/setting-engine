@@ -278,13 +278,32 @@ export async function runFollowerWatcher(options = {}) {
 
             // 6b. Contact Check
             if (!metadata.canContact) {
-                console.log(`   🚫 @${username} not contactable (No Message button). Skipping.`);
+                console.log(`   🚫 @${username} not contactable (No Message button). Attempting follow back...`);
+                // Click "Suivre en retour" button if present
+                const followedBack = await page.evaluate(() => {
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const followBtn = buttons.find(b => {
+                        const txt = b.innerText?.trim().toLowerCase();
+                        return txt === 'suivre en retour' || txt === 'follow back';
+                    });
+                    if (followBtn) {
+                        followBtn.click();
+                        return true;
+                    }
+                    return false;
+                });
+                if (followedBack) {
+                    console.log(`   ✅ Followed back @${username}.`);
+                    await new Promise(r => setTimeout(r, 1500));
+                } else {
+                    console.log(`   ⚠️ No "Suivre en retour" button found for @${username}.`);
+                }
                 await fullUpsertLead(username, account.id, {
                     status: 'uncontactable',
                     full_name: metadata.fullName,
                     bio: metadata.bio,
                     lead_source: 'new_follower',
-                    notes: 'No message button found on profile.'
+                    notes: followedBack ? 'Followed back, no message button.' : 'No message button found on profile.'
                 });
                 continue;
             }
