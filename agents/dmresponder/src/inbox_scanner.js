@@ -487,6 +487,23 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
+          // 6b. Auto-advance steps when prospect has replied
+          if (leadContext.funnel_step === 1 && updatedHistory.some(m => m.role === 'user')) {
+            console.log(`   📍 Auto-advancing from step 1 → 2 (prospect replied)`);
+            leadContext.funnel_step = 2;
+            await setDmThreadStatus(username, 'conversation', { funnel_step: 2 });
+          }
+          // Auto-advance step 5→6: prospect replied to call proposal → propose slots
+          if (leadContext.funnel_step === 5) {
+            const lastAssistant = [...updatedHistory].reverse().find(m => m.role === 'assistant');
+            const callProposed = lastAssistant && /30 min|appel|se call|on prenne|dispo/.test(lastAssistant.text || '');
+            if (callProposed && updatedHistory[updatedHistory.length - 1]?.role === 'user') {
+              console.log(`   📍 Auto-advancing from step 5 → 6 (prospect replied to call proposal)`);
+              leadContext.funnel_step = 6;
+              await setDmThreadStatus(username, 'conversation', { funnel_step: 6 });
+            }
+          }
+
           // 7. Generate Response
           console.log(`   🤖 Generating response...`);
           const response = await generateResponse({
