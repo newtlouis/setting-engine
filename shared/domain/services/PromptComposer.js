@@ -53,9 +53,10 @@ Tu dois suivre les ÉTAPES de conversation définies ci-dessous.
  * @param {AccountPersona} options.persona - The account persona
  * @param {FunnelStage[]} options.stages - The funnel stages with conversation scripts
  * @param {Object} options.leadContext - Optional lead context for personalization
+ * @param {number} options.currentStep - Current funnel step (1-9) to focus the prompt
  * @returns {string} The composed system prompt
  */
-export function composeSystemPrompt({ persona, stages, leadContext = null }) {
+export function composeSystemPrompt({ persona, stages, leadContext = null, currentStep = 0 }) {
   const parts = [];
 
   // 1. Add persona introduction
@@ -71,9 +72,9 @@ export function composeSystemPrompt({ persona, stages, leadContext = null }) {
     parts.push(`\n**RÈGLES SPÉCIFIQUES :**\n${persona.communicationRules}`);
   }
 
-  // 4. Add conversation flow from stages
+  // 4. Add conversation flow from stages (focused on current step)
   if (stages && stages.length > 0) {
-    parts.push(composeStagesSection(stages));
+    parts.push(composeStagesSection(stages, currentStep));
   }
 
   // 5. Objections handling - MIGRATED TO RAG
@@ -112,27 +113,70 @@ function composePersonaSection(persona) {
 }
 
 /**
- * Compose the conversation stages section
+ * Compose the conversation stages section.
+ * If currentStep is provided, only inject the relevant stages (prev/current/next)
+ * to reduce confusion and keep the LLM focused.
  */
-function composeStagesSection(stages) {
-  let section = `**FLOW DE CONVERSATION :**\n`;
-  section += `Suis ces étapes dans l'ordre. Analyse l'historique pour déterminer où tu en es.\n\n`;
+function composeStagesSection(stages, currentStep = 0) {
+  // Sort stages by stageOrder
+  const sorted = [...stages].sort((a, b) => a.stageOrder - b.stageOrder);
 
-  for (const stage of stages) {
-    if (stage.conversationScript) {
-      section += `---\n\n${stage.conversationScript}\n\n`;
-    } else {
-      // Fallback: generate minimal script from stage metadata
-      section += `---\n\n`;
-      section += `[${stage.stageLabel}] – ${stage.stageName.toUpperCase()}\n`;
-      if (stage.description) {
-        section += `Objectif: ${stage.description}\n`;
-      }
-      section += `\n`;
+  // Fallback: no current step known → show all stages (legacy behavior)
+  if (!currentStep || currentStep <= 0) {
+    let section = `**FLOW DE CONVERSATION :**\n`;
+    section += `Suis ces étapes dans l'ordre. Analyse l'historique pour déterminer où tu en es.\n\n`;
+    for (const stage of sorted) {
+      section += formatStageFull(stage);
     }
+    return section;
+  }
+
+  // Focused mode: only show relevant stages
+  const prevStage = sorted.find(s => s.stageOrder === currentStep - 1);
+  const currStage = sorted.find(s => s.stageOrder === currentStep);
+  const nextStage = sorted.find(s => s.stageOrder === currentStep + 1);
+
+  let section = `**ÉTAPE ACTUELLE : STEP_${currentStep}**\n`;
+  section += `⚠️ Tu DOIS utiliser le script de l'étape ${currentStep} ci-dessous. Ne saute PAS d'étape.\n\n`;
+
+  // Previous step (summary only, for context)
+  if (prevStage) {
+    section += `--- ÉTAPE PRÉCÉDENTE (contexte, DÉJÀ FAITE) ---\n`;
+    section += `[STEP_${prevStage.stageOrder}] – ${prevStage.stageLabel}\n`;
+    section += `Objectif : ${prevStage.description || prevStage.stageName}\n`;
+    section += `(Cette étape est terminée. Ne répète PAS ses questions.)\n\n`;
+  }
+
+  // Current step (full script)
+  if (currStage) {
+    section += `--- ✅ ÉTAPE EN COURS (UTILISE CE SCRIPT) ---\n`;
+    section += formatStageFull(currStage);
+  }
+
+  // Next step (objective only, so the LLM knows where it's going)
+  if (nextStage) {
+    section += `--- ÉTAPE SUIVANTE (pour info, N'Y VA PAS ENCORE) ---\n`;
+    section += `[STEP_${nextStage.stageOrder}] – ${nextStage.stageLabel}\n`;
+    section += `Objectif : ${nextStage.description || nextStage.stageName}\n\n`;
   }
 
   return section;
+}
+
+/**
+ * Format a single stage with its full script
+ */
+function formatStageFull(stage) {
+  if (stage.conversationScript) {
+    return `---\n\n${stage.conversationScript}\n\n`;
+  }
+  let s = `---\n\n`;
+  s += `[${stage.stageLabel}] – ${stage.stageName.toUpperCase()}\n`;
+  if (stage.description) {
+    s += `Objectif: ${stage.description}\n`;
+  }
+  s += `\n`;
+  return s;
 }
 
 /**

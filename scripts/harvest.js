@@ -93,7 +93,7 @@ async function main() {
   console.log('\n--- PHASE 1: NEW FOLLOWERS ---');
   try {
     const remaining = target - currentCount;
-    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--target-message-count', String(remaining)]);
+    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--track-week', '--target-message-count', String(remaining)]);
   } catch (err) {
     console.error(`⚠️ Followers phase error: ${err.message}`);
   }

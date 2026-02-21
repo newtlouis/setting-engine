@@ -903,11 +903,7 @@ export async function scrapeProfileMetadata(page, username) {
                 }
             }
 
-            // Fallback for Bio: meta description
-            if (!bio) {
-                const metaDesc = document.querySelector('meta[name="description"]');
-                if (metaDesc) bio = metaDesc.getAttribute('content') || '';
-            }
+            // No fallback for bio — meta description contains Instagram SEO snippet, not the actual bio
 
             // 3. Following Check
             const buttons = Array.from(document.querySelectorAll('button'));

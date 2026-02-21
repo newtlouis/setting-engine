@@ -88,13 +88,14 @@ export async function generateRevivalMessage(conversationHistory, leadContext) {
 /**
  * Get the system prompt from database for an account
  * @param {number} accountId - The account ID
+ * @param {number} funnelStep - Current funnel step to focus the prompt
  * @returns {Promise<string|null>} The composed system prompt or null if not configured
  */
-async function getPromptFromDatabase(accountId) {
+async function getPromptFromDatabase(accountId, funnelStep = 0) {
   if (!accountId) return null;
 
-  // Check cache first
-  const cacheKey = `prompt_${accountId}`;
+  // Check cache first (keyed by account + step)
+  const cacheKey = `prompt_${accountId}_step${funnelStep}`;
   if (promptCache.has(cacheKey)) {
     const cached = promptCache.get(cacheKey);
     // Cache for 5 minutes
@@ -118,7 +119,7 @@ async function getPromptFromDatabase(accountId) {
       return null;
     }
 
-    const prompt = composeSystemPrompt({ persona, stages });
+    const prompt = composeSystemPrompt({ persona, stages, currentStep: funnelStep });
 
     // Cache the result
     promptCache.set(cacheKey, { prompt, timestamp: Date.now() });
@@ -170,8 +171,9 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
 
   // Try to get prompt from database first (if accountId is available)
   const accountId = leadContext?.account_id || profileConfig?.account_id || null;
+  const funnelStep = leadContext?.funnel_step || 0;
   if (accountId) {
-    const dbPrompt = await getPromptFromDatabase(accountId);
+    const dbPrompt = await getPromptFromDatabase(accountId, funnelStep);
     if (dbPrompt) {
       systemPrompt = dbPrompt;
     }
@@ -190,10 +192,16 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       const container = await getContainer();
       const ragRetriever = container.services.ragRetriever;
 
-      // Get the last prospect message
-      const lastProspectMessage = conversationHistory
-        .filter(m => m.role === 'user')
-        .pop()?.text || '';
+      // Get all consecutive user messages at the end (prospects often send multiple messages)
+      const lastProspectMessages = [];
+      for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        if (conversationHistory[i].role === 'user') {
+          lastProspectMessages.unshift(conversationHistory[i].text);
+        } else {
+          break;
+        }
+      }
+      const lastProspectMessage = lastProspectMessages.join(' ') || '';
 
       console.log(`[Engine] RAG lookup for: "${lastProspectMessage}" (step: ${leadContext?.funnel_step})`);
       if (lastProspectMessage) {

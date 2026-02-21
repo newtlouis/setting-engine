@@ -413,9 +413,9 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
           
-          // Valid statuses for processing (exclude not_interested, already_known)
-          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling'];
-          const excludedStatuses = ['not_interested', 'already_known', 'ignored', 'failed'];
+          // Valid statuses for processing
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling', 'not_interested'];
+          const excludedStatuses = ['already_known', 'ignored', 'failed'];
 
           if (excludedStatuses.includes(leadContext.status) || leadContext.is_ignored) {
             console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}') excluded.`);
@@ -487,12 +487,31 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
+          // 6a. Not interested: only respond if they ask a question
+          if (leadContext.status === 'not_interested') {
+            const text = (lastMsg.text || '').trim();
+            const hasQuestionMark = text.includes('?');
+            const questionStarters = ['pourquoi', 'comment', 'quand', 'est-ce', 'peux-tu', 'pouvez-vous', 'est ce', 't\'es qui', 'qui es-tu', 'que proposes', 'c\'est quoi'];
+            const startsWithQuestion = questionStarters.some(s => text.toLowerCase().startsWith(s));
+            const closingWords = ['merci', 'thanks', 'ok', 'd\'accord', 'ca marche', 'ça marche', 'bonne soirée', 'bonne journée', 'super', 'cool'];
+            const isClosing = closingWords.some(w => text.toLowerCase().includes(w)) && text.length < 30 && !hasQuestionMark;
+            const isQuestion = (hasQuestionMark || startsWithQuestion) && !isClosing;
+
+            if (!isQuestion) {
+              console.log(`   ⏭️ Lead @${username} is 'not_interested' and message is not a question. Skipped.`);
+              continue;
+            }
+            console.log(`   ❓ Lead @${username} is 'not_interested' but asked a question — responding.`);
+          }
+
           // 6b. Auto-advance steps when prospect has replied
           if (leadContext.funnel_step === 1 && updatedHistory.some(m => m.role === 'user')) {
             console.log(`   📍 Auto-advancing from step 1 → 2 (prospect replied)`);
             leadContext.funnel_step = 2;
             await setDmThreadStatus(username, 'conversation', { funnel_step: 2 });
           }
+          // Note: pas d'auto-advance 2→3, le LLM gère la transition
+          // (il doit d'abord évaluer si le prospect est intéressé ou non via le script step 2)
           // Auto-advance step 5→6: prospect replied to call proposal → propose slots
           if (leadContext.funnel_step === 5) {
             const lastAssistant = [...updatedHistory].reverse().find(m => m.role === 'assistant');

@@ -300,6 +300,8 @@ async function processThread(thread, options) {
       leadContext.funnel_step = 2;
       await setDmThreadStatus(username, 'conversation', { funnel_step: 2 });
     }
+    // Note: pas d'auto-advance 2→3, le LLM gère la transition
+    // (il doit d'abord évaluer si le prospect est intéressé ou non via le script step 2)
     // Auto-advance step 5→6: prospect replied to call proposal → propose slots
     if (leadContext.funnel_step === 5) {
       const lastAssistant = [...updatedHistory].reverse().find(m => m.role === 'assistant');
