@@ -180,10 +180,10 @@ export async function runFollowerWatcher(options = {}) {
     let processedCount = 0;
     
     try {
-        const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
-        const browserResult = await initBrowser({ 
+        const browserResult = await initBrowser({
             profile,
-            headless: options.headless !== undefined ? options.headless : false 
+            purpose: 'harvest',
+            headless: options.headless !== undefined ? options.headless : false
         });
         page = browserResult.page;
         

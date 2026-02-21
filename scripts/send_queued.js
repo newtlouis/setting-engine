@@ -90,6 +90,7 @@ async function main() {
   console.log('🌐 Initializing browser...');
   const browserResult = await initBrowser({
     profile,
+    purpose: 'sender',
     headless: false
   });
   const page = browserResult.page;

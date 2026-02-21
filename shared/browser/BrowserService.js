@@ -18,6 +18,8 @@
  */
 
 import { chromium } from 'playwright';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, cpSync } from 'fs';
+import path from 'path';
 import { cleanupBrowserLocks, getBrowserDataDir } from '../paths.js';
 import { getStealthContextOptions, applyStealthToPage } from '../stealth.js';
 import { getCredentialsForProfile } from '../credentials.js';
@@ -30,6 +32,18 @@ import {
   handleCookiePopup,
   dismissPostLoginPopups
 } from './loginHandler.js';
+
+/**
+ * Check if a process with given PID is still running
+ */
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0); // Signal 0 = check existence without killing
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Browser session instance
@@ -291,9 +305,14 @@ class BrowserSession {
   }
 
   /**
-   * Close the browser session
+   * Close the browser session and release PID lock
    */
   async close() {
+    // Release PID lock
+    if (this._lockFile) {
+      try { unlinkSync(this._lockFile); } catch {}
+      this._lockFile = null;
+    }
     if (this.context) {
       await this.context.close().catch(() => {});
       this.context = null;
@@ -312,7 +331,8 @@ const BrowserService = {
    * Initialize a new browser session
    *
    * @param {Object} options - Session options
-   * @param {string} options.profile - Profile name for browser data directory
+   * @param {string} options.profile - Profile name (used for credentials)
+   * @param {string} [options.purpose] - Session purpose (e.g. 'responder', 'sender') for concurrent isolation
    * @param {boolean} [options.headless=false] - Run in headless mode
    * @param {number} [options.timeout=90000] - Default page timeout
    * @param {number} [options.slowMo=50] - Slow down operations by this many ms
@@ -323,6 +343,7 @@ const BrowserService = {
   async initSession(options = {}) {
     const {
       profile = 'default',
+      purpose = null,
       headless = false,
       timeout = 90000,
       slowMo = 50,
@@ -330,15 +351,44 @@ const BrowserService = {
       diagnostic = false
     } = options;
 
-    const userDataDir = getBrowserDataDir(profile);
+    // When purpose is provided, isolate browser data dir per purpose
+    // but keep profile for credential resolution
+    const dataProfile = purpose ? `${profile}-${purpose}` : profile;
+    const userDataDir = getBrowserDataDir(dataProfile);
 
     console.log('\n=== Initializing Browser Session ===');
-    console.log(`   Profile: ${profile}`);
+    console.log(`   Profile: ${profile}${purpose ? ` (${purpose})` : ''}`);
     console.log(`   User data: ${userDataDir}`);
     console.log(`   Headless: ${headless}`);
 
+    // Bootstrap: on first use with purpose, copy session from base profile
+    if (purpose) {
+      const baseDefaultDir = path.join(getBrowserDataDir(profile), 'Default');
+      const purposeDefaultDir = path.join(userDataDir, 'Default');
+      if (!existsSync(purposeDefaultDir) && existsSync(baseDefaultDir)) {
+        console.log(`   📋 Copying session from base profile...`);
+        mkdirSync(userDataDir, { recursive: true });
+        cpSync(baseDefaultDir, purposeDefaultDir, { recursive: true });
+      }
+    }
+
+    // PID lock: prevent two processes from using the same browser data dir
+    mkdirSync(userDataDir, { recursive: true });
+    const lockFile = path.join(userDataDir, '.session.pid');
+    if (existsSync(lockFile)) {
+      const existingPid = parseInt(readFileSync(lockFile, 'utf8'), 10);
+      if (existingPid && isProcessRunning(existingPid)) {
+        throw new Error(
+          `🔒 Another session is already using this browser (PID: ${existingPid}, profile: ${dataProfile}). ` +
+          `Wait for it to finish or kill it (kill ${existingPid}).`
+        );
+      }
+      console.log(`   🧹 Removed stale lock (PID ${existingPid} no longer running)`);
+    }
+    writeFileSync(lockFile, String(process.pid));
+
     // Clean up stale locks before launch (prevents macOS SIGTRAP crashes)
-    cleanupBrowserLocks(profile);
+    cleanupBrowserLocks(dataProfile);
 
     // Get stealth options
     const stealthOptions = getStealthContextOptions(userDataDir, {
@@ -349,7 +399,14 @@ const BrowserService = {
     });
 
     // Launch persistent context
-    const context = await chromium.launchPersistentContext(userDataDir, stealthOptions);
+    let context;
+    try {
+      context = await chromium.launchPersistentContext(userDataDir, stealthOptions);
+    } catch (err) {
+      // Clean up PID lock on launch failure
+      try { unlinkSync(lockFile); } catch {}
+      throw err;
+    }
 
     // Create working page
     const workingPage = await context.newPage();
@@ -373,12 +430,18 @@ const BrowserService = {
     // Check for challenge after loading
     await checkForChallenge(workingPage);
 
-    // Create session instance
+    // Create session instance — use original profile for credentials, not dataProfile
     const session = new BrowserSession(context, workingPage, profile, {
       headless,
       timeout,
       slowMo,
       diagnostic
+    });
+    session._lockFile = lockFile;
+
+    // Clean up PID lock on process exit (safety net)
+    process.on('exit', () => {
+      try { unlinkSync(lockFile); } catch {}
     });
 
     // Register graceful shutdown to prevent profile corruption
@@ -386,7 +449,12 @@ const BrowserService = {
 
     // Auto-login if requested
     if (autoLogin) {
-      await session.ensureLoggedIn();
+      const loggedIn = await session.ensureLoggedIn();
+      if (!loggedIn) {
+        console.error('\n   ❌ Login failed — cannot continue without an active session.');
+        await session.close();
+        throw new Error('Instagram login failed. Please check credentials or log in manually first.');
+      }
     }
 
     return session;

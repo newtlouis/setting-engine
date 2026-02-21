@@ -183,11 +183,10 @@ export async function runFollowupWatcher(options = {}) {
     }
 
     // 3. Init Browser
-    const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
-    let browser = await initBrowser({ 
-        userDataDir,
+    let browser = await initBrowser({
         profile,
-        headless: false 
+        purpose: 'followup',
+        headless: false
     });
 
     let processedCount = 0;

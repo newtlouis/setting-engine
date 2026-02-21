@@ -327,8 +327,9 @@ export async function runInboxScanner(options = {}) {
   const processedNames = new Set();
   
   try {
-    const browserResult = await initBrowser({ 
+    const browserResult = await initBrowser({
       profile,
+      purpose: 'responder',
       headless: false
     });
     const contextObj = browserResult.browser;

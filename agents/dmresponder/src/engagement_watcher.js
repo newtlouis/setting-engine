@@ -156,9 +156,10 @@ export async function runEngagementWatcher(options = {}) {
     let preparedCount = 0;
     
     try {
-        const browserResult = await initBrowser({ 
+        const browserResult = await initBrowser({
             profile,
-            headless: options.headless !== undefined ? options.headless : false 
+            purpose: 'harvest',
+            headless: options.headless !== undefined ? options.headless : false
         });
         page = browserResult.page;
         

@@ -48,7 +48,8 @@ let browserSession = null; // BrowserService session reference
 export async function initBrowser(options = {}) {
   const {
     profile = process.env.IG_PROFILE,
-    headless = CONFIG.HEADLESS
+    headless = CONFIG.HEADLESS,
+    purpose = null
   } = options;
 
   if (!profile) {
@@ -58,8 +59,10 @@ export async function initBrowser(options = {}) {
   const timeout = CONFIG.PAGE_TIMEOUT;
 
   // Use BrowserService for initialization
+  // purpose enables concurrent sessions (e.g. 'responder' vs 'sender')
   browserSession = await BrowserService.initSession({
     profile,
+    purpose,
     headless,
     timeout,
     slowMo: CONFIG.SLOW_MO,

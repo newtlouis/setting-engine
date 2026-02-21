@@ -141,13 +141,10 @@ export async function runCronWatcher(options = {}) {
   let successCount = 0;
   
   try {
-    // Determine browser data dir
-    const userDataDir = path.join(process.cwd(), `browser-data-${profile}`);
-
     // Step 1: Init browser (single login) - ALWAYS visible
-    browser = await initBrowser({ 
-      userDataDir,
+    browser = await initBrowser({
       profile,
+      purpose: 'responder',
       headless: false // Always visible
     });
     
