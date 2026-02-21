@@ -132,9 +132,11 @@ export async function runProspector(options = {}) {
     return stats;
   }
 
-  // Initialize browser
-  const userDataDir = getBrowserDataDir(profile);
-  console.log('\n🌐 Initializing browser...');
+  // Initialize browser with dedicated prospector account
+  // Uses INSTAGRAM_USERNAME_PROSPECTOR / INSTAGRAM_PASSWORD_PROSPECTOR from .env
+  // Profile is still used for DB/account association, not for browser session
+  const userDataDir = getBrowserDataDir('prospector');
+  console.log('\n🌐 Initializing browser (prospector account)...');
   const browserObj = await initBrowser({ userDataDir });
   const workingPage = getWorkingPage();
 
