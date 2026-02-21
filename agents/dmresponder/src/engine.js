@@ -348,15 +348,24 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
             'si tu changes d\'avis',
             'n\'hésite pas à revenir',
             'n\'hésite pas à me contacter',
+            'si ça te parle un jour',
+            'si un jour tu',
+            'si jamais tu',
             'prends soin de toi',
             'belle journée',
+            'bonne journée',
+            'passe une belle',
             'bonne continuation',
             'belle continuation',
             'pas de souci',
+            'au plaisir',
           ];
           const lowerMsg = message.toLowerCase();
           const closingMatchCount = closingPatterns.filter(p => lowerMsg.includes(p)).length;
           const looksLikeClosing = closingMatchCount >= 1;
+
+          // Check if the message has NO question (= not continuing the conversation)
+          const hasQuestion = message.includes('?');
 
           // Also check if the last user message was a refusal
           const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
@@ -367,8 +376,10 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
           const strongClosingPatterns = ['tu sais où me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
           const strongClosing = looksLikeClosing && strongClosingPatterns.some(p => lowerMsg.includes(p));
           const multipleClosingSignals = closingMatchCount >= 2;
+          // Closing message with no question = the LLM decided to end the conversation
+          const closingWithNoQuestion = looksLikeClosing && !hasQuestion;
 
-          if ((looksLikeClosing && userRefused) || strongClosing || multipleClosingSignals) {
+          if ((looksLikeClosing && userRefused) || strongClosing || multipleClosingSignals || closingWithNoQuestion) {
             message = '[NOT_INTERESTED] ' + message;
             console.log('[Engine] Safety net: added [NOT_INTERESTED] tag to closing message');
           }
