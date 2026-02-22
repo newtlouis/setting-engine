@@ -257,30 +257,45 @@ export async function autoLoginInstagram(page, username, password) {
     // Handle cookie consent popup
     await handleCookiePopup(page);
 
-    // Wait for login form
+    // Wait for login form (Instagram uses name="email" or name="username")
     console.log('   → Waiting for login form...');
-    await page.waitForSelector('input[name="username"]', { timeout: 10000 });
+    const usernameSelector = await Promise.race([
+      page.waitForSelector('input[name="email"]', { timeout: 10000 }).then(() => 'input[name="email"]'),
+      page.waitForSelector('input[name="username"]', { timeout: 10000 }).then(() => 'input[name="username"]')
+    ]);
 
     // Fill username
     console.log('   → Entering username...');
-    await typeHumanLike(page, username, { focusSelector: 'input[name="username"]' });
+    await typeHumanLike(page, username, { focusSelector: usernameSelector });
     await delay(500, 1000);
 
-    // Fill password
+    // Fill password (Instagram uses name="pass" or name="password")
     console.log('   → Entering password...');
-    await typeHumanLike(page, password, { focusSelector: 'input[name="password"]' });
+    const passwordField = await page.$('input[name="pass"]') || await page.$('input[name="password"]');
+    const passwordSelector = await page.$('input[name="pass"]') ? 'input[name="pass"]' : 'input[name="password"]';
+    await typeHumanLike(page, password, { focusSelector: passwordSelector });
     await delay(500, 1000);
 
     // Click login button
     console.log('   → Clicking login button...');
     try {
-      await page.click('button[type="submit"]', { force: true });
+      // Try new Instagram button first (role="button" with aria-label)
+      const loginBtn = await page.$('[role="button"][aria-label="Se connecter"]')
+        || await page.$('[role="button"][aria-label="Log in"]')
+        || await page.$('button[type="submit"]');
+      if (loginBtn) {
+        await loginBtn.click({ force: true });
+      } else {
+        await page.click('button[type="submit"]', { force: true });
+      }
     } catch (err) {
       // Fallback: try clicking with JavaScript
       console.log('   → Retrying with JavaScript click...');
       await page.evaluate(() => {
-        const submitBtn = document.querySelector('button[type="submit"]');
-        if (submitBtn) submitBtn.click();
+        const btn = document.querySelector('[role="button"][aria-label="Se connecter"]')
+          || document.querySelector('[role="button"][aria-label="Log in"]')
+          || document.querySelector('button[type="submit"]');
+        if (btn) btn.click();
       });
     }
 
@@ -323,7 +338,8 @@ export async function autoLoginInstagram(page, username, password) {
 
     // Check if login form disappeared
     if (!loginSuccessful) {
-      const loginForm = await page.$('input[name="username"]').catch(() => null);
+      const loginForm = await page.$('input[name="username"]').catch(() => null)
+        || await page.$('input[name="email"]').catch(() => null);
       if (!loginForm) {
         console.log('   ✅ Auto-login successful! (Login form disappeared)');
         loginSuccessful = true;

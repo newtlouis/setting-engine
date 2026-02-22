@@ -38,10 +38,12 @@ const CONFIG = {
     LIKE_TEXT: ['liked your', 'aimé votre', 'aimé votre reel', 'aimé votre publication', 'aimé votre photo', 'liked your reel', 'liked your photo'],
     COMMENT_TEXT: ['commented on', 'commenté sur', 'a commenté', 'commenté :', 'commented:'],
     IGNORE_TEXT: [
-        'à répondu à votre commentaire', 
+        'a répondu à votre commentaire',
         'replied to your comment',
-        'à aimé votre commentaire',
-        'liked your comment'
+        'a aimé votre commentaire',
+        'liked your comment',
+        'sur la publication de',
+        'on the post of'
     ]
   },
   MAX_POSTS_PER_SESSION: 8,

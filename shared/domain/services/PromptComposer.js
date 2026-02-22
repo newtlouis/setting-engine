@@ -114,8 +114,11 @@ function composePersonaSection(persona) {
 
 /**
  * Compose the conversation stages section.
- * If currentStep is provided, only inject the relevant stages (prev/current/next)
- * to reduce confusion and keep the LLM focused.
+ * If currentStep is provided, inject:
+ * - Previous step (summary, for context)
+ * - Current step (full script)
+ * - Next 3 steps (objective only, for smart skip detection)
+ * + A skip rule so the LLM can jump ahead if the prospect already gave the info.
  */
 function composeStagesSection(stages, currentStep = 0) {
   // Sort stages by stageOrder
@@ -131,13 +134,16 @@ function composeStagesSection(stages, currentStep = 0) {
     return section;
   }
 
-  // Focused mode: only show relevant stages
+  // Focused mode: current step full + upcoming steps as objectives
   const prevStage = sorted.find(s => s.stageOrder === currentStep - 1);
   const currStage = sorted.find(s => s.stageOrder === currentStep);
-  const nextStage = sorted.find(s => s.stageOrder === currentStep + 1);
+  const upcomingStages = sorted.filter(s => s.stageOrder > currentStep && s.stageOrder <= currentStep + 3);
 
   let section = `**ÉTAPE ACTUELLE : STEP_${currentStep}**\n`;
-  section += `⚠️ Tu DOIS utiliser le script de l'étape ${currentStep} ci-dessous. Ne saute PAS d'étape.\n\n`;
+  section += `Utilise le script de l'étape ${currentStep} ci-dessous.\n\n`;
+
+  // Skip rule
+  section += `**RÈGLE DE SAUT D'ÉTAPE :** Si le prospect a DÉJÀ donné dans son message les informations attendues par l'étape en cours (et potentiellement les suivantes), ne repose PAS ces questions. Saute directement à la première étape dont tu n'as PAS encore l'info. Indique le bon step_used dans ta réponse.\n\n`;
 
   // Previous step (summary only, for context)
   if (prevStage) {
@@ -153,11 +159,13 @@ function composeStagesSection(stages, currentStep = 0) {
     section += formatStageFull(currStage);
   }
 
-  // Next step (objective only, so the LLM knows where it's going)
-  if (nextStage) {
-    section += `--- ÉTAPE SUIVANTE (pour info, N'Y VA PAS ENCORE) ---\n`;
-    section += `[STEP_${nextStage.stageOrder}] – ${nextStage.stageLabel}\n`;
-    section += `Objectif : ${nextStage.description || nextStage.stageName}\n\n`;
+  // Upcoming steps (objective only, so LLM can detect if info is already given)
+  if (upcomingStages.length > 0) {
+    section += `--- ÉTAPES SUIVANTES (objectifs, pour détecter si le prospect a déjà répondu) ---\n`;
+    for (const stage of upcomingStages) {
+      section += `[STEP_${stage.stageOrder}] – ${stage.stageLabel}\n`;
+      section += `Objectif : ${stage.description || stage.stageName}\n\n`;
+    }
   }
 
   return section;

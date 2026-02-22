@@ -144,6 +144,7 @@ export function getStealthContextOptions(userDataDir, options = {}) {
     args,
     timeout,
     ignoreDefaultArgs: ['--enable-automation'],
+    permissions: ['notifications'], // Auto-grant notifications to prevent system popup
     hasTouch: false,
     isMobile: false,
     javaScriptEnabled: true

@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = {
-    target: 30,
+    target: 60,
     profile: 'melanie'
   };
 

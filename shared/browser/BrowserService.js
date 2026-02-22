@@ -118,20 +118,20 @@ class BrowserSession {
     // Get credentials for this profile
     const { username, password } = getCredentialsForProfile(this.profile);
 
-    if (!username || !password) {
-      // No credentials, wait for manual login
-      await waitForManualLogin(this.workingPage);
-      await this.workingPage.reload({ waitUntil: 'domcontentloaded' });
-      await delay(2000, 3000);
-      return await this.checkLoggedIn();
+    if (username && password) {
+      // Try auto-login first
+      const success = await autoLoginInstagram(this.workingPage, username, password);
+      if (success) {
+        this._isLoggedIn = true;
+        return true;
+      }
+      console.log('   ⚠️  Auto-login failed, switching to manual login...');
     }
 
-    // Auto-login with credentials
-    const success = await autoLoginInstagram(this.workingPage, username, password);
-    if (success) {
-      this._isLoggedIn = true;
-    }
-    return success;
+    // Fallback: wait for user to log in manually in the browser
+    await waitForManualLogin(this.workingPage);
+    await delay(2000, 3000);
+    return await this.checkLoggedIn();
   }
 
   /**
@@ -426,6 +426,9 @@ const BrowserService = {
       console.log(`   ⚠️ Initial navigation error (non-fatal): ${error.message}`);
     }
     await delay(2000, 3000);
+
+    // Handle cookie/consent popups early (before login attempt)
+    await handleCookiePopup(workingPage);
 
     // Check for challenge after loading
     await checkForChallenge(workingPage);
