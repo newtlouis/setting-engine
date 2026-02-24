@@ -318,6 +318,25 @@ export async function getOrCreateAccount(name) {
   }
 }
 
+/**
+ * Load all known lead usernames and display names for fast sidebar filtering.
+ * Returns Sets for O(1) lookup.
+ */
+export async function getKnownLeadIdentifiers() {
+  await initDB();
+  if (!db) return { usernames: new Set(), displayNames: new Set() };
+
+  const rows = db.prepare('SELECT username, full_name FROM leads WHERE is_ignored = 0').all();
+  const usernames = new Set(rows.map(r => r.username.toLowerCase()));
+  const displayNames = new Set();
+  for (const row of rows) {
+    if (row.full_name) {
+      displayNames.add(row.full_name.toLowerCase());
+    }
+  }
+  return { usernames, displayNames };
+}
+
 export function parseThreadMetadata(rawMetadata) {
   if (!rawMetadata) return {};
   if (typeof rawMetadata === 'object') return rawMetadata;
@@ -339,6 +358,7 @@ export function parseThreadMetadata(rawMetadata) {
     getTrackedDmThreads,
     setDmThreadStatus,
     getOrCreateAccount,
+    getKnownLeadIdentifiers,
     parseThreadMetadata,
     fullUpsertLead: (username, accountId, data) => dbFunctions.fullUpsertLead(username, accountId, data),
     getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),

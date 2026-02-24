@@ -22,6 +22,7 @@ import { generateResponse } from './engine.js';
 import {
   initDB,
   getLeadWithContext,
+  getKnownLeadIdentifiers,
   getConversationHistory,
   addMessage,
   setDmThreadStatus
@@ -368,16 +369,25 @@ export async function runInboxScanner(options = {}) {
     }
     
     await navigateToInbox(workingPage);
-    
+
+    // Load all known lead identifiers for sidebar pre-filtering
+    const knownLeads = await getKnownLeadIdentifiers();
+    console.log(`   🗂️ Loaded ${knownLeads.usernames.size} known leads for filtering`);
+
     // --- MAIN LOOP: SCAN -> PROCESS (Single Tab) ---
-    
+
     for (let scrollIdx = 0; scrollIdx <= CONFIG.MAX_SCROLLS; scrollIdx++) {
       console.log(`\n   📜 Round ${scrollIdx + 1}: Scanning visible conversations...`);
-      
+
       const visible = await getVisibleConversations(workingPage, allReplies);
-      
-      // Filter for actionable items: Unread AND Not Processed
-      const actionable = visible.filter(c => c.isUnread && !processedNames.has(c.name));
+
+      // Filter for actionable items: Unread AND Not Processed AND known in DB
+      const actionable = visible.filter(c => {
+        if (!c.isUnread || processedNames.has(c.name)) return false;
+        // Match display name against known usernames or full_names
+        const nameLower = c.name.toLowerCase();
+        return knownLeads.usernames.has(nameLower) || knownLeads.displayNames.has(nameLower);
+      });
       
       if (actionable.length > 0) {
         console.log(`      Found ${actionable.length} NEW unread conversation(s). Processing...`);

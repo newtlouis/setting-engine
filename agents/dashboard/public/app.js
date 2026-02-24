@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadAccounts();
     await loadDefaultAccount();
     loadFunnelAnalytics();
+    loadTodayPerformance();
     loadVelocity(30);
 });
 
@@ -64,6 +65,7 @@ async function setDefaultAccount() {
 function onAccountChange(accountId) {
     currentAccountId = accountId || null;
     loadFunnelAnalytics();
+    loadTodayPerformance();
     loadVelocity(getCurrentPeriod());
 }
 
@@ -107,6 +109,95 @@ async function loadFunnelAnalytics() {
         }
     } catch (e) {
         console.error('Funnel analytics load error', e);
+    }
+}
+
+// Load Today's Performance
+async function loadTodayPerformance() {
+    const container = document.getElementById('todayPerformance');
+    if (!container) return;
+
+    try {
+        let url = '/api/analytics/today';
+        if (currentAccountId) url += `?account_id=${currentAccountId}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.rows || data.rows.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px; padding: 8px;">Aucun lead contacte aujourd\'hui.</div>';
+            return;
+        }
+
+        const sourceColors = {
+            'Followers': 'var(--accent)',
+            'Likes': 'var(--warning)',
+            'Comments': '#f97316',
+            'Post likers': '#8b5cf6'
+        };
+
+        let html = `
+            <table class="source-table" style="width: 100%;">
+                <thead><tr>
+                    <th>Source</th>
+                    <th>Nouveaux</th>
+                    <th>Repondu</th>
+                    <th>Not Interested</th>
+                    <th>RDV</th>
+                    <th>Step 1</th>
+                    <th>Step 2</th>
+                    <th>Step 3</th>
+                    <th>Step 4</th>
+                    <th>Step 5+</th>
+                </tr></thead>
+                <tbody>
+        `;
+
+        for (const row of data.rows) {
+            let color = sourceColors[row.source_category];
+            if (!color && row.source_category.startsWith('#')) color = '#3fb950';
+            if (!color && row.source_category.startsWith('@')) color = '#db61a2';
+            if (!color) color = 'var(--text-secondary)';
+            const replyPct = row.total > 0 ? (row.replied / row.total * 100).toFixed(0) : 0;
+            html += `
+                <tr>
+                    <td><span style="color: ${color}; font-weight: 600;">${row.source_category}</span></td>
+                    <td style="font-weight: 600;">${row.total}</td>
+                    <td>${row.replied} <span style="color: var(--text-secondary); font-size: 11px;">(${replyPct}%)</span></td>
+                    <td>${row.not_interested}</td>
+                    <td>${row.booked}</td>
+                    <td>${row.step_1}</td>
+                    <td>${row.step_2}</td>
+                    <td>${row.step_3}</td>
+                    <td>${row.step_4}</td>
+                    <td>${row.step_5_plus}</td>
+                </tr>
+            `;
+        }
+
+        // Total row
+        const t = data.totals;
+        const totalReplyPct = t.total > 0 ? (t.replied / t.total * 100).toFixed(0) : 0;
+        html += `
+                <tr style="border-top: 2px solid var(--border); font-weight: 700;">
+                    <td>Total</td>
+                    <td>${t.total}</td>
+                    <td>${t.replied} <span style="color: var(--text-secondary); font-size: 11px; font-weight: 400;">(${totalReplyPct}%)</span></td>
+                    <td>${t.not_interested}</td>
+                    <td>${t.booked}</td>
+                    <td>${t.step_1}</td>
+                    <td>${t.step_2}</td>
+                    <td>${t.step_3}</td>
+                    <td>${t.step_4}</td>
+                    <td>${t.step_5_plus}</td>
+                </tr>
+            </tbody></table>
+        `;
+
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('Today performance load error', e);
+        container.innerHTML = '<div style="color: var(--error); font-size: 13px;">Erreur de chargement</div>';
     }
 }
 
