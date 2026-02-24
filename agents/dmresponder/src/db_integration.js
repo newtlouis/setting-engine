@@ -182,7 +182,7 @@ export async function getConversationHistory(username, accountId = null) {
  * @param {string} messageType - Type of message (empathy, qualification, etc.)
  * @returns {Promise<boolean>} Success
  */
-export async function addMessage(username, role, message, messageType = null, accountId = null) {
+export async function addMessage(username, role, message, messageType = null, accountId = null, sentAt = null) {
   await initDB();
   if (!db || !container) return false;
 
@@ -194,7 +194,8 @@ export async function addMessage(username, role, message, messageType = null, ac
       text: message,
       direction,
       type: messageType,
-      accountId
+      accountId,
+      sentAt
     });
 
     if (!result.message) {

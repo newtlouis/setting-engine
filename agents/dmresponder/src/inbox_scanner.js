@@ -466,7 +466,7 @@ export async function runInboxScanner(options = {}) {
           if (newMessages.length > 0) {
             console.log(`   💾 Saving ${newMessages.length} new message(s)`);
             for (const msg of newMessages) {
-              await addMessage(username, msg.role, msg.text);
+              await addMessage(username, msg.role, msg.text, null, null, msg.sentAt);
               updatedHistory.push(msg);
               if (msg.role === 'user' && msg.type === 'voice_note') {
                 hasVoiceNote = true;

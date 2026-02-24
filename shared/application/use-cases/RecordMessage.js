@@ -53,7 +53,7 @@ export class RecordMessage {
    * @returns {Promise<RecordMessageResult>}
    */
   async execute(input) {
-    const { username, text, direction, type = null, accountId = null } = input;
+    const { username, text, direction, type = null, accountId = null, sentAt = null } = input;
 
     // Get or create lead
     let lead = await this.leadRepository.findByUsername(username, accountId);
@@ -76,7 +76,8 @@ export class RecordMessage {
       leadId: lead.id,
       role,
       text,
-      type
+      type,
+      sentAt
     });
 
     // Save message

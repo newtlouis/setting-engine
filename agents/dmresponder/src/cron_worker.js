@@ -233,7 +233,7 @@ async function processThread(thread, options) {
       if (newMessages.length > 0) {
         console.log(`   📥 Saving ${newMessages.length} new message(s) to DB...`);
         for (const msg of newMessages) {
-          await addMessage(username, msg.role, msg.text);
+          await addMessage(username, msg.role, msg.text, null, null, msg.sentAt);
           updatedHistory.push({ role: msg.role, text: msg.text });
         }
       } else {
