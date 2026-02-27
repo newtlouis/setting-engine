@@ -400,6 +400,9 @@ export function getLeadsForResponder(filters = {}) {
     params.push(...filters.statuses);
   }
 
+  // Exclude booked leads (confirmed/completed)
+  query += " AND (booking_status IS NULL OR booking_status NOT IN ('confirmed', 'completed'))";
+
   if (filters.onlyWithUrl) {
     query += " AND dm_url IS NOT NULL AND dm_url <> ''";
   }

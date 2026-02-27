@@ -198,9 +198,15 @@ async function processThread(thread, options) {
     // Step 1: Get existing conversation history from DB
     const existingHistory = await getConversationHistory(username);
     const leadContext = await getLeadWithContext(username);
-    
+
+    // Skip booked leads
+    if (leadContext?.booking_status === 'confirmed' || leadContext?.booking_status === 'completed') {
+      console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}') - already booked. Skipped.`);
+      return { success: false, skipped: true };
+    }
+
     console.log(`   📚 Messages in DB: ${existingHistory.length}`);
-    
+
     // Step 2: Open DM and scrape messages FIRST
     console.log(`   🌐 Opening DM conversation...`);
     // OPTIMIZATION: Pass dm_url so scraper can go there directly

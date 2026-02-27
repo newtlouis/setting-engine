@@ -556,11 +556,11 @@ app.get('/api/leads', (req, res) => {
             if (status === 'contacted_total') {
                 sql += " AND total_messages_sent > 0";
             } else if (status === 'conversation') {
-                sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status = '')";
+                sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status NOT IN ('completed', 'confirmed'))";
             } else if (status === 'confirm_bookings') {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
-                 sql += " AND booking_status = 'completed'";
+                 sql += " AND booking_status IN ('completed', 'confirmed')";
             } else if (status === 'manual') {
                  sql += " AND status = 'manual'";
             } else if (status === 'not_interested') {

@@ -327,7 +327,12 @@ export async function getKnownLeadIdentifiers() {
   await initDB();
   if (!db) return { usernames: new Set(), displayNames: new Set() };
 
-  const rows = db.prepare('SELECT username, full_name FROM leads WHERE is_ignored = 0').all();
+  const rows = db.prepare(`
+    SELECT username, full_name FROM leads
+    WHERE is_ignored = 0
+      AND status NOT IN ('already_known', 'not_interested', 'failed', 'ignored')
+      AND (booking_status IS NULL OR booking_status NOT IN ('confirmed', 'completed'))
+  `).all();
   const usernames = new Set(rows.map(r => r.username.toLowerCase()));
   const displayNames = new Set();
   for (const row of rows) {
