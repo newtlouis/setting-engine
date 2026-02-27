@@ -425,8 +425,8 @@ export async function runInboxScanner(options = {}) {
           }
           
           // Valid statuses for processing
-          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling', 'not_interested'];
-          const excludedStatuses = ['already_known', 'ignored', 'failed'];
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling'];
+          const excludedStatuses = ['already_known', 'not_interested', 'ignored', 'failed'];
 
           if (excludedStatuses.includes(leadContext.status) || leadContext.is_ignored) {
             console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}') excluded.`);
@@ -441,7 +441,7 @@ export async function runInboxScanner(options = {}) {
           }
 
           // Skip booked leads and leads at funnel step 8+
-          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending') {
+          if (leadContext.booking_status === 'confirmed' || leadContext.booking_status === 'completed') {
             console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}') - already booked. Skipped.`);
             skippedCount++;
             continue;
