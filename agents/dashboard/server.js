@@ -357,6 +357,67 @@ app.get('/api/analytics/funnel', (req, res) => {
     }
 });
 
+// GET /api/analytics/today - Today's performance by source category
+app.get('/api/analytics/today', (req, res) => {
+    try {
+        const { account_id } = req.query;
+        const accountFilter = account_id ? ' AND l.account_id = ?' : '';
+        const accountParam = account_id ? [parseInt(account_id)] : [];
+
+        const rows = db.prepare(`
+            SELECT
+                CASE
+                    WHEN l.lead_source LIKE 'follower%' OR l.lead_source = 'new_follower' THEN 'Followers'
+                    WHEN l.lead_source = 'post_like' THEN 'Likes'
+                    WHEN l.lead_source = 'post_comment' THEN 'Comments'
+                    WHEN l.lead_source LIKE 'hashtag:%' THEN '#' || SUBSTR(l.lead_source, 9)
+                    WHEN l.lead_source LIKE '#%' THEN l.lead_source
+                    WHEN l.lead_source LIKE 'profile:%' THEN '@' || REPLACE(REPLACE(REPLACE(l.lead_source, 'profile:', ''), 'https://www.instagram.com/', ''), '/', '')
+                    WHEN l.lead_source LIKE '@%' THEN l.lead_source
+                    WHEN l.lead_source LIKE 'https://www.instagram.com/%' THEN 'Post likers'
+                    ELSE COALESCE(l.lead_source, 'Autre')
+                END as source_category,
+                COUNT(*) as total,
+                SUM(CASE WHEN l.total_messages_received > 0 THEN 1 ELSE 0 END) as replied,
+                SUM(CASE WHEN l.status = 'not_interested' THEN 1 ELSE 0 END) as not_interested,
+                SUM(CASE WHEN l.booking_status IN ('completed','confirmed') THEN 1 ELSE 0 END) as booked,
+                SUM(CASE WHEN l.funnel_step <= 1 THEN 1 ELSE 0 END) as step_1,
+                SUM(CASE WHEN l.funnel_step = 2 THEN 1 ELSE 0 END) as step_2,
+                SUM(CASE WHEN l.funnel_step = 3 THEN 1 ELSE 0 END) as step_3,
+                SUM(CASE WHEN l.funnel_step = 4 THEN 1 ELSE 0 END) as step_4,
+                SUM(CASE WHEN l.funnel_step >= 5 THEN 1 ELSE 0 END) as step_5_plus
+            FROM leads l
+            INNER JOIN (
+                SELECT lead_id, DATE(MIN(sent_at)) as first_contact_day
+                FROM conversations
+                WHERE role = 'assistant'
+                GROUP BY lead_id
+            ) fc ON fc.lead_id = l.id
+            WHERE l.is_ignored = 0
+              AND fc.first_contact_day = DATE('now')
+              ${accountFilter}
+            GROUP BY source_category
+            ORDER BY total DESC
+        `).all(...accountParam);
+
+        // Total row
+        const totals = {
+            source_category: 'Total',
+            total: 0, replied: 0, not_interested: 0, booked: 0,
+            step_1: 0, step_2: 0, step_3: 0, step_4: 0, step_5_plus: 0
+        };
+        for (const r of rows) {
+            for (const k of Object.keys(totals)) {
+                if (k !== 'source_category') totals[k] += r[k];
+            }
+        }
+
+        res.json({ rows, totals });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/analytics/velocity - Velocity metrics over time
 app.get('/api/analytics/velocity', (req, res) => {
     try {
@@ -495,11 +556,11 @@ app.get('/api/leads', (req, res) => {
             if (status === 'contacted_total') {
                 sql += " AND total_messages_sent > 0";
             } else if (status === 'conversation') {
-                sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status = '')";
+                sql += " AND status IN ('conversation', 'replied') AND (booking_status IS NULL OR booking_status NOT IN ('completed', 'confirmed'))";
             } else if (status === 'confirm_bookings') {
                 sql += " AND booking_status = 'pending'";
             } else if (status === 'booked') {
-                 sql += " AND booking_status = 'completed'";
+                 sql += " AND booking_status IN ('completed', 'confirmed')";
             } else if (status === 'manual') {
                  sql += " AND status = 'manual'";
             } else if (status === 'not_interested') {

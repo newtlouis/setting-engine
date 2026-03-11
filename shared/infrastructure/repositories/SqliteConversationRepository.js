@@ -53,12 +53,12 @@ export function createSqliteConversationRepository({ getDb }) {
       const data = message.toDbRow();
 
       const stmt = db.prepare(`
-        INSERT INTO conversations (lead_id, role, message_text, message_type)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO conversations (lead_id, role, message_text, message_type, sent_at)
+        VALUES (?, ?, ?, ?, ?)
         RETURNING *
       `);
 
-      const row = stmt.get(leadId, data.role, data.message_text, data.message_type);
+      const row = stmt.get(leadId, data.role, data.message_text, data.message_type, data.sent_at);
 
       // Update lead message counts and funnel_step
       if (message.role === MessageRole.ASSISTANT) {

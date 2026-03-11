@@ -367,6 +367,13 @@ export async function scrapeConversationMessages(page) {
         'bloquer', 'block', 'signaler', 'report', 'restreindre', 'restrict',
         'publicité', 'marketing', 'artiste', 'créateur', 'entrepreneur'];
 
+      // Collect <time datetime> elements with their Y positions for timestamp attribution
+      const timeElements = Array.from(document.querySelectorAll('time[datetime]'));
+      const timestamps = timeElements.map(t => ({
+        y: t.getBoundingClientRect().top,
+        datetime: t.getAttribute('datetime')
+      })).sort((a, b) => a.y - b.y);
+
       // Find all div[dir="auto"] as message candidates
       const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
 
@@ -414,10 +421,21 @@ export async function scrapeConversationMessages(page) {
         const leftRatio = rect.left / windowWidth;
         const isUser = leftRatio < 0.5;
 
+        // Find closest <time> element above this message (largest Y <= message Y)
+        let sentAt = null;
+        const msgY = rect.top;
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+          if (timestamps[i].y <= msgY) {
+            sentAt = timestamps[i].datetime;
+            break;
+          }
+        }
+
         result.push({
           role: isUser ? 'user' : 'assistant',
           text,
-          type: messageType
+          type: messageType,
+          sentAt
         });
       }
 
@@ -441,6 +459,11 @@ export async function scrapeConversationMessages(page) {
             'entrepreneur', 'photographe', 'photographer', 'thérapeute', 'therapist',
             'influenceur', 'influencer', 'consultant', 'designer', 'gamer',
             'journaliste', 'journalist', 'sportif', 'athlete', 'écrivain', 'writer'];
+          const timeElements = Array.from(document.querySelectorAll('time[datetime]'));
+          const timestamps = timeElements.map(t => ({
+            y: t.getBoundingClientRect().top,
+            datetime: t.getAttribute('datetime')
+          })).sort((a, b) => a.y - b.y);
           const dirAutoElements = Array.from(document.querySelectorAll('div[dir="auto"]'));
           for (const el of dirAutoElements) {
             let text = el.innerText?.trim();
@@ -455,7 +478,12 @@ export async function scrapeConversationMessages(page) {
             if (el.closest('header')) continue;
             const rect = el.getBoundingClientRect();
             const isUser = (rect.left / windowWidth) < 0.5;
-            result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text' });
+            let sentAt = null;
+            const msgY = rect.top;
+            for (let i = timestamps.length - 1; i >= 0; i--) {
+              if (timestamps[i].y <= msgY) { sentAt = timestamps[i].datetime; break; }
+            }
+            result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text', sentAt });
           }
           return result;
         });

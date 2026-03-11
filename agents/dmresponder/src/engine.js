@@ -153,10 +153,18 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     'Content-Type': 'application/json',
   };
 
+  // Inject current date/time so the LLM can interpret relative dates correctly
+  // (e.g. "demain" in yesterday's message = "aujourd'hui")
+  const now = new Date();
+  const currentDateTime = now.toLocaleString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
+  });
+
   // Build a context description if available
-  let contextDescription = "";
+  let contextDescription = `\n\nDATE ET HEURE ACTUELLES : ${currentDateTime}\n⚠️ Les horodatages entre crochets [HH:MM JJ/MM] indiquent QUAND chaque message a été envoyé. Utilise-les pour interpréter les dates relatives ("demain", "ce soir", "lundi") par rapport au moment où le message a été écrit, PAS par rapport à maintenant.\n`;
   if (leadContext) {
-    contextDescription = `\n\nCONTEXTE DU PROSPECT (Utilise ces infos pour personnaliser l'échange) :\n`;
+    contextDescription += `\nCONTEXTE DU PROSPECT (Utilise ces infos pour personnaliser l'échange) :\n`;
     if (leadContext.username) contextDescription += `- Username: @${leadContext.username}\n`;
     if (leadContext.fullName) contextDescription += `- Nom: ${leadContext.fullName}\n`;
     if (leadContext.biography) contextDescription += `- Bio: ${leadContext.biography}\n`;
@@ -319,7 +327,20 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   // The messages payload starts with the system prompt + context
   const messages = [
     { role: 'system', content: systemPrompt + contextDescription },
-    ...conversationHistory.map(msg => ({ role: msg.role, content: msg.text })),
+    ...conversationHistory.map(msg => {
+      // Prefix each message with its timestamp so the LLM can track time gaps
+      let content = msg.text;
+      if (msg.timestamp) {
+        const d = new Date(msg.timestamp);
+        const ts = d.toLocaleString('fr-FR', {
+          hour: '2-digit', minute: '2-digit',
+          day: '2-digit', month: '2-digit',
+          timeZone: 'Europe/Paris'
+        });
+        content = `[${ts}] ${msg.text}`;
+      }
+      return { role: msg.role, content };
+    }),
   ];
 
   const data = {

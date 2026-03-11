@@ -239,8 +239,12 @@ async function detectErrorPage(page) {
       const bodyLength = bodyText.trim().length;
 
       // Completely blank page (< 50 chars visible)
+      // But exclude private profiles which have minimal text
       if (bodyLength < 50) {
-        return { isError: true, reason: 'Page appears blank (< 50 chars)' };
+        const isPrivate = bodyText.includes('privé') || bodyText.includes('private');
+        if (!isPrivate) {
+          return { isError: true, reason: 'Page appears blank (< 50 chars)' };
+        }
       }
 
       // Title-based detection
@@ -447,16 +451,25 @@ async function validateProfilePage(page, expectedUsername) {
   try {
     const url = page.url();
     
-    // Check for "Profile not available" or similar messages
+    // Check for "Profile/Page not available" or similar messages
     const isUnavailable = await page.evaluate(() => {
         const text = document.body?.innerText?.toLowerCase() || '';
         const patterns = [
-            'profile n’est pas disponible',
+            'cette page n\'est pas disponible',
+            'cette page n\'est malheureusement pas disponible',
+            'page a été supprimée',
+            'profile n\u2019est pas disponible',
             'profile is not available',
+            'sorry, this page isn\'t available',
+            'this page isn\'t available',
+            'le lien que vous avez suivi est peut-être rompu',
             'lien est peut-être brisé',
+            'link you followed may be broken',
             'link may be broken',
             'page introuvable',
-            'page not found'
+            'page not found',
+            'contenu n\'est pas disponible',
+            'content isn\'t available'
         ];
         return patterns.some(p => text.includes(p));
     });

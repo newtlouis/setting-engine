@@ -198,9 +198,15 @@ async function processThread(thread, options) {
     // Step 1: Get existing conversation history from DB
     const existingHistory = await getConversationHistory(username);
     const leadContext = await getLeadWithContext(username);
-    
+
+    // Skip booked leads
+    if (leadContext?.booking_status === 'confirmed' || leadContext?.booking_status === 'completed') {
+      console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}') - already booked. Skipped.`);
+      return { success: false, skipped: true };
+    }
+
     console.log(`   📚 Messages in DB: ${existingHistory.length}`);
-    
+
     // Step 2: Open DM and scrape messages FIRST
     console.log(`   🌐 Opening DM conversation...`);
     // OPTIMIZATION: Pass dm_url so scraper can go there directly
@@ -233,7 +239,7 @@ async function processThread(thread, options) {
       if (newMessages.length > 0) {
         console.log(`   📥 Saving ${newMessages.length} new message(s) to DB...`);
         for (const msg of newMessages) {
-          await addMessage(username, msg.role, msg.text);
+          await addMessage(username, msg.role, msg.text, null, null, msg.sentAt);
           updatedHistory.push({ role: msg.role, text: msg.text });
         }
       } else {

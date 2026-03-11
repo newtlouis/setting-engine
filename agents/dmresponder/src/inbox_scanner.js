@@ -22,6 +22,7 @@ import { generateResponse } from './engine.js';
 import {
   initDB,
   getLeadWithContext,
+  getKnownLeadIdentifiers,
   getConversationHistory,
   addMessage,
   setDmThreadStatus
@@ -368,16 +369,25 @@ export async function runInboxScanner(options = {}) {
     }
     
     await navigateToInbox(workingPage);
-    
+
+    // Load all known lead identifiers for sidebar pre-filtering
+    const knownLeads = await getKnownLeadIdentifiers();
+    console.log(`   🗂️ Loaded ${knownLeads.usernames.size} known leads for filtering`);
+
     // --- MAIN LOOP: SCAN -> PROCESS (Single Tab) ---
-    
+
     for (let scrollIdx = 0; scrollIdx <= CONFIG.MAX_SCROLLS; scrollIdx++) {
       console.log(`\n   📜 Round ${scrollIdx + 1}: Scanning visible conversations...`);
-      
+
       const visible = await getVisibleConversations(workingPage, allReplies);
-      
-      // Filter for actionable items: Unread AND Not Processed
-      const actionable = visible.filter(c => c.isUnread && !processedNames.has(c.name));
+
+      // Filter for actionable items: Unread AND Not Processed AND known in DB
+      const actionable = visible.filter(c => {
+        if (!c.isUnread || processedNames.has(c.name)) return false;
+        // Match display name against known usernames or full_names
+        const nameLower = c.name.toLowerCase();
+        return knownLeads.usernames.has(nameLower) || knownLeads.displayNames.has(nameLower);
+      });
       
       if (actionable.length > 0) {
         console.log(`      Found ${actionable.length} NEW unread conversation(s). Processing...`);
@@ -415,8 +425,8 @@ export async function runInboxScanner(options = {}) {
           }
           
           // Valid statuses for processing
-          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling', 'not_interested'];
-          const excludedStatuses = ['already_known', 'ignored', 'failed'];
+          const validStatuses = ['new', 'conversation', 'outreach', 'contacted', 'replied', 'qualified', 'scheduling'];
+          const excludedStatuses = ['already_known', 'not_interested', 'ignored', 'failed'];
 
           if (excludedStatuses.includes(leadContext.status) || leadContext.is_ignored) {
             console.log(`   ⏭️ Lead @${username} (status: '${leadContext.status}') excluded.`);
@@ -431,7 +441,7 @@ export async function runInboxScanner(options = {}) {
           }
 
           // Skip booked leads and leads at funnel step 8+
-          if (leadContext.booking_status === 'completed' || leadContext.booking_status === 'pending') {
+          if (leadContext.booking_status === 'confirmed' || leadContext.booking_status === 'completed') {
             console.log(`   ⏭️ Lead @${username} (booking: '${leadContext.booking_status}') - already booked. Skipped.`);
             skippedCount++;
             continue;
@@ -456,7 +466,7 @@ export async function runInboxScanner(options = {}) {
           if (newMessages.length > 0) {
             console.log(`   💾 Saving ${newMessages.length} new message(s)`);
             for (const msg of newMessages) {
-              await addMessage(username, msg.role, msg.text);
+              await addMessage(username, msg.role, msg.text, null, null, msg.sentAt);
               updatedHistory.push(msg);
               if (msg.role === 'user' && msg.type === 'voice_note') {
                 hasVoiceNote = true;

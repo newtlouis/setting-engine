@@ -143,7 +143,7 @@ function composeStagesSection(stages, currentStep = 0) {
   section += `Utilise le script de l'étape ${currentStep} ci-dessous.\n\n`;
 
   // Skip rule
-  section += `**RÈGLE DE SAUT D'ÉTAPE :** Si le prospect a DÉJÀ donné dans son message les informations attendues par l'étape en cours (et potentiellement les suivantes), ne repose PAS ces questions. Saute directement à la première étape dont tu n'as PAS encore l'info. Indique le bon step_used dans ta réponse.\n\n`;
+  section += `**RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.\n\n`;
 
   // Previous step (summary only, for context)
   if (prevStage) {

@@ -119,6 +119,11 @@ export async function goToProfile(page, username, targetUrl = null) {
     // Verify we are on the profile page and no challenge
     const verifyResult = await verifyProfilePage(page, username);
     if (!verifyResult.success) {
+      // Profile deleted/unavailable → permanent failure
+      const reason = (verifyResult.reason || '').toLowerCase();
+      if (reason.includes('unavailable') || reason.includes('deleted') || reason.includes('supprimée') || reason.includes('indisponible')) {
+        return { success: false, canContact: false, error: 'profile_not_found' };
+      }
       return { success: false, canContact: false, error: verifyResult.reason };
     }
     

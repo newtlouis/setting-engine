@@ -177,7 +177,7 @@ async function selectLead(username) {
         
         // Status Mapping
         const statusSelect = document.getElementById('fieldStatus');
-        if (lead.booking_status === 'completed') {
+        if (lead.booking_status === 'completed' || lead.booking_status === 'confirmed') {
              statusSelect.value = 'closed_won';
         } else if (lead.booking_status === 'pending') {
              statusSelect.value = 'scheduling';
