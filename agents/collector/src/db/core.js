@@ -175,25 +175,18 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
       UNIQUE(account_id, stage_order)
     );
 
-    -- Followup Templates table: message templates for each stage
+    -- Followup Templates table: message templates for follow-up sequences
     CREATE TABLE IF NOT EXISTS followup_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      stage_id INTEGER NOT NULL REFERENCES funnel_stages(id) ON DELETE CASCADE,
-      account_id INTEGER NOT NULL REFERENCES accounts(id),
-      template_order INTEGER NOT NULL,     -- 1st, 2nd, 3rd followup
       template_text TEXT NOT NULL,
-      template_name TEXT,                  -- e.g., "Relance douce"
+      step_order INTEGER NOT NULL,  -- 1, 2, 3... controls sequence
       is_active INTEGER DEFAULT 1,
-      usage_count INTEGER DEFAULT 0,
-      success_count INTEGER DEFAULT 0,     -- replies received
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(stage_id, template_order)
+      created_at TEXT DEFAULT (datetime('now'))
     );
 
     -- Create indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_funnel_stages_account ON funnel_stages(account_id);
-    CREATE INDEX IF NOT EXISTS idx_followup_templates_stage ON followup_templates(stage_id);
+    -- idx_followup_templates_step created after migration below
     CREATE INDEX IF NOT EXISTS idx_leads_username ON leads(username);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_leads_warmth ON leads(warmth);
@@ -201,7 +194,7 @@ export async function initDatabase(dbPath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_comments_lead_id ON comments(lead_id);
     CREATE INDEX IF NOT EXISTS idx_comments_post_url ON comments(post_url);
     CREATE INDEX IF NOT EXISTS idx_posts_url ON posts(post_url);
-    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(post_id);
+    CREATE INDEX IF NOT EXISTS idx_posts_account_id ON posts(account_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_lead_id ON conversations(lead_id);
     CREATE INDEX IF NOT EXISTS idx_test_scenario_results_scenario_id ON test_scenario_results(scenario_id);
   `);
@@ -277,6 +270,18 @@ function runMigrations() {
         created_at TEXT DEFAULT (datetime('now'))
       );
     `);
+
+    // Migration: Add step_order to followup_templates if missing (old schema had template_order)
+    const ftCols = db.prepare("PRAGMA table_info(followup_templates)").all();
+    if (!ftCols.some(c => c.name === 'step_order')) {
+      console.log('🔄 Migrating: Adding step_order to followup_templates...');
+      db.exec(`ALTER TABLE followup_templates ADD COLUMN step_order INTEGER`);
+      // Copy from template_order if it exists
+      if (ftCols.some(c => c.name === 'template_order')) {
+        db.exec(`UPDATE followup_templates SET step_order = template_order WHERE step_order IS NULL`);
+      }
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_followup_templates_step ON followup_templates(step_order)`);
 
     // Create Outreach Queue Table (for harvest/send system)
     db.exec(`
@@ -461,6 +466,24 @@ function runMigrations() {
         UNIQUE(account_id, source_value)
       );
     `);
+
+    // Create account_personas table if missing
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS account_personas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id),
+        persona_name TEXT NOT NULL,
+        niche TEXT,
+        communication_rules TEXT,
+        objections_script TEXT,
+        knowledge_base TEXT,
+        post_booking_message TEXT,
+        qualification_prompt TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_account_personas_account ON account_personas(account_id)');
 
     // Migration: Add qualification_prompt to account_personas
     const personaColumns = db.prepare("PRAGMA table_info(account_personas)").all();

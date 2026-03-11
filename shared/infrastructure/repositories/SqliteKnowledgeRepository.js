@@ -12,6 +12,20 @@ import {
 } from '../../utils/embeddings.js';
 
 /**
+ * Safely parse a JSON array field that may be stored as CSV
+ */
+function safeParseArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // Fallback: treat as comma-separated string
+    return value.split(',').map(s => s.trim()).filter(Boolean);
+  }
+}
+
+/**
  * Create SQLite Knowledge Repository
  *
  * @param {Object} deps - Dependencies
@@ -37,8 +51,8 @@ export function createSqliteKnowledgeRepository({ getDb }) {
 
       return rows.map(row => ({
         ...row,
-        triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
-        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
+        triggerKeywords: safeParseArray(row.trigger_keywords),
+        applicableSteps: safeParseArray(row.applicable_steps) || null,
         embedding: deserializeEmbedding(row.embedding)
       }));
     },
@@ -58,8 +72,8 @@ export function createSqliteKnowledgeRepository({ getDb }) {
 
       return rows.map(row => ({
         ...row,
-        triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
-        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
+        triggerKeywords: safeParseArray(row.trigger_keywords),
+        applicableSteps: safeParseArray(row.applicable_steps) || null,
         embedding: deserializeEmbedding(row.embedding)
       }));
     },
@@ -106,8 +120,8 @@ export function createSqliteKnowledgeRepository({ getDb }) {
 
       return rows.map(row => ({
         ...row,
-        triggerKeywords: row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [],
-        applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
+        triggerKeywords: safeParseArray(row.trigger_keywords),
+        applicableSteps: safeParseArray(row.applicable_steps) || null,
         embedding: deserializeEmbedding(row.embedding)
       }));
     },
@@ -129,14 +143,14 @@ export function createSqliteKnowledgeRepository({ getDb }) {
       const matches = [];
 
       for (const row of rows) {
-        const keywords = row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [];
+        const keywords = safeParseArray(row.trigger_keywords);
         const matchedKeyword = keywords.find(kw => textLower.includes(kw.toLowerCase()));
 
         if (matchedKeyword) {
           matches.push({
             ...row,
             triggerKeywords: keywords,
-            applicableSteps: row.applicable_steps ? JSON.parse(row.applicable_steps) : null,
+            applicableSteps: safeParseArray(row.applicable_steps) || null,
             embedding: deserializeEmbedding(row.embedding),
             matchedKeyword
           });
