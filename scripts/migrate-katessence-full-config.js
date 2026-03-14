@@ -506,6 +506,20 @@ const prospectorSources = [
     '#leadervisionnaire',
     '#viesurmesuree',
     '#liberteentrepreneur',
+    '#Entrepreneurebienetre',
+    '#Coachholistique',
+    '#Entrepreneureconsciente',
+    '#Businessholistique',
+    '#Leadershipfeminin',
+    '#Therapeuteholistique',
+    '#Coachspirituel',
+    '#Praticienneholistique',
+    '#Businessaligné',
+    '#Entrepreneurealignée',
+    '#Accompagnanteholistique',
+    '#Leaderfeminin',
+    '#Personalbrandingspirituel',
+    '#Missiondevie',
     // TODO: ajouter des profils concurrents a scraper : @concurrent1, @concurrent2
 ];
 
