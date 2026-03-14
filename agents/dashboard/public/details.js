@@ -235,6 +235,17 @@ async function selectLead(username) {
             document.getElementById('linkPost').style.pointerEvents = 'none';
         }
         
+        // 2a. Render Briefing (if available)
+        const briefingSection = document.getElementById('briefingSection');
+        const briefingField = document.getElementById('fieldBriefing');
+        if (lead.notes && lead.notes.includes('ACTIVITE')) {
+            briefingSection.style.display = 'block';
+            briefingField.value = lead.notes;
+        } else {
+            briefingSection.style.display = 'none';
+            briefingField.value = '';
+        }
+
         // 2. Render Conversation
         renderMessages(messages);
         

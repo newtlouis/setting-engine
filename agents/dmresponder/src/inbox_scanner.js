@@ -622,6 +622,18 @@ export async function runInboxScanner(options = {}) {
                           bookingStatus = 'confirmed';
                           bookingUrl = bookingResult.booking_url || null;
 
+                          // Generate pre-call briefing (non-blocking)
+                          try {
+                              const { generateBriefing } = await import('../../../shared/domain/services/BriefingGenerator.js');
+                              const briefing = await generateBriefing(updatedHistory, leadContext);
+                              if (briefing) {
+                                  await setDmThreadStatus(username, leadContext.status || 'scheduling', { notes: briefing });
+                                  console.log(`   📋 Pre-call briefing saved for @${username}`);
+                              }
+                          } catch (briefingErr) {
+                              console.error(`   ⚠️ Briefing generation failed (non-blocking):`, briefingErr.message);
+                          }
+
                           // Format the slot for the confirmation message
                           const slotDate = new Date(bookingIntent.slot);
                           const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
