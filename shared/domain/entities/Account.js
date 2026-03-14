@@ -15,7 +15,14 @@ export class Account {
     this.igUsername = data.ig_username || data.igUsername || null;
     this.description = data.description || null;
     this.isDefault = Boolean(data.is_default || data.isDefault);
+    this.bookingMode = data.booking_mode || data.bookingMode || 'calendly';
+    this.bookingConfig = data.booking_config || data.bookingConfig || null;
     this.createdAt = data.created_at || data.createdAt || null;
+
+    // Parse JSON booking_config if it's a string
+    if (typeof this.bookingConfig === 'string') {
+      try { this.bookingConfig = JSON.parse(this.bookingConfig); } catch { this.bookingConfig = null; }
+    }
   }
 
   /**
@@ -68,6 +75,8 @@ export class Account {
       ig_username: this.igUsername,
       description: this.description,
       is_default: this.isDefault ? 1 : 0,
+      booking_mode: this.bookingMode,
+      booking_config: this.bookingConfig ? JSON.stringify(this.bookingConfig) : null,
       created_at: this.createdAt
     };
   }
@@ -82,6 +91,8 @@ export class Account {
       igUsername: this.igUsername,
       description: this.description,
       isDefault: this.isDefault,
+      bookingMode: this.bookingMode,
+      bookingConfig: this.bookingConfig,
       createdAt: this.createdAt
     };
   }

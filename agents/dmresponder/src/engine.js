@@ -238,29 +238,31 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     }
   }
 
-  // Inject Calendly Availability if in booking stage (Step 5+)
+  // Inject booking availability if in booking stage (Step 5+)
   // Also check conversation context: if last assistant message proposed a call, we need slots
   const currentStep = leadContext?.funnel_step || 0;
   const lastAssistantMsg = conversationHistory.filter(m => m.role === 'assistant').pop()?.text?.toLowerCase() || '';
   const callProposed = lastAssistantMsg.includes('30 min') || lastAssistantMsg.includes('appel') || lastAssistantMsg.includes('se call') || lastAssistantMsg.includes('on prenne');
   const needsSlots = currentStep >= 5 || callProposed;
-  console.log(`[Engine] Calendly check: step=${currentStep}, callProposed=${callProposed}, needsSlots=${needsSlots}`);
+  console.log(`[Engine] Booking check: step=${currentStep}, callProposed=${callProposed}, needsSlots=${needsSlots}`);
   if (needsSlots) {
       try {
-          const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
-          // Get profile name from DB account or config fallback
+          const { resolveBookingAdapter } = await import('../../../shared/infrastructure/booking/BookingAdapterFactory.js');
+          const { getDb } = await import('../../../agents/collector/src/db/core.js');
+
+          // Resolve the right adapter based on account's booking_mode
           let profileName = profileConfig?.profile_name || 'default';
-          if (profileName === 'default' && accountId) {
-              try {
-                  const { getDb } = await import('../../../agents/collector/src/db/core.js');
-                  const db = getDb();
-                  if (db) {
-                      const acc = db.prepare('SELECT name FROM accounts WHERE id = ?').get(accountId);
-                      if (acc) profileName = acc.name;
-                  }
-              } catch (e) {}
+          let adapter;
+          if (accountId) {
+              const resolved = resolveBookingAdapter(getDb, accountId);
+              adapter = resolved.adapter;
+              profileName = resolved.profileName;
+          } else {
+              const { createCalendlyAdapter } = await import('../../../shared/infrastructure/booking/CalendlyAdapter.js');
+              adapter = createCalendlyAdapter();
           }
-          const availability = await fetchAvailability(profileName);
+
+          const availability = await adapter.fetchAvailability(profileName);
 
           const formatSlot = (s) => {
               const d = new Date(s.start_time);
@@ -272,7 +274,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
           const hasNextWeek = availability.nextWeek?.primary?.length > 0;
 
           if (hasThisWeek || hasNextWeek) {
-              contextDescription += `\n\nDISPONIBILITÉS CALENDLY RÉELLES :\n`;
+              contextDescription += `\n\nDISPONIBILITÉS RÉELLES :\n`;
 
               if (hasThisWeek) {
                   contextDescription += `\nCETTE SEMAINE :\n`;
@@ -297,11 +299,11 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
               contextDescription += `- Si le lead a donné ses coordonnées -> [STEP_8]. Confirmation chaleureuse.\n`;
           } else {
-              contextDescription += `\n\n⚠️ AUCUN CRÉNEAU CALENDLY DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
+              contextDescription += `\n\n⚠️ AUCUN CRÉNEAU DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
           }
       } catch (e) {
-          console.error("[Engine] Failed to fetch Calendly availability:", e.message);
-          contextDescription += `\n\n⚠️ AUCUN CRÉNEAU CALENDLY DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
+          console.error("[Engine] Failed to fetch booking availability:", e.message);
+          contextDescription += `\n\n⚠️ AUCUN CRÉNEAU DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
       }
   }
 

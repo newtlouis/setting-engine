@@ -592,7 +592,7 @@ export async function runInboxScanner(options = {}) {
           }
 
           // --- BOOKING STATE MACHINE ---
-          // If we have a complete booking_intent from LLM, attempt Calendly booking
+          // If we have a complete booking_intent from LLM, attempt booking via adapter
           if (response.booking_intent && response.booking_intent.slot && response.booking_intent.email) {
               bookingIntent = response.booking_intent;
               bookingStatus = 'pending';
@@ -603,19 +603,46 @@ export async function runInboxScanner(options = {}) {
               // Validate email format
               const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
               if (!emailRegex.test(bookingIntent.email)) {
-                  console.log(`   ⚠️ Invalid email format: "${bookingIntent.email}" — skipping Calendly`);
+                  console.log(`   ⚠️ Invalid email format: "${bookingIntent.email}" — skipping booking`);
                   bookingStatus = 'pending'; // Keep pending, need valid email
               } else {
                   try {
-                      const { createBooking } = await import('../../../shared/utils/calendly.js');
-                      // Pass recent conversation as hints for phone country detection
+                      // Resolve the right booking adapter for this account
+                      const { resolveBookingAdapter } = await import('../../../shared/infrastructure/booking/BookingAdapterFactory.js');
+                      const { getDb } = await import('../../../agents/collector/src/db/core.js');
+
+                      let adapter, adapterProfileName;
+                      const acc = getDb().prepare('SELECT id FROM accounts WHERE name = ?').get(profile);
+                      if (acc) {
+                          const resolved = resolveBookingAdapter(getDb, acc.id);
+                          adapter = resolved.adapter;
+                          adapterProfileName = resolved.profileName;
+                      } else {
+                          const { createCalendlyAdapter } = await import('../../../shared/infrastructure/booking/CalendlyAdapter.js');
+                          adapter = createCalendlyAdapter();
+                          adapterProfileName = profile;
+                      }
+
+                      // Generate briefing early so it can be included in the event (Google Calendar)
+                      let briefing = null;
+                      try {
+                          const { generateBriefing } = await import('../../../shared/domain/services/BriefingGenerator.js');
+                          briefing = await generateBriefing(updatedHistory, leadContext);
+                      } catch (briefingErr) {
+                          console.error(`   ⚠️ Briefing generation failed (non-blocking):`, briefingErr.message);
+                      }
+
                       const recentText = updatedHistory.slice(-10).map(m => m.text).join(' ');
-                      const bookingResult = await createBooking(profile, {
+                      const profileUrl = `https://www.instagram.com/${username}/`;
+
+                      const bookingResult = await adapter.createBooking(adapterProfileName, {
                           startTime: bookingIntent.slot,
                           email: bookingIntent.email,
                           name: leadContext.fullName || username,
                           phone: bookingIntent.phone || null,
-                          conversationHints: recentText
+                          conversationHints: recentText,
+                          briefing,
+                          profileUrl
                       });
 
                       if (bookingResult.success) {
@@ -623,16 +650,10 @@ export async function runInboxScanner(options = {}) {
                           bookingStatus = 'confirmed';
                           bookingUrl = bookingResult.booking_url || null;
 
-                          // Generate pre-call briefing (non-blocking)
-                          try {
-                              const { generateBriefing } = await import('../../../shared/domain/services/BriefingGenerator.js');
-                              const briefing = await generateBriefing(updatedHistory, leadContext);
-                              if (briefing) {
-                                  await setDmThreadStatus(username, leadContext.status || 'scheduling', { notes: briefing });
-                                  console.log(`   📋 Pre-call briefing saved for @${username}`);
-                              }
-                          } catch (briefingErr) {
-                              console.error(`   ⚠️ Briefing generation failed (non-blocking):`, briefingErr.message);
+                          // Save briefing to lead notes
+                          if (briefing) {
+                              await setDmThreadStatus(username, leadContext.status || 'scheduling', { notes: briefing });
+                              console.log(`   📋 Pre-call briefing saved for @${username}`);
                           }
 
                           // Format the slot for the confirmation message
@@ -666,13 +687,11 @@ export async function runInboxScanner(options = {}) {
 
                           console.log(`   📝 Confirmation message: "${finalMessage}"`);
                       } else {
-                          console.log(`   ⚠️ Calendly booking FAILED: ${bookingResult.error}`);
-                          if (bookingResult.details) console.log(`   📋 Details:`, JSON.stringify(bookingResult.details));
+                          console.log(`   ⚠️ Booking FAILED: ${bookingResult.error}`);
 
                           // Re-fetch availability and propose alternatives
                           try {
-                              const { fetchAvailability } = await import('../../../shared/utils/calendly.js');
-                              const freshAvailability = await fetchAvailability(profile);
+                              const freshAvailability = await adapter.fetchAvailability(adapterProfileName);
                               const allSlots = [
                                   ...(freshAvailability.thisWeek?.primary || []),
                                   ...(freshAvailability.thisWeek?.backup || []),
