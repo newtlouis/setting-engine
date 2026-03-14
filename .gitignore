@@ -74,3 +74,6 @@ temp/
 
 # Backups
 backups/
+
+# PMAD session artifacts
+.pmad/
