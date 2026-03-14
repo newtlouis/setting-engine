@@ -368,6 +368,11 @@ function runMigrations() {
       console.log('🔄 Migrating: Adding applicable_steps to knowledge_base table...');
       db.exec(`ALTER TABLE knowledge_base ADD COLUMN applicable_steps TEXT`);
     }
+    // Migration: Add video_url column if missing
+    if (!kbColumns.some(col => col.name === 'video_url')) {
+      console.log('🔄 Migrating: Adding video_url to knowledge_base table...');
+      db.exec(`ALTER TABLE knowledge_base ADD COLUMN video_url TEXT`);
+    }
     db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_category ON knowledge_base(account_id, category);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_kb_account_active ON knowledge_base(account_id, is_active);`);
 

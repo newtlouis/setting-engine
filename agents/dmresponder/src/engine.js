@@ -305,6 +305,29 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       }
   }
 
+  // Inject video resources if available (for STEP_5 video CTA alternative)
+  if (currentStep >= 4 && currentStep <= 5 && accountId) {
+      try {
+          const { getVideoResources } = await import('./db_integration.js');
+          const { matchVideo } = await import('../../../shared/domain/services/VideoMatcher.js');
+          const videoEntries = await getVideoResources(accountId);
+          if (videoEntries.length > 0) {
+              const bestVideo = matchVideo(videoEntries, {
+                  conversationHistory,
+                  leadContext,
+                  applicableContext: 'funnel_alternative'
+              });
+              if (bestVideo) {
+                  contextDescription += `\n\nVIDEOS RESSOURCES DISPONIBLES :\n`;
+                  contextDescription += `Video recommandée : "${bestVideo.content}" → ${bestVideo.video_url}\n`;
+                  contextDescription += `Utilise cette video comme CTA alternatif si le prospect hésite à prendre un appel (hésitation molle). Reste au STEP_5 après.\n`;
+              }
+          }
+      } catch (e) {
+          console.error('[Engine] Video resource injection failed (continuing without):', e.message);
+      }
+  }
+
   // Force JSON output instruction
   systemPrompt += `
   

@@ -343,6 +343,25 @@ export async function getKnownLeadIdentifiers() {
   return { usernames, displayNames };
 }
 
+/**
+ * Get video resource entries for an account from knowledge_base
+ *
+ * @param {number} accountId
+ * @returns {Promise<Array>} Video resource entries with video_url
+ */
+export async function getVideoResources(accountId) {
+  await initDB();
+  if (!container) return [];
+
+  try {
+    const allEntries = await container.repositories.knowledge.getByAccount(accountId);
+    return allEntries.filter(entry => entry.category === 'video_resource' && entry.video_url);
+  } catch (error) {
+    console.error('Error getting video resources:', error.message);
+    return [];
+  }
+}
+
 export function parseThreadMetadata(rawMetadata) {
   if (!rawMetadata) return {};
   if (typeof rawMetadata === 'object') return rawMetadata;
@@ -366,6 +385,7 @@ export function parseThreadMetadata(rawMetadata) {
     getOrCreateAccount,
     getKnownLeadIdentifiers,
     parseThreadMetadata,
+    getVideoResources,
     fullUpsertLead: (username, accountId, data) => dbFunctions.fullUpsertLead(username, accountId, data),
     getNextFollowupTemplate: (lastId) => dbFunctions.getNextFollowupTemplate(lastId),
     updateLeadLastFollowup: (username, tplId) => dbFunctions.updateLeadLastFollowup(username, tplId),

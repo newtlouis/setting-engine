@@ -25,7 +25,8 @@ import {
   getKnownLeadIdentifiers,
   getConversationHistory,
   addMessage,
-  setDmThreadStatus
+  setDmThreadStatus,
+  getVideoResources
 } from './db_integration.js';
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
@@ -643,6 +644,25 @@ export async function runInboxScanner(options = {}) {
                           finalMessage = template
                               .replace('{{day}}', day)
                               .replace('{{hour}}', hour);
+
+                          // Append targeted video resource based on conversation blocage
+                          try {
+                              const { matchVideo } = await import('../../../shared/domain/services/VideoMatcher.js');
+                              const videoEntries = await getVideoResources(leadContext.account_id);
+                              if (videoEntries.length > 0) {
+                                  const bestVideo = matchVideo(videoEntries, {
+                                      conversationHistory: updatedHistory,
+                                      leadContext,
+                                      applicableContext: 'post_booking'
+                                  });
+                                  if (bestVideo) {
+                                      finalMessage += `\n\nen attendant, cette vidéo pourrait t'intéresser 👇\n${bestVideo.video_url}`;
+                                      console.log(`   🎬 Video resource appended: ${bestVideo.video_url}`);
+                                  }
+                              }
+                          } catch (videoErr) {
+                              console.error(`   ⚠️ Video matching failed (non-blocking):`, videoErr.message);
+                          }
 
                           console.log(`   📝 Confirmation message: "${finalMessage}"`);
                       } else {

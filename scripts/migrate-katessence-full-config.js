@@ -396,7 +396,11 @@ SI reponse = "j'ai deja un coach/accompagnant"
 -> "Super ! L'echange c'est juste un point strategique, ca peut etre complementaire. Qu'est-ce que t'en penses ?"
 
 SI reponse = hesitation molle ("je sais pas", "peut-etre", "on verra")
--> "Ecoute, c'est 30 min sans engagement. Vu ce que tu me decris, ca pourrait t'aider a y voir plus clair sur les prochaines etapes. On tente ?"
+-> Si des VIDEOS RESSOURCES sont disponibles dans le contexte, propose une video pertinente comme alternative :
+   "Je comprends ! En attendant, j'ai une video qui pourrait t'aider sur [sujet du blocage identifie] 👇 [VIDEO_URL]. Dis-moi ce que t'en penses !"
+   RESTE au [STEP_5] apres avoir envoye la video. Ne passe PAS au step suivant.
+-> Si AUCUNE video n'est disponible, utilise le fallback :
+   "Ecoute, c'est 30 min sans engagement. Vu ce que tu me decris, ca pourrait t'aider a y voir plus clair sur les prochaines etapes. On tente ?"
 
 SI reponse = mefiance ("arnaque", "c'est quoi le piege")
 -> "J'accompagne des entrepreneures comme toi a structurer leur business. L'echange est gratuit, c'est pour voir si on est alignees. Apres si tu veux aller plus loin je t'expliquerai. Mais zero pression."
@@ -652,6 +656,48 @@ const knowledgeBaseEntries = [
         situation: "Le prospect demande si l'appel est payant",
         content: "L'echange est 100% gratuit et sans engagement ! C'est un point strategique pour faire le point sur ta situation et voir si on est alignees.",
         applicable_steps: '5,6'
+    },
+
+    // --- VIDEO RESOURCES ---
+    {
+        category: 'video_resource',
+        trigger_keywords: 'clients,acquisition,trouver des clients,pas de clients,plus de clients,attirer,prospection',
+        situation: "Le prospect a un blocage lie a l'acquisition de clients",
+        content: "Comment obtenir plus de clients",
+        applicable_steps: 'both',
+        video_url: 'https://youtu.be/cDDK-eFDqJg'
+    },
+    {
+        category: 'video_resource',
+        trigger_keywords: 'vente,vendre,conversion,closer,closing,ca irregulier,revenus,chiffre',
+        situation: "Le prospect a un blocage lie a la vente ou aux revenus",
+        content: "Comment vendre plus",
+        applicable_steps: 'both',
+        video_url: 'https://youtu.be/ssq-LVGkdWo'
+    },
+    {
+        category: 'video_resource',
+        trigger_keywords: 'temps,energie,epuisee,fatiguee,burn,charge mentale,surmenee,debordee,tout porter,repose sur moi',
+        situation: "Le prospect est epuise ou manque de temps/energie",
+        content: "Comment reprendre la main sur son temps et son energie",
+        applicable_steps: 'both',
+        video_url: 'https://youtu.be/ZY-htDfYzY0'
+    },
+    {
+        category: 'video_resource',
+        trigger_keywords: 'positionnement,offre,positionner,clarte,message,niche,cible,audience,pas clair',
+        situation: "Le prospect a du mal a se positionner ou a clarifier son offre",
+        content: "Comment se positionner et parler clairement de son offre",
+        applicable_steps: 'both',
+        video_url: 'https://youtu.be/JSY5-2m8wko'
+    },
+    {
+        category: 'video_resource',
+        trigger_keywords: 'visibilite,visible,reseaux,instagram,audience,contenu,communaute,followers,abonnes',
+        situation: "Le prospect veut etre plus visible sur les reseaux",
+        content: "Comment etre visible sur les reseaux sociaux",
+        applicable_steps: 'both',
+        video_url: 'https://youtu.be/2gMu6xp--yk'
     }
 ];
 
@@ -832,8 +878,8 @@ async function migrate() {
     const kbStmt = db.prepare(`
         INSERT INTO knowledge_base (
             account_id, category, trigger_keywords, situation, content,
-            applicable_steps, is_active, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+            applicable_steps, video_url, is_active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
     `);
 
     for (const entry of knowledgeBaseEntries) {
@@ -843,7 +889,8 @@ async function migrate() {
             entry.trigger_keywords,
             entry.situation,
             entry.content,
-            entry.applicable_steps
+            entry.applicable_steps,
+            entry.video_url || null
         );
     }
     console.log(`   ${knowledgeBaseEntries.length} entries created`);
