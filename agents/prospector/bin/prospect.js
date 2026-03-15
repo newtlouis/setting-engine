@@ -15,16 +15,17 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from various possible locations in a monorepo
+// Load environment variables from all .env files in the monorepo
+// Later files don't override earlier ones (first value wins)
 const envPaths = [
-  join(__dirname, '../../..', '.env'),      // Root
-  join(__dirname, '../../outreach', '.env')   // Outreach agent (where the key likely is)
+  join(__dirname, '../../..', '.env'),          // Root (if exists)
+  join(__dirname, '../../outreach', '.env'),     // Outreach agent (prospector credentials)
+  join(__dirname, '../../dmresponder', '.env')   // DM Responder (OpenAI key, other credentials)
 ];
 
 for (const envPath of envPaths) {
   if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
-    break;
+    dotenv.config({ path: envPath, override: false });
   }
 }
 
@@ -41,6 +42,7 @@ program
   .option('--dry-run', 'List what would be done without opening browser', false)
   .option('--skip-qualification', 'Skip bio qualification check', false)
   .option('--prepare-only', 'Queue leads without opening browser tabs', false)
+  .option('--mode <mode>', 'Prospecting mode: "comments" (leads = commenters) or "authors" (leads = post authors)', 'comments')
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');
@@ -49,6 +51,7 @@ program
     console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Max leads/post: ${options.leads}`);
     console.log(`   Total limit: ${options.total}`);
+    console.log(`   Mode: ${options.mode}`);
     if (options.dryRun) console.log('   MODE: DRY RUN (no browser)');
     console.log('');
 
@@ -62,7 +65,8 @@ program
         totalLimit: parseInt(options.total, 10),
         dryRun: options.dryRun,
         skipQualification: options.skipQualification,
-        prepareOnly: options.prepareOnly
+        prepareOnly: options.prepareOnly,
+        mode: options.mode
       });
       process.exit(0);
     } catch (error) {

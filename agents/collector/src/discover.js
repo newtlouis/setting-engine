@@ -175,6 +175,57 @@ export async function discoverFromHashtags(page, hashtags, maxPosts, alreadyScra
 }
 
 /**
+ * Extract the author username from a post page
+ *
+ * @param {Page} page - Playwright page object
+ * @param {string} postUrl - URL of the Instagram post
+ * @returns {Promise<string|null>} Author username or null
+ */
+export async function extractPostAuthor(page, postUrl) {
+  try {
+    await gotoWithRetry(page, postUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await delay(2000 + Math.random() * 1500);
+
+    const author = await page.evaluate(() => {
+      // Only search within <main> to exclude sidebar navigation (which contains the logged-in user's profile link)
+      const mainEl = document.querySelector('main') || document.body;
+      const skipPrefixes = ['/p/', '/reel/', '/explore/', '/stories/', '/accounts/', '/legal/', '/web/', '/direct/'];
+      const skipExact = ['/', '/accounts/login/', '/accounts/emailsignup/'];
+      const profilePattern = /^\/[a-zA-Z0-9_.]+\/?$/;
+
+      // Strategy 1: Find links whose img alt contains "Photo de profil de" or "profile picture"
+      const mainLinks = mainEl.querySelectorAll('a[href^="/"]');
+      for (const link of mainLinks) {
+        const imgAlt = link.querySelector('img')?.alt || '';
+        if (imgAlt.match(/photo de profil de|profile picture of/i)) {
+          const href = link.getAttribute('href');
+          if (href && profilePattern.test(href)) {
+            return href.replace(/\//g, '');
+          }
+        }
+      }
+
+      // Strategy 2: First profile-pattern link within main that's not a system link
+      for (const link of mainLinks) {
+        const href = link.getAttribute('href');
+        if (!href || !profilePattern.test(href)) continue;
+        if (skipExact.includes(href)) continue;
+        if (skipPrefixes.some(prefix => href.startsWith(prefix))) continue;
+        if (link.closest('footer') || link.closest('[role="contentinfo"]')) continue;
+        return href.replace(/\//g, '');
+      }
+
+      return null;
+    });
+
+    return author || null;
+  } catch (err) {
+    console.error(`   ⚠️ Error extracting author from ${postUrl}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
  * Discover posts from competitor profiles
  * 
  * @param {Page} page - Playwright page object

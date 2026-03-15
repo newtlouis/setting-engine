@@ -66,7 +66,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--slow'] },
-        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode'] },
         { name: 'test:e2e', description: 'Test E2E LLM (real API)', options: [] },
     ],
     Collection: [
@@ -77,7 +77,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse step-by-step vs scripts funnel', options: ['--profile', '--username', '--save'] },
     ],
     Prospecting: [
-        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--max'] },
+        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--leads', '--total', '--prepare-only', '--skip-qualification'] },
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max'] },
@@ -94,7 +94,7 @@ const COMMAND_REGISTRY = {
         { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile'] },
     ],
     Operations: [
-        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile'] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode'] },
         { name: 'backup', description: 'Backup base de donnees', options: ['--upload'] },
         { name: 'restore', description: 'Restaurer base de donnees', options: ['--remote'] },
     ],

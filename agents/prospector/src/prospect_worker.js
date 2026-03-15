@@ -11,7 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Import from Collector agent
-import { discoverFromHashtags, discoverFromProfiles } from '../../collector/src/discover.js';
+import { discoverFromHashtags, discoverFromProfiles, extractPostAuthor } from '../../collector/src/discover.js';
 import { scrapePostComments } from '../../collector/src/scrape_post.js';
 
 // Import from Outreach agent
@@ -87,7 +87,8 @@ export async function runProspector(options = {}) {
     totalLimit = 20,
     dryRun = false,
     skipQualification = false,
-    prepareOnly = false
+    prepareOnly = false,
+    mode = 'comments'
   } = options;
 
   if (!profile) throw new Error('Profile is required');
@@ -101,6 +102,7 @@ export async function runProspector(options = {}) {
   const outreachConfig = loadOutreachConfig(accountId, profileConfig);
   console.log(`🧠 Niche: ${outreachConfig.niche || 'default'}`);
   console.log(`📦 Prepare Only: ${prepareOnly}`);
+  console.log(`🔍 Mode: ${mode === 'authors' ? 'AUTHORS (post publishers)' : 'COMMENTS (commenters)'}`);
 
   if (source) {
     const sourceInfo = parseSource(source);
@@ -213,18 +215,34 @@ export async function runProspector(options = {}) {
       if (stats.leadsContacted >= totalLimit) break;
         const post = posts[postIdx];
         const postUrl = post.url || post.post_url;
-        
+
         // Skip if already in memory (could happen if discovery returned a duplicate)
         if (alreadyScraped.has(postUrl)) continue;
         alreadyScraped.add(postUrl);
         console.log(`\n📝 Processing Post ${postIdx + 1}/${posts.length} in batch: ${postUrl}`);
 
-        // Navigate to post and scrape comments
-        console.log('   Scraping comments...');
         try {
-            // Scraping more comments to be exhaustive (up to 500)
-            const comments = await scrapePostComments(workingPage, postUrl, 500); 
-            
+          // Build list of candidate leads depending on mode
+          let candidates = []; // Array of { username, comment }
+
+          if (mode === 'authors') {
+            // AUTHORS MODE: extract the post author as the lead
+            console.log('   Extracting post author...');
+            const authorUsername = await extractPostAuthor(workingPage, postUrl);
+            if (authorUsername) {
+              console.log(`   👤 Post author: @${authorUsername}`);
+              candidates.push({
+                username: authorUsername,
+                comment: { username: authorUsername, comment_text: null, post_url: postUrl }
+              });
+            } else {
+              console.log('   ⚠️ Could not extract post author.');
+            }
+          } else {
+            // COMMENTS MODE (default): scrape comments, leads = commenters
+            console.log('   Scraping comments...');
+            const comments = await scrapePostComments(workingPage, postUrl, 500);
+
             if (!comments || comments.length === 0) {
               console.log('   No comments found on this post.');
               dbFunctions.upsertPost(post);
@@ -235,22 +253,25 @@ export async function runProspector(options = {}) {
             console.log(`   Found ${comments.length} comments`);
             stats.commentsFound += comments.length;
 
-            // STEP 3: Process each commenter
             const uniqueUsernames = new Set();
-            
             for (const comment of comments) {
               const username = comment.username;
               if (!username) continue;
               if (username.toLowerCase() === 'reels') continue;
-             
-             // Skip duplicates in this session
-             if (uniqueUsernames.has(username)) continue;
-             uniqueUsernames.add(username);
+              if (uniqueUsernames.has(username)) continue;
+              uniqueUsernames.add(username);
+              candidates.push({ username, comment });
+            }
+          }
+
+          // STEP 3: Process each candidate lead
+          for (const { username, comment } of candidates) {
+             if (stats.leadsContacted >= totalLimit) break;
 
              // Skip if already in database in active or completed stage
              const existingLead = dbFunctions.getLeadByUsername(username, accountId);
              const skipStatuses = ['contacted', 'queued', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
-             
+
              if (existingLead && skipStatuses.includes(existingLead.status)) {
                console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
                stats.leadsSkipped++;
@@ -262,7 +283,7 @@ export async function runProspector(options = {}) {
 
              // STEP 3a: Open profile and check contactability
              const profileResult = await goToProfile(workingPage, username);
-             
+
              if (!profileResult.success) {
                console.log(`   ❌ Could not open profile: ${profileResult.error}`);
                stats.leadsFailed++;
@@ -277,7 +298,7 @@ export async function runProspector(options = {}) {
 
              // STEP 3b: Check "Contact" button
              const contactCheck = await checkCanContact(workingPage);
-             
+
              if (!contactCheck.canContact) {
                console.log(`   🔒 @${username}: No Contact button`);
                stats.leadsSkipped++;
@@ -293,7 +314,7 @@ export async function runProspector(options = {}) {
              if (!skipQualification) {
                const qualificationPrompt = outreachConfig.qualificationPrompt;
                const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username);
-               
+
                if (!qualResult.qualified) {
                  console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
                  stats.leadsSkipped++;
@@ -306,7 +327,7 @@ export async function runProspector(options = {}) {
              stats.leadsQualified++;
 
              // STEP 3e: Generate message
-             
+
              // 🤖 Smart Name Extraction (AI)
              let aiFirstName = null;
              try {
@@ -328,7 +349,7 @@ export async function runProspector(options = {}) {
                   warmth: 'cold',
                   comments: [comment]
                 };
-                
+
                 const messageResult = generateFirstMessage(leadForTemplate, [comment], {
                   niche: outreachConfig.niche || 'personal development',
                   isSimple: true,
@@ -358,7 +379,7 @@ export async function runProspector(options = {}) {
                        first_name: aiFirstName,
                        source: 'prospect'
                    });
-                  
+
                   if (queueResult) {
                       console.log(`   📦 Queued @${username} for later sending.`);
                       saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw);
@@ -396,7 +417,6 @@ export async function runProspector(options = {}) {
                        console.log(`   ⏭️  @${username}: Conversation existante détectée - Marqué comme 'already_known'.`);
                        saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl, aiFirstName, currentSourceRaw);
                      } else if (sendResult.isCompetitor) {
-                        // This should have been caught by qualifyLead, but safety check
                        console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
                        saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData, null, aiFirstName, currentSourceRaw);
                      } else {
@@ -413,12 +433,12 @@ export async function runProspector(options = {}) {
 
              // Small delay between leads
              await delay(2000, 4000);
-           } // End comment loop
-           
+           } // End candidates loop
+
            // Ensure post is in DB and mark as fully scraped to avoid re-processing
            dbFunctions.upsertPost(post);
            dbFunctions.markPostScraped(postUrl);
-           
+
         } catch (err) {
             console.error(`   ⚠️ Error processing post ${postUrl}: ${err.message}`);
         }
