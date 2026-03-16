@@ -386,8 +386,16 @@ export async function runInboxScanner(options = {}) {
       const actionable = visible.filter(c => {
         if (!c.isUnread || processedNames.has(c.name)) return false;
         // Match display name against known usernames or full_names
+        // Instagram sidebar title can include bio/title after the name (e.g. "Carole Delarue Arrighi Coach en...")
         const nameLower = c.name.toLowerCase();
-        return knownLeads.usernames.has(nameLower) || knownLeads.displayNames.has(nameLower);
+        if (knownLeads.usernames.has(nameLower) || knownLeads.displayNames.has(nameLower)) return true;
+        // Normalize display name to username format and check prefix matches
+        const nameAsUsername = nameLower.replace(/[\s\-]+/g, '_').replace(/[^a-z0-9_.]/g, '');
+        for (const uname of knownLeads.usernames) {
+          // Exact match or the sidebar name starts with the username (name + title/bio appended)
+          if (nameAsUsername === uname || nameAsUsername.startsWith(uname + '_')) return true;
+        }
+        return false;
       });
       
       if (actionable.length > 0) {
