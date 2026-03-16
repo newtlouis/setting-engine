@@ -4,6 +4,7 @@
 
 let currentProcessId = null;
 let currentEventSource = null;
+let cachedRegistry = null;
 
 // ANSI escape code to HTML converter (8 standard colors + bold)
 function ansiToHtml(text) {
@@ -72,8 +73,8 @@ function ansiToHtml(text) {
 async function loadCommands() {
     try {
         const res = await fetch('/api/commands');
-        const registry = await res.json();
-        renderCommands(registry);
+        cachedRegistry = await res.json();
+        renderCommands(cachedRegistry);
     } catch (err) {
         document.getElementById('commandPanel').innerHTML =
             `<div style="color: var(--error); padding: 20px;">Erreur: ${err.message}</div>`;
@@ -98,7 +99,8 @@ function renderCommands(registry) {
                   ).join('')}</div>`
                 : '';
 
-            const defaultValue = cmd.defaults || '';
+            const profile = getSelectedProfile();
+            const defaultValue = (profile && cmd.profileDefaults && cmd.profileDefaults[profile]) || cmd.defaults || '';
             const placeholder = visibleOptions.length > 0
                 ? visibleOptions.join(' ')
                 : '';
@@ -325,6 +327,14 @@ async function loadAccounts() {
 }
 
 // Init
-loadAccounts();
+loadAccounts().then(() => {
+    // Re-render commands when profile changes (for profileDefaults)
+    const select = document.getElementById('accountSelect');
+    if (select) {
+        select.addEventListener('change', () => {
+            if (cachedRegistry) renderCommands(cachedRegistry);
+        });
+    }
+});
 loadCommands();
 checkRunningProcesses();

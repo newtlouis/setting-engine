@@ -77,7 +77,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse step-by-step vs scripts funnel', options: ['--profile', '--username', '--save'] },
     ],
     Prospecting: [
-        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--total', '--skip-qualification', '--variant'] },
+        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--total', '--skip-qualification', '--variant'], profileDefaults: { katessence: '--mode authors --posts 30 --variant B' } },
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max'] },
