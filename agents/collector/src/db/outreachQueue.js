@@ -17,10 +17,10 @@ export function addToOutreachQueue(lead) {
     const stmt = db.prepare(`
       INSERT INTO outreach_queue (
         username, profile_url, dm_url, prepared_message,
-        first_name, source, resource_file, resource_url
+        first_name, source, resource_file, resource_url, account_id
       ) VALUES (
         @username, @profile_url, @dm_url, @prepared_message,
-        @first_name, @source, @resource_file, @resource_url
+        @first_name, @source, @resource_file, @resource_url, @account_id
       )
       ON CONFLICT(username) DO UPDATE SET
         status = 'pending',
@@ -29,6 +29,7 @@ export function addToOutreachQueue(lead) {
         source = @source,
         resource_file = COALESCE(@resource_file, resource_file),
         resource_url = COALESCE(@resource_url, resource_url),
+        account_id = COALESCE(@account_id, account_id),
         error = NULL,
         sent_at = NULL,
         created_at = datetime('now')
@@ -42,7 +43,8 @@ export function addToOutreachQueue(lead) {
       first_name: lead.first_name || null,
       source: lead.source || null,
       resource_file: lead.resource_file || null,
-      resource_url: lead.resource_url || null
+      resource_url: lead.resource_url || null,
+      account_id: lead.account_id || null
     });
     return info.changes > 0 ? { id: info.lastInsertRowid, ...lead } : null;
   } catch (err) {
@@ -56,8 +58,16 @@ export function addToOutreachQueue(lead) {
  * @param {number} limit - Max number to fetch
  * @returns {Array} List of queued leads
  */
-export function getQueuedLeads(limit = 5) {
+export function getQueuedLeads(limit = 5, accountId = null) {
   const db = getDb();
+  if (accountId) {
+    return db.prepare(`
+      SELECT * FROM outreach_queue
+      WHERE status = 'pending' AND account_id = ?
+      ORDER BY created_at ASC
+      LIMIT ?
+    `).all(accountId, limit);
+  }
   return db.prepare(`
     SELECT * FROM outreach_queue
     WHERE status = 'pending'
@@ -97,8 +107,12 @@ export function markQueuedLeadFailed(username, error) {
  * Get count of pending leads in queue
  * @returns {number}
  */
-export function getQueueCount() {
+export function getQueueCount(accountId = null) {
   const db = getDb();
+  if (accountId) {
+    const result = db.prepare(`SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending' AND account_id = ?`).get(accountId);
+    return result ? result.count : 0;
+  }
   const result = db.prepare(`SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending'`).get();
   return result ? result.count : 0;
 }

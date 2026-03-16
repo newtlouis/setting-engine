@@ -77,7 +77,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse step-by-step vs scripts funnel', options: ['--profile', '--username', '--save'] },
     ],
     Prospecting: [
-        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--leads', '--total', '--prepare-only', '--skip-qualification'] },
+        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--total', '--skip-qualification'] },
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max'] },
@@ -2116,7 +2116,8 @@ app.post('/api/commands/run', async (req, res) => {
     // Validate args: allow --flags and their values (strings/numbers following a flag)
     const sanitizedArgs = [];
     for (let i = 0; i < args.length; i++) {
-        const a = String(args[i]);
+        // Fix macOS smart dashes: — (em dash) and – (en dash) → --
+        const a = String(args[i]).replace(/\u2014/g, '--').replace(/\u2013/g, '--');
         if (a.startsWith('--')) {
             sanitizedArgs.push(a);
         } else if (sanitizedArgs.length > 0 && !sanitizedArgs[sanitizedArgs.length - 1].includes('=')) {
@@ -2125,6 +2126,7 @@ app.post('/api/commands/run', async (req, res) => {
         }
     }
 
+    console.log(`[CMD] ${command} args:`, sanitizedArgs);
     const processId = randomUUID();
     const projectRoot = path.join(__dirname, '..', '..');
     const argsStr = sanitizedArgs.length > 0 ? ' -- ' + sanitizedArgs.join(' ') : '';
@@ -2143,7 +2145,7 @@ app.post('/api/commands/run', async (req, res) => {
 
     const child = spawn('sh', ['-c', shellCmd], {
         cwd: projectRoot,
-        env: { ...process.env, FORCE_COLOR: '1' },
+        env: { ...process.env, FORCE_COLOR: '1', PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || '/usr/bin:/bin'}` },
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: true,
     });

@@ -169,7 +169,7 @@ function getSelectedProfile() {
 async function runCommand(name) {
     // Parse args from input field
     const input = document.getElementById(`args-${name}`);
-    const argsStr = input ? input.value.trim() : '';
+    const argsStr = input ? input.value.trim().replace(/\u2014/g, '--').replace(/\u2013/g, '--') : '';
     const args = argsStr ? argsStr.split(/\s+/) : [];
 
     // Auto-inject --profile from account selector

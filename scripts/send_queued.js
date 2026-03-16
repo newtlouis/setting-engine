@@ -69,20 +69,18 @@ async function main() {
   const container = await getContainer();
   const outreachQueue = container.repositories.outreachQueue;
 
+  const account = await container.repositories.account.getOrCreate(profile);
+  const accountId = account.id;
+
   const stats = await outreachQueue.getStats();
-  console.log(`📊 Queue status: ${stats.pending} pending leads`);
+  console.log(`📊 Queue status: ${stats.pending} pending leads (all profiles)`);
 
-  if (stats.pending === 0) {
-    console.log('✅ Queue is empty. Nothing to send.');
-    return;
-  }
-
-  // Get leads to process
-  const leadsToSend = await outreachQueue.getPending(limit);
-  console.log(`📩 Fetched ${leadsToSend.length} leads to process\n`);
+  // Get leads to process for this profile
+  const leadsToSend = await outreachQueue.getPending(limit, accountId);
+  console.log(`📩 Found ${leadsToSend.length} pending leads for profile "${profile}"`);
 
   if (leadsToSend.length === 0) {
-    console.log('✅ No pending leads found.');
+    console.log('✅ No pending leads for this profile. Nothing to send.');
     return;
   }
 
@@ -95,7 +93,6 @@ async function main() {
   });
   const page = browserResult.page;
 
-  const account = await container.repositories.account.getOrCreate(profile);
   let sentCount = 0;
   let failedCount = 0;
 

@@ -37,11 +37,8 @@ program
   .requiredOption('--profile <name>', 'Instagram profile/account name (REQUIRED)')
   .option('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
   .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
-  .option('--leads <number>', 'Maximum leads to process per post', '10')
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
-  .option('--dry-run', 'List what would be done without opening browser', false)
   .option('--skip-qualification', 'Skip bio qualification check', false)
-  .option('--prepare-only', 'Queue leads without opening browser tabs', false)
   .option('--mode <mode>', 'Prospecting mode: "comments" (leads = commenters) or "authors" (leads = post authors)', 'comments')
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
@@ -49,10 +46,8 @@ program
     console.log(`   Profile: ${options.profile}`);
     console.log(`   Source: ${options.source}`);
     console.log(`   Batch size: ${options.posts} posts`);
-    console.log(`   Max leads/post: ${options.leads}`);
     console.log(`   Total limit: ${options.total}`);
     console.log(`   Mode: ${options.mode}`);
-    if (options.dryRun) console.log('   MODE: DRY RUN (no browser)');
     console.log('');
 
     try {
@@ -61,11 +56,8 @@ program
         profile: options.profile,
         source: options.source,
         maxPosts: parseInt(options.posts, 10),
-        maxLeadsPerPost: parseInt(options.leads, 10),
         totalLimit: parseInt(options.total, 10),
-        dryRun: options.dryRun,
         skipQualification: options.skipQualification,
-        prepareOnly: options.prepareOnly,
         mode: options.mode
       });
       process.exit(0);

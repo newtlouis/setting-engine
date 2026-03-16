@@ -18,7 +18,7 @@ pub fn run() {
             let server_already_running = TcpStream::connect("127.0.0.1:3000").is_ok();
 
             if !server_already_running {
-                let child = Command::new("node")
+                let child = Command::new("/opt/homebrew/bin/node")
                     .arg("agents/dashboard/server.js")
                     .current_dir(PROJECT_DIR)
                     .stdout(Stdio::null())

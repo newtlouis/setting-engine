@@ -15,15 +15,12 @@ import { discoverFromHashtags, discoverFromProfiles, extractPostAuthor } from '.
 import { scrapePostComments } from '../../collector/src/scrape_post.js';
 
 // Import from Outreach agent
-import { 
-  initBrowser, 
+import {
+  initBrowser,
   goToProfile,
   checkCanContact,
   scrapeProfileData,
-  sendDMToUserInNewTab,
-  closeBrowser, 
-  waitForUserToFinish, 
-  getOpenMessageTabs,
+  closeBrowser,
   getWorkingPage
 } from '../../outreach/src/dm_sender.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
@@ -83,11 +80,8 @@ export async function runProspector(options = {}) {
     profile,
     source,
     maxPosts = 3,
-    maxLeadsPerPost = 10,
     totalLimit = 20,
-    dryRun = false,
     skipQualification = false,
-    prepareOnly = false,
     mode = 'comments'
   } = options;
 
@@ -101,7 +95,6 @@ export async function runProspector(options = {}) {
   const profileConfig = await loadProfileConfig(profile);
   const outreachConfig = loadOutreachConfig(accountId, profileConfig);
   console.log(`🧠 Niche: ${outreachConfig.niche || 'default'}`);
-  console.log(`📦 Prepare Only: ${prepareOnly}`);
   console.log(`🔍 Mode: ${mode === 'authors' ? 'AUTHORS (post publishers)' : 'COMMENTS (commenters)'}`);
 
   if (source) {
@@ -119,20 +112,6 @@ export async function runProspector(options = {}) {
     leadsSkipped: 0,
     leadsFailed: 0
   };
-
-  // DRY RUN MODE
-  if (dryRun) {
-    console.log('\n🚧 DRY RUN MODE - No browser will be opened');
-    console.log('This will simulate the discovery phase only.\n');
-    
-    // We can't actually scrape without a browser, so just show what would happen
-    console.log(`Would loop until ${totalLimit} successful contacts are made:`);
-    console.log(`   1. Find batch of ${maxPosts} posts from rotated sources`);
-    console.log(`   2. Process comment leads (max ${maxLeadsPerPost} per post)`);
-    console.log(`   3. If limit not reached, move to NEXT source and find batch of ${maxPosts} posts`);
-    console.log(`   4. Repeat...`);
-    return stats;
-  }
 
   // Initialize browser with dedicated prospector account
   // Uses INSTAGRAM_USERNAME_PROSPECTOR / INSTAGRAM_PASSWORD_PROSPECTOR from .env
@@ -368,67 +347,24 @@ export async function runProspector(options = {}) {
 
               console.log(`   💬 Message: "${finalMessage.substring(0, 60)}..."`);
 
-              // STEP 3f: Send message (opens new tab, types, keeps open)
-              if (prepareOnly) {
-                  // Queue mode: store lead + message for later
-                   const queueResult = dbFunctions.addToOutreachQueue({
-                       username,
-                       profile_url: `https://www.instagram.com/${username}/`,
-                       dm_url: null,
-                       prepared_message: finalMessage,
-                       first_name: aiFirstName,
-                       source: 'prospect'
-                   });
+              // STEP 3f: Queue lead + message for later sending
+              const queueResult = dbFunctions.addToOutreachQueue({
+                  username,
+                  profile_url: `https://www.instagram.com/${username}/`,
+                  dm_url: null,
+                  prepared_message: finalMessage,
+                  first_name: aiFirstName,
+                  source: 'prospect',
+                  account_id: accountId
+              });
 
-                  if (queueResult) {
-                      console.log(`   📦 Queued @${username} for later sending.`);
-                      saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw);
-                      stats.leadsContacted++;
-                      console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
-                  } else {
-                      console.log(`   ⚠️ Already in queue: @${username}`);
-                  }
+              if (queueResult) {
+                  console.log(`   📦 Queued @${username} for later sending.`);
+                  saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw);
+                  stats.leadsContacted++;
+                  console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
               } else {
-                   // Normal mode: Open tab for review
-                   const sendResult = await sendDMToUserInNewTab(username, finalMessage, {
-                     targetUrl: `https://www.instagram.com/${username}/`,
-                     profileData
-                   });
-
-                  // Keep focusing the working page (scraper) so the user can see progress
-                  if (workingPage) {
-                    await workingPage.bringToFront().catch(() => {});
-                  }
-
-                   if (sendResult.success && sendResult.tabKeptOpen) {
-                     console.log(`   ✅ Message typed! Tab kept open for review.`);
-                     stats.leadsContacted++;
-
-                     // Save to database
-                     saveLeadToDb(username, comment, accountId, 'outreach', null, profileData, sendResult.dmUrl, aiFirstName, currentSourceRaw);
-                                          // Record conversation
-                      const lead = dbFunctions.getLeadByUsername(username, accountId);
-                      if (lead) {
-                        dbFunctions.addConversationMessage(lead.id, 'assistant', finalMessage, 'outreach');
-                      }
-
-                   } else if (sendResult.skipped) {
-                     if (sendResult.existingConversation) {
-                       console.log(`   ⏭️  @${username}: Conversation existante détectée - Marqué comme 'already_known'.`);
-                       saveLeadToDb(username, comment, accountId, 'already_known', 'existing_messages', profileData, sendResult.dmUrl, aiFirstName, currentSourceRaw);
-                     } else if (sendResult.isCompetitor) {
-                       console.log(`   🚫 @${username}: Qualifié comme concurrent pendant l'envoi.`);
-                       saveLeadToDb(username, comment, accountId, 'failed', 'competitor', profileData, null, aiFirstName, currentSourceRaw);
-                     } else {
-                       console.log(`   ⏭️  @${username}: Lead ignoré (${sendResult.error || 'raison inconnue'})`);
-                       saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, profileData, null, aiFirstName, currentSourceRaw);
-                     }
-                     stats.leadsSkipped++;
-                   } else {
-                     console.log(`   ❌ Failed to send: ${sendResult.error}`);
-                     stats.leadsFailed++;
-                     saveLeadToDb(username, comment, accountId, 'failed', sendResult.error, null, null, aiFirstName, currentSourceRaw);
-                   }
+                  console.log(`   ⚠️ Already in queue: @${username}`);
               }
 
              // Small delay between leads
@@ -457,35 +393,21 @@ export async function runProspector(options = {}) {
     if (process.env.DEBUG) console.error(error.stack);
   }
 
-  // FINAL: Wait for user to review tabs
-  const openTabs = getOpenMessageTabs();
-  if (openTabs.length > 0) {
-    console.log(`\n🎯 PROSPECTING COMPLETE`);
-    console.log('========================');
-    console.log(`   Posts scraped: ${stats.postsScraped}`);
-    console.log(`   Comments found: ${stats.commentsFound}`);
-    console.log(`   Leads processed: ${stats.leadsProcessed}`);
-    console.log(`   Leads qualified: ${stats.leadsQualified}`);
-    console.log(`   Messages ready: ${stats.leadsContacted}`);
-    console.log(`   Skipped: ${stats.leadsSkipped}`);
-    console.log(`   Failed: ${stats.leadsFailed}`);
-    console.log('');
-    
-    if (prepareOnly) {
-        console.log(`✨ Queued ${stats.leadsContacted} leads for later sending.`);
-        console.log(`   Total pending in queue: ${dbFunctions.getQueueCount()}`);
-        await closeBrowser().catch(() => {});
-        dbFunctions.closeDatabase();
-    } else {
-        await waitForUserToFinish();
-        await closeBrowser().catch(() => {});
-        dbFunctions.closeDatabase();
-    }
-  } else {
-    console.log('\n📭 No messages to review.');
-    await closeBrowser().catch(() => {});
-    dbFunctions.closeDatabase();
-  }
+  // FINAL: Print stats and close
+  console.log(`\n🎯 PROSPECTING COMPLETE`);
+  console.log('========================');
+  console.log(`   Posts scraped: ${stats.postsScraped}`);
+  console.log(`   Comments found: ${stats.commentsFound}`);
+  console.log(`   Leads processed: ${stats.leadsProcessed}`);
+  console.log(`   Leads qualified: ${stats.leadsQualified}`);
+  console.log(`   Queued: ${stats.leadsContacted}`);
+  console.log(`   Skipped: ${stats.leadsSkipped}`);
+  console.log(`   Failed: ${stats.leadsFailed}`);
+  console.log('');
+  console.log(`✨ Queued ${stats.leadsContacted} leads for later sending.`);
+  console.log(`   Total pending in queue: ${dbFunctions.getQueueCount()}`);
+  await closeBrowser().catch(() => {});
+  dbFunctions.closeDatabase();
 
   return stats;
 }

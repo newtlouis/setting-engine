@@ -68,14 +68,13 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
       return count;
     },
 
-    async getPending(limit = 10) {
+    async getPending(limit = 10, accountId = null) {
       const db = getDb();
-      const rows = db.prepare(`
-        SELECT * FROM outreach_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT ?
-      `).all(limit);
+      const query = accountId
+        ? `SELECT * FROM outreach_queue WHERE status = 'pending' AND account_id = ? ORDER BY created_at ASC LIMIT ?`
+        : `SELECT * FROM outreach_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?`;
+      const params = accountId ? [accountId, limit] : [limit];
+      const rows = db.prepare(query).all(...params);
 
       return rows.map(row => ({
         id: row.id,
@@ -88,6 +87,7 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
         status: row.status,
         resourceFile: row.resource_file,
         resourceUrl: row.resource_url,
+        accountId: row.account_id,
         createdAt: row.created_at
       }));
     },

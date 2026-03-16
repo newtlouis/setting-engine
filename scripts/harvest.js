@@ -132,7 +132,7 @@ async function main() {
   const remaining = target - currentCount;
   console.log(`\n--- PHASE 3: PROSPECTOR (need ${remaining} more) ---`);
   try {
-    await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--prepare-only', '--total', String(remaining), '--mode', prospectMode]);
+    await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--total', String(remaining), '--mode', prospectMode]);
   } catch (err) {
     console.error(`⚠️ Prospector phase error: ${err.message}`);
   }
