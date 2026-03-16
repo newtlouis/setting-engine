@@ -107,7 +107,8 @@ searchInput.addEventListener('input', (e) => {
 
 async function searchLeads(query) {
     try {
-        const res = await fetch(`/api/leads?search=${encodeURIComponent(query)}&limit=10`);
+        const accountParam = currentAccountId ? `&account_id=${currentAccountId}` : '';
+        const res = await fetch(`/api/leads?search=${encodeURIComponent(query)}&limit=10${accountParam}`);
         const leads = await res.json();
         
         // Render results
