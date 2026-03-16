@@ -357,8 +357,8 @@ export async function scrapeProfileData(page) {
         // Block purely numeric or count-like strings (e.g., "1 234", "10k")
         if (/^[\d.,\s]+[kKmM]?$/.test(text.trim())) return false;
         
-        // Block UI buttons
-        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner|abonné)$/i.test(text.trim())) return false;
+        // Block UI buttons and interaction labels
+        if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner|abonné|plus|more|voir plus|see more)$/i.test(text.trim())) return false;
         
         return true;
       }
@@ -377,10 +377,11 @@ export async function scrapeProfileData(page) {
               
           if (candidates.length > 0) {
               // The "Name" is usually the first short valid candidate
+              // Instagram display names with titles/emojis can be up to ~100 chars
               for (const c of candidates) {
-                  if (c.length < 50 && !c.includes('\n')) {
+                  if (c.length < 100 && !c.includes('\n')) {
                       foundFullName = c;
-                      break; 
+                      break;
                   }
               }
               

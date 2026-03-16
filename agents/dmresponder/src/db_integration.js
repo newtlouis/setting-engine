@@ -85,6 +85,7 @@ export async function getLeadWithContext(username, accountId = null) {
 
       // Funnel state
       funnel_step: lead.funnelStep || 0,
+      variant: lead.variant || 'A',
       booking_status: lead.bookingStatus || null,
       status: lead.status,
       is_ignored: lead.isIgnored,

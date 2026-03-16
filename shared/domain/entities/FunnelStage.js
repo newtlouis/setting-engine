@@ -13,7 +13,8 @@ export class FunnelStage {
     this.stageName = data.stage_name || data.stageName || '';
     this.stageLabel = data.stage_label || data.stageLabel || ''; // e.g., "STEP_1"
     this.description = data.description || '';
-    this.conversationScript = data.conversation_script || data.conversationScript || null; // LLM script for this stage
+    this.conversationScript = data.conversation_script || data.conversationScript || null; // LLM script for this stage (variant A)
+    this.conversationScriptB = data.conversation_script_b || data.conversationScriptB || null; // Variant B script
     this.maxFollowups = data.max_followups || data.maxFollowups || 0;
     this.followupDelayHours = data.followup_delay_hours || data.followupDelayHours || 24;
     this.autoIgnoreAfterMax = Boolean(data.auto_ignore_after_max || data.autoIgnoreAfterMax);
@@ -46,6 +47,7 @@ export class FunnelStage {
       stage_label: this.stageLabel,
       description: this.description,
       conversation_script: this.conversationScript,
+      conversation_script_b: this.conversationScriptB,
       max_followups: this.maxFollowups,
       followup_delay_hours: this.followupDelayHours,
       auto_ignore_after_max: this.autoIgnoreAfterMax ? 1 : 0,
@@ -62,6 +64,7 @@ export class FunnelStage {
       stageLabel: this.stageLabel,
       description: this.description,
       conversationScript: this.conversationScript,
+      conversationScriptB: this.conversationScriptB,
       maxFollowups: this.maxFollowups,
       followupDelayHours: this.followupDelayHours,
       autoIgnoreAfterMax: this.autoIgnoreAfterMax,
@@ -83,6 +86,7 @@ export class FunnelStage {
       stage_name: stageName,
       stage_label: stageLabel,
       conversation_script: options.conversationScript || null,
+      conversation_script_b: options.conversationScriptB || null,
       max_followups: options.maxFollowups || 0,
       followup_delay_hours: options.followupDelayHours || 24,
       auto_ignore_after_max: options.autoIgnoreAfterMax || false,

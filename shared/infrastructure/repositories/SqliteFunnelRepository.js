@@ -74,6 +74,7 @@ export function createSqliteFunnelRepository({ getDb }) {
             stage_label = @stage_label,
             description = @description,
             conversation_script = @conversation_script,
+            conversation_script_b = @conversation_script_b,
             max_followups = @max_followups,
             followup_delay_hours = @followup_delay_hours,
             auto_ignore_after_max = @auto_ignore_after_max,
@@ -86,11 +87,11 @@ export function createSqliteFunnelRepository({ getDb }) {
         const result = db.prepare(`
           INSERT INTO funnel_stages (
             account_id, stage_order, stage_name, stage_label,
-            description, conversation_script, max_followups, followup_delay_hours,
+            description, conversation_script, conversation_script_b, max_followups, followup_delay_hours,
             auto_ignore_after_max, is_active
           ) VALUES (
             @account_id, @stage_order, @stage_name, @stage_label,
-            @description, @conversation_script, @max_followups, @followup_delay_hours,
+            @description, @conversation_script, @conversation_script_b, @max_followups, @followup_delay_hours,
             @auto_ignore_after_max, @is_active
           )
           ON CONFLICT(account_id, stage_order) DO UPDATE SET
@@ -98,6 +99,7 @@ export function createSqliteFunnelRepository({ getDb }) {
             stage_label = excluded.stage_label,
             description = excluded.description,
             conversation_script = excluded.conversation_script,
+            conversation_script_b = excluded.conversation_script_b,
             max_followups = excluded.max_followups,
             followup_delay_hours = excluded.followup_delay_hours,
             auto_ignore_after_max = excluded.auto_ignore_after_max,

@@ -137,6 +137,7 @@ export function createSqliteLeadRepository({ getDb }) {
             lead_source = @lead_source,
             lead_type = @lead_type,
             booking_status = @booking_status,
+            variant = @variant,
             pain_points = @pain_points,
             notes = @notes,
             updated_at = datetime('now')
@@ -153,14 +154,14 @@ export function createSqliteLeadRepository({ getDb }) {
             engagement_score, total_comments, total_messages_sent,
             total_messages_received, funnel_step,
             last_followup_template_id, last_contact_at, lead_source,
-            lead_type, booking_status, pain_points, notes
+            lead_type, booking_status, variant, pain_points, notes
           ) VALUES (
             @username, @account_id, @full_name, @first_name, @bio, @email,
             @profile_url, @dm_url, @status, @warmth, @is_ignored,
             @engagement_score, @total_comments, @total_messages_sent,
             @total_messages_received, @funnel_step,
             @last_followup_template_id, @last_contact_at, @lead_source,
-            @lead_type, @booking_status, @pain_points, @notes
+            @lead_type, @booking_status, @variant, @pain_points, @notes
           )
           ON CONFLICT(username, account_id) DO UPDATE SET
             full_name = COALESCE(excluded.full_name, full_name),

@@ -82,7 +82,8 @@ export async function runProspector(options = {}) {
     maxPosts = 3,
     totalLimit = 20,
     skipQualification = false,
-    mode = 'comments'
+    mode = 'comments',
+    variantMode = 'A'
   } = options;
 
   if (!profile) throw new Error('Profile is required');
@@ -314,10 +315,25 @@ export async function runProspector(options = {}) {
              } catch (e) {
                   console.error(`   ⚠️ Name extraction failed: ${e.message}`);
              }
-                          // Final Message preparation
+
+              // Determine A/B variant for this lead
+              let leadVariant;
+              if (variantMode === 'random') {
+                leadVariant = Math.random() < 0.5 ? 'A' : 'B';
+              } else {
+                leadVariant = variantMode === 'B' ? 'B' : 'A';
+              }
+
+              // Final Message preparation
               let finalMessage = "";
-              if (aiFirstName) {
-                // NEW PATTERN: Just "[Name] ?"
+              if (leadVariant === 'B') {
+                // Variant B: "Hello Prénom, est-ce que tu proposes toujours un accompagnement ?"
+                const name = aiFirstName || profileData.fullName?.split(' ')[0] || '';
+                finalMessage = name
+                  ? `Hello ${name}, est-ce que tu proposes toujours un accompagnement ?`
+                  : `Hello, est-ce que tu proposes toujours un accompagnement ?`;
+              } else if (aiFirstName) {
+                // Variant A: Just "[Name] ?"
                 finalMessage = `${aiFirstName} ?`;
               } else {
                 const nameToUse = 'there';
@@ -345,7 +361,7 @@ export async function runProspector(options = {}) {
                 continue;
               }
 
-              console.log(`   💬 Message: "${finalMessage.substring(0, 60)}..."`);
+              console.log(`   💬 [${leadVariant}] Message: "${finalMessage.substring(0, 60)}..."`);
 
               // STEP 3f: Queue lead + message for later sending
               const queueResult = dbFunctions.addToOutreachQueue({
@@ -355,12 +371,13 @@ export async function runProspector(options = {}) {
                   prepared_message: finalMessage,
                   first_name: aiFirstName,
                   source: 'prospect',
-                  account_id: accountId
+                  account_id: accountId,
+                  variant: leadVariant
               });
 
               if (queueResult) {
                   console.log(`   📦 Queued @${username} for later sending.`);
-                  saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw);
+                  saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw, leadVariant);
                   stats.leadsContacted++;
                   console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
               } else {
@@ -415,16 +432,16 @@ export async function runProspector(options = {}) {
 /**
  * Helper to save lead to database
  */
-function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null, sourceTag = null) {
+function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null, sourceTag = null, variant = 'A') {
   try {
     // Insert or update lead
     const lead = dbFunctions.getLeadByUsername(username, accountId);
-    
+
     if (!lead) {
       // Create new lead
       db.prepare(`
-        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, first_name, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, first_name, notes, variant)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         username,
         accountId,
@@ -435,7 +452,8 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
         dmUrl || null,
         sourceTag || 'prospect',
         firstName || null,
-        failReason ? `Failed: ${failReason}` : null
+        failReason ? `Failed: ${failReason}` : null,
+        variant
       );
       
       // Also save the comment

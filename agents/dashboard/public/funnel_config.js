@@ -230,11 +230,18 @@ function renderStages() {
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Script de Conversation (Instructions pour l'IA)</label>
+                    <label>Script de Conversation — Variante A</label>
                     <textarea class="form-textarea" style="min-height: 200px;"
                               onchange="updateConversationScript(${stage.id}, this.value)"
                               placeholder="Instructions pour l'IA a cette etape...">${stage.conversationScript || stage.conversation_script || ''}</textarea>
-                    <p class="form-hint">Ce script sera utilise par l'IA pour guider la conversation a cette etape du funnel.</p>
+                    <p class="form-hint">Script principal (variante A) utilise par l'IA pour guider la conversation.</p>
+                </div>
+                <div class="form-group">
+                    <label style="color: #f0883e;">Script de Conversation — Variante B</label>
+                    <textarea class="form-textarea" style="min-height: 200px; border-color: #f0883e40;"
+                              onchange="updateConversationScriptB(${stage.id}, this.value)"
+                              placeholder="Script alternatif (variante B)...">${stage.conversationScriptB || stage.conversation_script_b || ''}</textarea>
+                    <p class="form-hint">Script alternatif (variante B). Si vide, la variante A sera utilisee pour les leads B aussi.</p>
                 </div>
 
                 <!-- Templates for this stage -->
@@ -291,7 +298,27 @@ async function updateConversationScript(stageId, script) {
         const stage = stages.find(s => s.id === stageId);
         if (stage) stage.conversation_script = script;
 
-        showToast('Script de conversation mis a jour', 'success');
+        showToast('Script A mis a jour', 'success');
+    } catch (e) {
+        showToast('Erreur: ' + e.message, 'error');
+    }
+}
+
+async function updateConversationScriptB(stageId, script) {
+    try {
+        const res = await fetch(`/api/funnel-stages/${stageId}/script`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_script_b: script })
+        });
+
+        if (!res.ok) throw new Error('Update failed');
+
+        // Update local data
+        const stage = stages.find(s => s.id === stageId);
+        if (stage) stage.conversation_script_b = script;
+
+        showToast('Script B mis a jour', 'success');
     } catch (e) {
         showToast('Erreur: ' + e.message, 'error');
     }

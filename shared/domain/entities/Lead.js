@@ -73,6 +73,9 @@ export class Lead {
     this.leadType = data.lead_type || data.leadType || 'cold';
     this.platform = data.platform || 'instagram'; // instagram, tiktok, linkedin
 
+    // A/B variant (assigned at outreach, never changes)
+    this.variant = data.variant || 'A';
+
     // Qualification
     this.bookingStatus = data.booking_status || data.bookingStatus || null;
     this.painPoints = this._parsePainPoints(data.pain_points || data.painPoints);
@@ -275,6 +278,7 @@ export class Lead {
       lead_type: this.leadType,
       platform: this.platform,
       booking_status: this.bookingStatus,
+      variant: this.variant,
       pain_points: JSON.stringify(this.painPoints),
       notes: this.notes,
       created_at: this.createdAt,
@@ -310,6 +314,7 @@ export class Lead {
       leadType: this.leadType,
       platform: this.platform,
       bookingStatus: this.bookingStatus,
+      variant: this.variant,
       painPoints: this.painPoints,
       notes: this.notes,
       createdAt: this.createdAt,

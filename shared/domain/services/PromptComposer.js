@@ -54,9 +54,10 @@ Tu dois suivre les ÉTAPES de conversation définies ci-dessous.
  * @param {FunnelStage[]} options.stages - The funnel stages with conversation scripts
  * @param {Object} options.leadContext - Optional lead context for personalization
  * @param {number} options.currentStep - Current funnel step (1-9) to focus the prompt
+ * @param {string} options.variant - A/B variant ('A' or 'B'). 'B' uses conversationScriptB if available.
  * @returns {string} The composed system prompt
  */
-export function composeSystemPrompt({ persona, stages, leadContext = null, currentStep = 0 }) {
+export function composeSystemPrompt({ persona, stages, leadContext = null, currentStep = 0, variant = 'A' }) {
   const parts = [];
 
   // 1. Add persona introduction
@@ -74,7 +75,7 @@ export function composeSystemPrompt({ persona, stages, leadContext = null, curre
 
   // 4. Add conversation flow from stages (focused on current step)
   if (stages && stages.length > 0) {
-    parts.push(composeStagesSection(stages, currentStep));
+    parts.push(composeStagesSection(stages, currentStep, variant));
   }
 
   // 5. Objections handling - MIGRATED TO RAG
@@ -120,7 +121,7 @@ function composePersonaSection(persona) {
  * - Next 3 steps (objective only, for smart skip detection)
  * + A skip rule so the LLM can jump ahead if the prospect already gave the info.
  */
-function composeStagesSection(stages, currentStep = 0) {
+function composeStagesSection(stages, currentStep = 0, variant = 'A') {
   // Sort stages by stageOrder
   const sorted = [...stages].sort((a, b) => a.stageOrder - b.stageOrder);
 
@@ -129,7 +130,7 @@ function composeStagesSection(stages, currentStep = 0) {
     let section = `**FLOW DE CONVERSATION :**\n`;
     section += `Suis ces étapes dans l'ordre. Analyse l'historique pour déterminer où tu en es.\n\n`;
     for (const stage of sorted) {
-      section += formatStageFull(stage);
+      section += formatStageFull(stage, variant);
     }
     return section;
   }
@@ -156,7 +157,7 @@ function composeStagesSection(stages, currentStep = 0) {
   // Current step (full script)
   if (currStage) {
     section += `--- ✅ ÉTAPE EN COURS (UTILISE CE SCRIPT) ---\n`;
-    section += formatStageFull(currStage);
+    section += formatStageFull(currStage, variant);
   }
 
   // Upcoming steps (objective only, so LLM can detect if info is already given)
@@ -174,9 +175,14 @@ function composeStagesSection(stages, currentStep = 0) {
 /**
  * Format a single stage with its full script
  */
-function formatStageFull(stage) {
-  if (stage.conversationScript) {
-    return `---\n\n${stage.conversationScript}\n\n`;
+function formatStageFull(stage, variant = 'A') {
+  // Pick variant B script if available, otherwise fall back to A
+  const script = (variant === 'B' && stage.conversationScriptB)
+    ? stage.conversationScriptB
+    : stage.conversationScript;
+
+  if (script) {
+    return `---\n\n${script}\n\n`;
   }
   let s = `---\n\n`;
   s += `[${stage.stageLabel}] – ${stage.stageName.toUpperCase()}\n`;

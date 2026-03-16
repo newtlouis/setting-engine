@@ -40,6 +40,7 @@ program
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
   .option('--skip-qualification', 'Skip bio qualification check', false)
   .option('--mode <mode>', 'Prospecting mode: "comments" (leads = commenters) or "authors" (leads = post authors)', 'comments')
+  .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'A')
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');
@@ -48,6 +49,7 @@ program
     console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Total limit: ${options.total}`);
     console.log(`   Mode: ${options.mode}`);
+    console.log(`   Variant: ${options.variant}`);
     console.log('');
 
     try {
@@ -58,7 +60,8 @@ program
         maxPosts: parseInt(options.posts, 10),
         totalLimit: parseInt(options.total, 10),
         skipQualification: options.skipQualification,
-        mode: options.mode
+        mode: options.mode,
+        variantMode: options.variant
       });
       process.exit(0);
     } catch (error) {

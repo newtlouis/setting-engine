@@ -24,7 +24,8 @@ function parseArgs() {
   const result = {
     target: 60,
     profile: 'melanie',
-    prospectMode: 'comments'
+    prospectMode: 'comments',
+    variant: 'A'
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -36,6 +37,9 @@ function parseArgs() {
       i++;
     } else if (args[i] === '--prospect-mode' && args[i + 1]) {
       result.prospectMode = args[i + 1];
+      i++;
+    } else if (args[i] === '--variant' && args[i + 1]) {
+      result.variant = args[i + 1];
       i++;
     }
   }
@@ -70,13 +74,14 @@ function runScript(command, args) {
 }
 
 async function main() {
-  const { target, profile, prospectMode } = parseArgs();
+  const { target, profile, prospectMode, variant } = parseArgs();
 
   console.log('========================================');
   console.log('   LEAD HARVESTER - Queue Builder');
   console.log('========================================');
   console.log(`   Target: ${target} leads`);
   console.log(`   Profile: ${profile}`);
+  console.log(`   Variant: ${variant}`);
   console.log(`   Priority: Followers → Engagement → Prospector`);
   console.log('========================================\n');
 
@@ -132,7 +137,7 @@ async function main() {
   const remaining = target - currentCount;
   console.log(`\n--- PHASE 3: PROSPECTOR (need ${remaining} more) ---`);
   try {
-    await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--total', String(remaining), '--mode', prospectMode]);
+    await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--total', String(remaining), '--mode', prospectMode, '--variant', variant]);
   } catch (err) {
     console.error(`⚠️ Prospector phase error: ${err.message}`);
   }

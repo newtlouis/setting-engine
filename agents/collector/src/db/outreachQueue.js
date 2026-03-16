@@ -17,10 +17,10 @@ export function addToOutreachQueue(lead) {
     const stmt = db.prepare(`
       INSERT INTO outreach_queue (
         username, profile_url, dm_url, prepared_message,
-        first_name, source, resource_file, resource_url, account_id
+        first_name, source, resource_file, resource_url, account_id, variant
       ) VALUES (
         @username, @profile_url, @dm_url, @prepared_message,
-        @first_name, @source, @resource_file, @resource_url, @account_id
+        @first_name, @source, @resource_file, @resource_url, @account_id, @variant
       )
       ON CONFLICT(username) DO UPDATE SET
         status = 'pending',
@@ -30,6 +30,7 @@ export function addToOutreachQueue(lead) {
         resource_file = COALESCE(@resource_file, resource_file),
         resource_url = COALESCE(@resource_url, resource_url),
         account_id = COALESCE(@account_id, account_id),
+        variant = COALESCE(@variant, variant),
         error = NULL,
         sent_at = NULL,
         created_at = datetime('now')
@@ -44,7 +45,8 @@ export function addToOutreachQueue(lead) {
       source: lead.source || null,
       resource_file: lead.resource_file || null,
       resource_url: lead.resource_url || null,
-      account_id: lead.account_id || null
+      account_id: lead.account_id || null,
+      variant: lead.variant || 'A'
     });
     return info.changes > 0 ? { id: info.lastInsertRowid, ...lead } : null;
   } catch (err) {

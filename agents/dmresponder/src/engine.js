@@ -91,11 +91,11 @@ export async function generateRevivalMessage(conversationHistory, leadContext) {
  * @param {number} funnelStep - Current funnel step to focus the prompt
  * @returns {Promise<string|null>} The composed system prompt or null if not configured
  */
-async function getPromptFromDatabase(accountId, funnelStep = 0) {
+async function getPromptFromDatabase(accountId, funnelStep = 0, variant = 'A') {
   if (!accountId) return null;
 
-  // Check cache first (keyed by account + step)
-  const cacheKey = `prompt_${accountId}_step${funnelStep}`;
+  // Check cache first (keyed by account + step + variant)
+  const cacheKey = `prompt_${accountId}_step${funnelStep}_v${variant}`;
   if (promptCache.has(cacheKey)) {
     const cached = promptCache.get(cacheKey);
     // Cache for 5 minutes
@@ -119,7 +119,7 @@ async function getPromptFromDatabase(accountId, funnelStep = 0) {
       return null;
     }
 
-    const prompt = composeSystemPrompt({ persona, stages, currentStep: funnelStep });
+    const prompt = composeSystemPrompt({ persona, stages, currentStep: funnelStep, variant });
 
     // Cache the result
     promptCache.set(cacheKey, { prompt, timestamp: Date.now() });
@@ -180,8 +180,9 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   // Try to get prompt from database first (if accountId is available)
   const accountId = leadContext?.account_id || profileConfig?.account_id || null;
   const funnelStep = leadContext?.funnel_step || 0;
+  const variant = leadContext?.variant || 'A';
   if (accountId) {
-    const dbPrompt = await getPromptFromDatabase(accountId, funnelStep);
+    const dbPrompt = await getPromptFromDatabase(accountId, funnelStep, variant);
     if (dbPrompt) {
       systemPrompt = dbPrompt;
     }

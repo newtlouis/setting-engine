@@ -66,7 +66,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--slow'] },
-        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode'] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode', '--variant'] },
         { name: 'test:e2e', description: 'Test E2E LLM (real API)', options: [] },
     ],
     Collection: [
@@ -77,7 +77,7 @@ const COMMAND_REGISTRY = {
         { name: 'analyze:steps', description: 'Analyse step-by-step vs scripts funnel', options: ['--profile', '--username', '--save'] },
     ],
     Prospecting: [
-        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--total', '--skip-qualification'] },
+        { name: 'prospect', description: 'Prospection unifiee', options: ['--profile', '--source', '--mode', '--posts', '--total', '--skip-qualification', '--variant'] },
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max'] },
@@ -94,7 +94,7 @@ const COMMAND_REGISTRY = {
         { name: 'respond:engagement', description: 'Surveiller engagement', options: ['--profile'] },
     ],
     Operations: [
-        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode'] },
+        { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode', '--variant'] },
         { name: 'backup', description: 'Backup base de donnees', options: ['--upload'] },
         { name: 'restore', description: 'Restaurer base de donnees', options: ['--remote'] },
     ],
@@ -1177,14 +1177,26 @@ app.patch('/api/personas/:accountId', async (req, res) => {
 app.patch('/api/funnel-stages/:id/script', async (req, res) => {
     try {
         const { id } = req.params;
-        const { conversation_script } = req.body;
+        const { conversation_script, conversation_script_b } = req.body;
 
-        if (conversation_script === undefined) {
-            return res.status(400).json({ error: 'conversation_script is required' });
+        if (conversation_script === undefined && conversation_script_b === undefined) {
+            return res.status(400).json({ error: 'conversation_script or conversation_script_b is required' });
         }
 
-        db.prepare(`UPDATE funnel_stages SET conversation_script = ?, updated_at = datetime('now') WHERE id = ?`)
-          .run(conversation_script, parseInt(id));
+        const updates = [];
+        const values = [];
+        if (conversation_script !== undefined) {
+            updates.push('conversation_script = ?');
+            values.push(conversation_script);
+        }
+        if (conversation_script_b !== undefined) {
+            updates.push('conversation_script_b = ?');
+            values.push(conversation_script_b);
+        }
+        updates.push("updated_at = datetime('now')");
+        values.push(parseInt(id));
+
+        db.prepare(`UPDATE funnel_stages SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
         // Clear prompt cache for this account
         const stage = db.prepare('SELECT account_id FROM funnel_stages WHERE id = ?').get(parseInt(id));

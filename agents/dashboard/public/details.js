@@ -210,6 +210,10 @@ async function selectLead(username) {
         }
         
         document.getElementById('fieldSource').value = lead.lead_source || 'Unknown';
+
+        // Variant display
+        const variantEl = document.getElementById('fieldVariant');
+        if (variantEl) variantEl.value = lead.variant || 'A';
         
         // Comment Logic + Post URL
         if (comments && comments.length > 0) {

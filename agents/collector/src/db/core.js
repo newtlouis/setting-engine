@@ -499,6 +499,37 @@ function runMigrations() {
 
     console.log('📋 Outreach config tables ready');
 
+    // ---------------------------------------------------------
+    // A/B VARIANT TESTING MIGRATIONS
+    // ---------------------------------------------------------
+
+    // Migration: Add conversation_script_b to funnel_stages
+    const funnelStagesColumns = db.prepare("PRAGMA table_info(funnel_stages)").all();
+    if (!funnelStagesColumns.some(col => col.name === 'conversation_script_b')) {
+      console.log('🔄 Migrating: Adding conversation_script_b to funnel_stages...');
+      db.exec(`ALTER TABLE funnel_stages ADD COLUMN conversation_script_b TEXT`);
+    }
+
+    // Migration: Add variant to leads
+    if (!leadsColumns.some(col => col.name === 'variant')) {
+      console.log('🔄 Migrating: Adding variant to leads...');
+      db.exec(`ALTER TABLE leads ADD COLUMN variant TEXT DEFAULT 'A'`);
+    }
+
+    // Migration: Add account_id to outreach_queue (if missing)
+    if (!queueColumns.some(col => col.name === 'account_id')) {
+      console.log('🔄 Migrating: Adding account_id to outreach_queue...');
+      db.exec(`ALTER TABLE outreach_queue ADD COLUMN account_id INTEGER`);
+    }
+
+    // Migration: Add variant to outreach_queue
+    if (!queueColumns.some(col => col.name === 'variant')) {
+      console.log('🔄 Migrating: Adding variant to outreach_queue...');
+      db.exec(`ALTER TABLE outreach_queue ADD COLUMN variant TEXT DEFAULT 'A'`);
+    }
+
+    console.log('🧬 A/B variant tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }
