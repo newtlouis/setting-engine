@@ -143,11 +143,33 @@ async function main() {
             continue;
         }
 
-        // Safety check: scrape visible messages in the DM thread
+        // Safety check: detect existing conversation in the DM thread
         const existingMessages = await scrapeConversationMessages(currentPage);
-        if (existingMessages && existingMessages.length > 0) {
-            console.log(`   ⏭️  Skipping @${lead.username}: conversation already has ${existingMessages.length} message(s) on Instagram`);
-            await outreachQueue.markSent(lead.username);
+        // Fallback: check for conversation indicators in DOM (works in overlay mode too)
+        const hasConversationHistory = await currentPage.evaluate(() => {
+            const bodyText = document.body.innerText || '';
+            // "Vous avez envoyé" = we sent a message before
+            if (bodyText.includes('Vous avez envoyé') || bodyText.includes('You sent')) return 'sent_before';
+            // "Message expiré" = there were messages that expired
+            if (bodyText.includes('Message expiré') || bodyText.includes('message expired')) return 'expired_messages';
+            // Date patterns in DM overlay (e.g. "02/08/2018" or "2 août 2018")
+            const hasDateFormat = /\d{1,2}\/\d{2}\/\d{4}/.test(bodyText);
+            const hasRows = document.querySelectorAll('[role="row"]').length;
+            const hasTextbox = document.querySelectorAll('[role="textbox"]').length;
+            if (hasDateFormat && hasRows > 2 && hasTextbox > 0) return 'date_and_rows';
+            return null;
+        }).catch(() => null);
+
+        if ((existingMessages && existingMessages.length > 0) || hasConversationHistory) {
+            const reason = existingMessages?.length > 0
+                ? `${existingMessages.length} message(s) scraped`
+                : `indicator: ${hasConversationHistory}`;
+            console.log(`   ⏭️  Skipping @${lead.username}: existing conversation (${reason})`);
+            await outreachQueue.markFailed(lead.username, 'existing_conversation');
+            await fullUpsertLead(lead.username, account.id, {
+              status: 'already_known',
+              notes: 'Existing conversation detected before send'
+            });
             if (manual && currentPage !== page) await currentPage.close().catch(() => {});
             continue;
         }
