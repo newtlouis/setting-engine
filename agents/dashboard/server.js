@@ -105,6 +105,13 @@ const runningProcesses = new Map();
 
 // API Routes
 
+// POST /api/open-db - Open database in DB Browser for SQLite
+app.post('/api/open-db', (req, res) => {
+    const dbPath = path.join(__dirname, '..', 'collector', 'permanent-data', 'leads.db');
+    spawn('open', ['-a', 'DB Browser for SQLite', dbPath], { stdio: 'ignore', detached: true }).unref();
+    res.json({ success: true });
+});
+
 // GET /api/accounts - List all accounts
 app.get('/api/accounts', (req, res) => {
     try {
