@@ -291,9 +291,12 @@ export async function runProspector(options = {}) {
              console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
 
              // STEP 3d: Qualify lead (if not skipped)
+             let accompanimentType = null;
              if (!skipQualification) {
                const qualificationPrompt = outreachConfig.qualificationPrompt;
-               const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username);
+               // Extract accompaniment type when niche is set (profile-level opt-in)
+               const extractAccompaniment = !qualificationPrompt && !!outreachConfig.niche;
+               const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
 
                if (!qualResult.qualified) {
                  console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
@@ -302,6 +305,7 @@ export async function runProspector(options = {}) {
                  await delay(1000, 2000);
                  continue;
                }
+               accompanimentType = qualResult.accompanimentType || null;
              }
 
              stats.leadsQualified++;
@@ -327,11 +331,12 @@ export async function runProspector(options = {}) {
               // Final Message preparation
               let finalMessage = "";
               if (leadVariant === 'B') {
-                // Variant B: "Hello Prénom, est-ce que tu proposes toujours un accompagnement ?"
+                // Variant B: "Hello Prénom, est-ce que tu proposes toujours un accompagnement en {type} ?"
                 const name = aiFirstName || profileData.fullName?.split(' ')[0] || '';
+                const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
                 finalMessage = name
-                  ? `Hello ${name}, est-ce que tu proposes toujours un accompagnement ?`
-                  : `Hello, est-ce que tu proposes toujours un accompagnement ?`;
+                  ? `Hello ${name}, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`
+                  : `Hello, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`;
               } else if (aiFirstName) {
                 // Variant A: Just "[Name] ?"
                 finalMessage = `${aiFirstName} ?`;
@@ -377,7 +382,7 @@ export async function runProspector(options = {}) {
 
               if (queueResult) {
                   console.log(`   📦 Queued @${username} for later sending.`);
-                  saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw, leadVariant);
+                  saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw, leadVariant, accompanimentType);
                   stats.leadsContacted++;
                   console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
               } else {
@@ -432,7 +437,7 @@ export async function runProspector(options = {}) {
 /**
  * Helper to save lead to database
  */
-function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null, sourceTag = null, variant = 'A') {
+function saveLeadToDb(username, comment, accountId, status, failReason = null, profileData = null, dmUrl = null, firstName = null, sourceTag = null, variant = 'A', accompanimentType = null) {
   try {
     // Insert or update lead
     const lead = dbFunctions.getLeadByUsername(username, accountId);
@@ -440,8 +445,8 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
     if (!lead) {
       // Create new lead
       db.prepare(`
-        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, first_name, notes, variant)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO leads (username, account_id, profile_url, status, full_name, bio, dm_url, lead_source, first_name, notes, variant, accompaniment_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         username,
         accountId,
@@ -453,7 +458,8 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
         sourceTag || 'prospect',
         firstName || null,
         failReason ? `Failed: ${failReason}` : null,
-        variant
+        variant,
+        accompanimentType
       );
       
       // Also save the comment
@@ -470,12 +476,13 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
     } else {
       // Update existing lead
       db.prepare(`
-        UPDATE leads SET 
+        UPDATE leads SET
           status = ?,
           full_name = COALESCE(?, full_name),
           bio = COALESCE(?, bio),
           dm_url = COALESCE(?, dm_url),
           notes = COALESCE(?, notes),
+          accompaniment_type = COALESCE(?, accompaniment_type),
           updated_at = datetime('now')
         WHERE username = ? AND account_id = ?
       `).run(
@@ -484,6 +491,7 @@ function saveLeadToDb(username, comment, accountId, status, failReason = null, p
         profileData?.bio || null,
         dmUrl || null,
         failReason || null,
+        accompanimentType,
         username,
         accountId
       );

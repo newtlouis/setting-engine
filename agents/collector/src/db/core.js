@@ -530,6 +530,17 @@ function runMigrations() {
 
     console.log('🧬 A/B variant tables ready');
 
+    // ---------------------------------------------------------
+    // ACCOMPANIMENT TYPE MIGRATION
+    // ---------------------------------------------------------
+
+    if (!leadsColumns.some(col => col.name === 'accompaniment_type')) {
+      console.log('🔄 Migrating: Adding accompaniment_type to leads...');
+      db.exec(`ALTER TABLE leads ADD COLUMN accompaniment_type TEXT`);
+    }
+
+    console.log('📋 Accompaniment type column ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }

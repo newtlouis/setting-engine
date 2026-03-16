@@ -79,6 +79,7 @@ export class Lead {
     // Qualification
     this.bookingStatus = data.booking_status || data.bookingStatus || null;
     this.painPoints = this._parsePainPoints(data.pain_points || data.painPoints);
+    this.accompanimentType = data.accompaniment_type || data.accompanimentType || null;
     this.notes = data.notes || null;
 
     // Timestamps
@@ -280,6 +281,7 @@ export class Lead {
       booking_status: this.bookingStatus,
       variant: this.variant,
       pain_points: JSON.stringify(this.painPoints),
+      accompaniment_type: this.accompanimentType,
       notes: this.notes,
       created_at: this.createdAt,
       updated_at: this.updatedAt
@@ -316,6 +318,7 @@ export class Lead {
       bookingStatus: this.bookingStatus,
       variant: this.variant,
       painPoints: this.painPoints,
+      accompanimentType: this.accompanimentType,
       notes: this.notes,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
