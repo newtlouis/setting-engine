@@ -27,7 +27,11 @@ const browserContext = await chromium.launchPersistentContext(userDataDir, steal
 const page = await browserContext.newPage();
 await applyStealthToPage(page);
 
-await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded' });
+// Support --url flag for direct navigation (e.g. open DM page)
+const urlFlagIndex = process.argv.indexOf('--url');
+const targetUrl = urlFlagIndex !== -1 ? process.argv[urlFlagIndex + 1] : 'https://www.instagram.com/';
+
+await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
 // Wait for page to settle
 await page.waitForTimeout(3000);

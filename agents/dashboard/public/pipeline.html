@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-link.active {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Toggle bar */
+        .pipeline-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .toggle-group {
+            display: flex;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .pipeline-stats {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
+
+        /* Group sections */
+        .pipeline-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+
+        .group-header:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .group-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .group-count {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .group-chevron {
+            font-size: 12px;
+            color: var(--text-secondary);
+            transition: transform 0.2s;
+            margin-left: 12px;
+        }
+
+        .group-header.collapsed .group-chevron {
+            transform: rotate(-90deg);
+        }
+
+        .group-body {
+            border-top: 1px solid var(--border);
+        }
+
+        .group-body.hidden {
+            display: none;
+        }
+
+        /* Lead rows */
+        .lead-row {
+            display: grid;
+            grid-template-columns: 160px 140px 100px 80px 60px 1fr;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.1s;
+            font-size: 13px;
+        }
+
+        .lead-row:last-child {
+            border-bottom: none;
+        }
+
+        .lead-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .lead-username {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .lead-name {
+            color: var(--text-primary);
+        }
+
+        .lead-status {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .status-contacted { background: rgba(88, 166, 255, 0.15); color: #58a6ff; }
+        .status-conversation { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
+        .status-scheduling { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+        .status-converted { background: rgba(163, 113, 247, 0.15); color: #a371f7; }
+        .status-not_interested { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+
+        .lead-variant {
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .lead-date {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/lead_details.html" class="nav-link">Lead Details</a>
+                <a href="/pipeline.html" class="nav-link active">Pipeline</a>
+                <a href="/scenario_tester.html" class="nav-link">Chatbox testeur</a>
+                <a href="/funnel_config.html" class="nav-link">Config Funnel</a>
+                <a href="/knowledge_base.html" class="nav-link">Knowledge Base</a>
+                <a href="/commands.html" class="nav-link">Commands</a>
+                <a href="#" class="nav-link" onclick="fetch('/api/open-db',{method:'POST'});return false;">DB</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Compte:</label>
+                <select id="accountSelect"></select>
+            </div>
+        </header>
+
+        <!-- Controls -->
+        <div class="pipeline-controls">
+            <div class="toggle-group">
+                <button class="toggle-btn" data-group="step">Par etape</button>
+                <button class="toggle-btn active" data-group="day">Par jour</button>
+            </div>
+            <span id="pipelineStats" class="pipeline-stats"></span>
+        </div>
+
+        <!-- Pipeline content -->
+        <div id="pipelineContent">
+            <div class="empty-state">Chargement...</div>
+        </div>
+    </div>
+
+    <script src="pipeline.js"></script>
+</body>
+
+</html>

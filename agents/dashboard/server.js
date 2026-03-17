@@ -112,6 +112,22 @@ app.post('/api/open-db', (req, res) => {
     res.json({ success: true });
 });
 
+// POST /api/open-instagram - Open Instagram profile in browser with account session
+app.post('/api/open-instagram', (req, res) => {
+    const { username, profile } = req.body;
+    if (!username || !profile) return res.status(400).json({ error: 'username and profile required' });
+
+    const profileUrl = `https://www.instagram.com/${username}/`;
+    const projectRoot = path.join(__dirname, '..', '..');
+    const child = spawn('node', ['open_session.js', '--profile', profile, '--url', profileUrl], {
+        cwd: projectRoot,
+        stdio: 'ignore',
+        detached: true
+    });
+    child.unref();
+    res.json({ success: true, url: profileUrl });
+});
+
 // GET /api/accounts - List all accounts
 app.get('/api/accounts', (req, res) => {
     try {
@@ -517,6 +533,73 @@ app.get('/api/analytics/velocity', (req, res) => {
         `).all(...accountParam);
 
         res.json({ daily, bySource, byStep });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/leads/pipeline — leads grouped by funnel step or day
+app.get('/api/leads/pipeline', (req, res) => {
+    try {
+        const { account_id, group_by = 'step' } = req.query;
+        if (!account_id) return res.status(400).json({ error: 'account_id required' });
+
+        const statusFilter = "('contacted','conversation','scheduling','converted','not_interested')";
+        let sql;
+
+        if (group_by === 'day') {
+            sql = `
+                SELECT
+                    date(COALESCE(last_contact_at, updated_at)) as group_key,
+                    id, username, full_name, first_name, status, funnel_step,
+                    warmth, variant, last_contact_at, updated_at, accompaniment_type
+                FROM leads
+                WHERE account_id = ? AND status IN ${statusFilter} AND is_ignored = 0
+                ORDER BY COALESCE(last_contact_at, updated_at) DESC
+            `;
+        } else {
+            sql = `
+                SELECT
+                    funnel_step as group_key,
+                    id, username, full_name, first_name, status, funnel_step,
+                    warmth, variant, last_contact_at, updated_at, accompaniment_type
+                FROM leads
+                WHERE account_id = ? AND status IN ${statusFilter} AND is_ignored = 0
+                ORDER BY funnel_step DESC, COALESCE(last_contact_at, updated_at) DESC
+            `;
+        }
+
+        const rows = db.prepare(sql).all(parseInt(account_id));
+
+        // Group rows
+        const groupMap = new Map();
+        for (const row of rows) {
+            const key = String(row.group_key ?? 'unknown');
+            if (!groupMap.has(key)) groupMap.set(key, []);
+            groupMap.get(key).push(row);
+        }
+
+        // Also include not_interested as a separate group when grouping by step
+        const groups = [];
+        for (const [key, leads] of groupMap) {
+            let label;
+            if (group_by === 'day') {
+                label = key;
+            } else {
+                const stepLabels = {
+                    '0': 'Step 0 — Nouveau',
+                    '1': 'Step 1 — Premier contact',
+                    '2': 'Step 2 — Connexion',
+                    '3': 'Step 3 — Exploration',
+                    '4': 'Step 4 — Projection',
+                    '5': 'Step 5 — Proposition appel',
+                };
+                label = stepLabels[key] || `Step ${key}`;
+            }
+            groups.push({ key, label, count: leads.length, leads });
+        }
+
+        res.json({ group_by, groups });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
