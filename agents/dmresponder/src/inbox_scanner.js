@@ -557,6 +557,14 @@ export async function runInboxScanner(options = {}) {
             continue;
           }
 
+          // Dedup: skip if identical to last assistant message
+          const lastAssistantMsg = [...updatedHistory].reverse().find(m => m.role === 'assistant');
+          if (lastAssistantMsg && message.replace(/\[.*?\]\s*/g, '').trim().toLowerCase() === lastAssistantMsg.text.trim().toLowerCase()) {
+            console.log(`   ⚠️ Duplicate message detected — marking as not_interested.`);
+            await setDmThreadStatus(username, 'not_interested', { booking_status: 'cancelled' });
+            continue;
+          }
+
           const profileUrl = `https://www.instagram.com/${username}/`;
           console.log(`\n   💬 SENDING RESPONSE:`);
           console.log(`   Profile: ${profileUrl}`);

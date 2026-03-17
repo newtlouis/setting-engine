@@ -398,6 +398,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
             'si ça te parle un jour',
             'si un jour tu',
             'si jamais tu',
+            'si jamais t\'',
             'prends soin de toi',
             'belle journée',
             'bonne journée',
@@ -406,6 +407,9 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
             'belle continuation',
             'pas de souci',
             'au plaisir',
+            'te souhaite le meilleur',
+            'je te souhaite',
+            'bonne route',
           ];
           const lowerMsg = message.toLowerCase();
           const closingMatchCount = closingPatterns.filter(p => lowerMsg.includes(p)).length;
@@ -420,7 +424,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
           const userRefused = refusalPatterns.some(p => lastUserMsg.includes(p));
 
           // Strong closing: LLM itself decided to close (2+ closing signals = definitive closing)
-          const strongClosingPatterns = ['tu sais où me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
+          const strongClosingPatterns = ['tu sais où me trouver', 'tu sais ou me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
           const strongClosing = looksLikeClosing && strongClosingPatterns.some(p => lowerMsg.includes(p));
           const multipleClosingSignals = closingMatchCount >= 2;
           // Closing message with no question = the LLM decided to end the conversation

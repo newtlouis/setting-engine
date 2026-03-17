@@ -335,7 +335,16 @@ async function processThread(thread, options) {
       });
       return { success: false };
     }
-    
+
+    // Dedup: skip if identical to last assistant message
+    const lastAssistantMsg = [...updatedHistory].reverse().find(m => m.role === 'assistant');
+    if (lastAssistantMsg && message.replace(/\[.*?\]\s*/g, '').trim().toLowerCase() === lastAssistantMsg.text.trim().toLowerCase()) {
+      console.log(`   ⚠️ Duplicate message detected — marking as not_interested.`);
+      await markThread(username, 'not_interested', thread.metadata, { booking_status: 'cancelled' });
+      await openTab.close().catch(() => {});
+      return { success: false };
+    }
+
     console.log(`\n   💬 SENDING RESPONSE:`);
     console.log(`   Profile: ${profileUrl}`);
     console.log(`   Message: "${message}"\n`);

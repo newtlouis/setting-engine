@@ -326,15 +326,14 @@ async function loadAccounts() {
     }
 }
 
-// Init
+// Init — load accounts first, then commands (so profile is set when defaults resolve)
 loadAccounts().then(() => {
-    // Re-render commands when profile changes (for profileDefaults)
     const select = document.getElementById('accountSelect');
     if (select) {
         select.addEventListener('change', () => {
             if (cachedRegistry) renderCommands(cachedRegistry);
         });
     }
+    return loadCommands();
 });
-loadCommands();
 checkRunningProcesses();
