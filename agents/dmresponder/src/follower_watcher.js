@@ -322,7 +322,7 @@ export async function runFollowerWatcher(options = {}) {
             // 8. Prepare Message
              let aiFirstName = null;
             try {
-                aiFirstName = await extractNameWithAI(username, metadata.fullName);
+                aiFirstName = await extractNameWithAI(username, metadata.fullName, metadata.bio);
             } catch (e) {}
             
             let messageTemplate = outreachConfig.followerTemplate;

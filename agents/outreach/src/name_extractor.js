@@ -50,9 +50,10 @@ function isCommonWord(name) {
  *
  * @param {string} username - Instagram username
  * @param {string} fullName - Profile full name (can be empty or contain emojis/titles)
+ * @param {string} [bio] - Profile bio text
  * @returns {Promise<string|null>} Extracted Name or null if not found
  */
-export async function extractNameWithAI(username, fullName) {
+export async function extractNameWithAI(username, fullName, bio = null) {
   // Check requirements
   if (!CONFIG.OPENAI_API_KEY) {
     if (process.env.DEBUG) console.warn('   ⚠️  OPENAI_API_KEY not set - skipping AI name extraction');
@@ -61,21 +62,24 @@ export async function extractNameWithAI(username, fullName) {
   
   try {
     const prompt = `
-I will give you an Instagram username and a profile "full name".
+I will give you an Instagram username, a profile "full name", and optionally a bio.
 Your goal is to identify the **First Name** of the person to use in a friendly message (e.g. "Hello [Name]").
 
 Rules:
-1. Prioritize the "Full Name" field if it contains a human name.
-2. Ignore titles like "Coach", "Therapist", "Psychologue", emojis, or business words.
-3. If Full Name is empty or generic, look at the "Username" to guess the name.
-4. If the name is composed (e.g. Jean-Pierre), keep it.
-5. Return ONLY the First Name (Capitalized).
-6. If you CANNOT identify a human First Name with confidence, return exactly "UNKNOWN".
-7. IMPORTANT: Common words, abstract concepts, or brand names are NOT first names. Examples: "Présence", "Harmonie", "Essence", "Éveil", "Lumière", "Énergie", "Sérénité" → return "UNKNOWN".
+1. Look for a human first name in ALL three sources: Full Name, Bio, and Username.
+2. Prioritize the "Full Name" field if it contains a human name.
+3. If Full Name is empty or contains only titles/business words, check the "Bio" for a first name (e.g. "Annelise, formatrice en..." → "Annelise").
+4. If neither Full Name nor Bio contain a name, look at the "Username" to guess (e.g. "annelisebasque_formations" → "Annelise").
+5. Ignore titles like "Coach", "Therapist", "Psychologue", "Formatrice", "Formateur", emojis, or business words — these are NOT names.
+6. If the name is composed (e.g. Jean-Pierre), keep it.
+7. Return ONLY the First Name (Capitalized).
+8. If you CANNOT identify a human First Name with confidence, return exactly "UNKNOWN".
+9. IMPORTANT: Common words, abstract concepts, roles, or brand names are NOT first names. Examples: "Présence", "Harmonie", "Formatrice", "Coaching", "Essence" → return "UNKNOWN".
 
 Data:
 Username: ${username || 'N/A'}
 Full Name: ${fullName || 'N/A'}
+Bio: ${bio || 'N/A'}
     `.trim();
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

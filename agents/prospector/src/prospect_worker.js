@@ -315,7 +315,7 @@ export async function runProspector(options = {}) {
              // 🤖 Smart Name Extraction (AI)
              let aiFirstName = null;
              try {
-                  aiFirstName = await extractNameWithAI(username, profileData.fullName);
+                  aiFirstName = await extractNameWithAI(username, profileData.fullName, profileData.bio);
              } catch (e) {
                   console.error(`   ⚠️ Name extraction failed: ${e.message}`);
              }

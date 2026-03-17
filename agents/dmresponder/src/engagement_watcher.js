@@ -311,7 +311,7 @@ export async function runEngagementWatcher(options = {}) {
                 // 7. Prepare Outreach Message
                 let aiFirstName = null;
                 try {
-                    aiFirstName = await extractNameWithAI(username, metadata.fullName);
+                    aiFirstName = await extractNameWithAI(username, metadata.fullName, metadata.bio);
                 } catch (e) {}
 
                 // --- CTA Keyword Detection ---
