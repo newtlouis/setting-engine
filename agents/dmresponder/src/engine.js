@@ -14,6 +14,66 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 // Cache for prompt data to avoid repeated DB queries
 const promptCache = new Map();
 
+// ============================================
+// FOREIGN LANGUAGE DETECTION
+// ============================================
+
+// Words that French speakers commonly use — should NOT trigger foreign language detection
+const UNIVERSAL_WORDS = new Set([
+  'hello', 'hi', 'hey', 'ok', 'okay', 'yes', 'no', 'yeah', 'yep', 'nope',
+  'sure', 'thanks', 'thank', 'please', 'sorry', 'cool', 'nice', 'good', 'great',
+  'lol', 'haha', 'hahaha', 'wow', 'omg', 'love', 'like', 'bye', 'ciao', 'stop',
+  'of', 'course', 'the', 'a', 'it', 'is', 'my', 'me', 'you', 'and', 'or', 'but',
+  'what', 'why', 'how', 'who', 'where', 'when', 'up', 'so', 'too', 'all', 'just',
+  'not', 'top', 'go', 'come', 'on', 'off', 'in', 'out', 'at', 'to', 'for', 'with',
+]);
+
+// Common French words that indicate the message is in French
+const FRENCH_WORDS = new Set([
+  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'on',
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'au', 'aux',
+  'est', 'suis', 'sont', 'ai', 'as', 'ont', 'avons', 'avez', 'été',
+  'et', 'ou', 'mais', 'donc', 'car', 'que', 'qui', 'quoi', 'dont',
+  'ne', 'pas', 'plus', 'jamais', 'rien',
+  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
+  'ce', 'cette', 'ces', 'ça', 'cela', 'ceci',
+  'dans', 'sur', 'sous', 'avec', 'pour', 'par', 'entre', 'chez',
+  'très', 'bien', 'aussi', 'encore', 'toujours', 'trop', 'peu',
+  'oui', 'non', 'merci', 'bonjour', 'bonsoir', 'salut', 'coucou',
+  'moi', 'toi', 'lui', 'eux', 'nous', 'leur', 'leurs',
+  'puis', 'après', 'avant', 'pendant', 'depuis', 'vers',
+  'tout', 'toute', 'tous', 'toutes', 'même', 'autre', 'autres',
+  'peut', 'peux', 'veux', 'veut', 'fais', 'fait', 'va', 'vais',
+  'comme', 'quand', 'si', 'parce', 'alors', 'donc',
+]);
+
+/**
+ * Detect if a message is a substantial non-French sentence.
+ * Returns true only for 4+ word messages with no French indicators.
+ * Short/universal words (hello, yes, ok, what's up...) are ignored.
+ */
+function isForeignLanguageMessage(message) {
+  if (!message) return false;
+
+  const words = message.trim().split(/\s+/);
+  if (words.length < 4) return false;
+
+  const hasFrenchAccents = /[éèêëàâçùûôîïœæ]/i.test(message);
+  if (hasFrenchAccents) return false;
+
+  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü']/g, ''));
+  const substantiveWords = cleanWords.filter(w => w.length > 1 && !UNIVERSAL_WORDS.has(w));
+
+  // Not enough non-universal words to judge
+  if (substantiveWords.length < 3) return false;
+
+  const frenchCount = substantiveWords.filter(w => FRENCH_WORDS.has(w)).length;
+  const frenchRatio = frenchCount / substantiveWords.length;
+
+  // Less than 10% French words → likely foreign language
+  return frenchRatio < 0.1;
+}
+
 /**
  * Generates a response for a conversation using an LLM.
  *
@@ -379,6 +439,26 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     presence_penalty: 0,
     response_format: { type: "json_object" } // Enforce JSON mode
   };
+
+  // === FOREIGN LANGUAGE PRE-CHECK ===
+  // If the prospect wrote a real sentence in a non-French language, close politely in their language
+  const lastUserMsgText = conversationHistory.filter(m => m.role === 'user').pop()?.text || '';
+  if (isForeignLanguageMessage(lastUserMsgText)) {
+    console.log('[Engine] Foreign language detected, generating closing message');
+    const closingResp = await axios.post(OPENAI_API_URL, {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'Generate a very short, polite closing message in the SAME language as the user message. Say that unfortunately you only communicate in French and wish them well. 1-2 sentences max. Return ONLY the message text, no JSON.' },
+        { role: 'user', content: lastUserMsgText }
+      ],
+      max_tokens: 100,
+      temperature: 0.3
+    }, { headers });
+    const closingMsg = closingResp.data.choices?.[0]?.message?.content?.trim();
+    if (closingMsg) {
+      return { message: `[NOT_INTERESTED] ${closingMsg}`, step_used: '9', booking_intent: null };
+    }
+  }
 
   const response = await axios.post(OPENAI_API_URL, data, { headers });
 

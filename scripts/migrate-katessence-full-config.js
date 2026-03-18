@@ -341,6 +341,13 @@ ARBRE DE DECISION (apres reponse du prospect) :
 SI reponse = objectif aligne avec l'avatar ("scaler sans m'epuiser", "avoir un systeme", "structurer mon business", "retrouver de l'espace", "vivre de mon activite sans tout porter", "un business qui soutient ma vie", "plus de liberte", "arreter de tout faire seule", "avoir des clientes plus engagees", "croissance durable", "moins de charge mentale")
 -> Passe IMMEDIATEMENT au message type de [STEP_5]. NE REPOSE PAS la question.
 
+SI reponse = satisfaite / alignee / pas de decalage ("je suis en adequation", "non je suis bien", "tout roule", "ca me convient", "pas de souci", "je suis alignee", "non du tout", "ca va bien", "pas de decalage", "je suis contente de ce que j'ai")
+-> C'est POSITIF, pas un refus ! La personne est bien dans son activite. Creuse les CHALLENGES FUTURS.
+-> Message type : "Ah super ! A ton sens ca va etre quoi le challenge que tu vas devoir relever durant les prochains mois ?"
+-> Si elle donne un challenge -> passe a [STEP_5].
+-> Si elle dit vraiment "aucun challenge" / "rien" -> "Ok top ! Et si tu pouvais changer une seule chose dans ton business demain, ce serait quoi ?"
+-> Si toujours rien -> passe au [STEP_5] quand meme.
+
 SI reponse = objectif hors-niche (sport, sante physique pure, emploi salarie)
 -> "Ah oui je comprends !" puis : "Et au niveau de ton activite, t'aurais un objectif aussi ?"
 -> Si la personne dit non -> [NOT_INTERESTED]

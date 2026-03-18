@@ -72,6 +72,68 @@ function parseSource(source) {
   }
 }
 
+// ============================================
+// FOREIGN LANGUAGE BIO DETECTION
+// ============================================
+
+const UNIVERSAL_BIO_WORDS = new Set([
+  'hello', 'hi', 'hey', 'ok', 'love', 'life', 'happy', 'free',
+  'cool', 'style', 'design', 'art', 'music', 'photo', 'video',
+  'coach', 'coaching', 'yoga', 'fitness', 'beauty', 'fashion',
+  'diy', 'travel', 'food', 'blog', 'vlog', 'dm', 'link', 'bio',
+  'ceo', 'founder', 'creator', 'artist', 'model', 'digital',
+  'mindset', 'lifestyle', 'wellness', 'flow', 'zen', 'energy',
+  'shop', 'store', 'online', 'new', 'best', 'top', 'pro',
+]);
+
+const FRENCH_BIO_WORDS = new Set([
+  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'on',
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'au', 'aux',
+  'est', 'suis', 'sont', 'ai', 'ont', 'été',
+  'et', 'ou', 'mais', 'que', 'qui', 'quoi', 'dont',
+  'ne', 'pas', 'plus',
+  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
+  'ce', 'cette', 'ces', 'ça',
+  'dans', 'sur', 'avec', 'pour', 'par', 'chez', 'entre',
+  'très', 'bien', 'aussi', 'encore', 'toujours', 'trop',
+  'moi', 'toi', 'lui', 'eux', 'leur', 'leurs',
+  'tout', 'toute', 'tous', 'toutes', 'même', 'autre',
+  'peut', 'veux', 'fais', 'fait', 'va', 'vais',
+  'comme', 'quand', 'si', 'alors', 'donc', 'parce',
+  'accompagnement', 'accompagne', 'thérapeute', 'formatrice', 'formateur',
+  'praticienne', 'praticien', 'spécialisée', 'spécialisé',
+  'développement', 'personnel', 'holistique', 'bien-être', 'bienveillance',
+  'naturopathe', 'sophrologue', 'hypnothérapeute', 'réflexologue',
+]);
+
+/**
+ * Detect if a bio is entirely in a foreign (non-French) language.
+ * Short bios (< 5 words) are always accepted.
+ * Bios with French accents or French words are accepted.
+ */
+function isForeignLanguageBio(bio) {
+  if (!bio) return false;
+
+  // Strip emojis and special characters for word count
+  const cleaned = bio.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[|•·—–→←↓↑▪️✨🌿💫🔥✅❤️🙏🎯📩💬📲🌸🌺🌻🌼💐🌈⭐️🏆💪🧘‍♀️🧘‍♂️]/gu, ' ');
+  const words = cleaned.trim().split(/\s+/).filter(w => w.length > 0);
+
+  if (words.length < 5) return false;
+
+  const hasFrenchAccents = /[éèêëàâçùûôîïœæ]/i.test(bio);
+  if (hasFrenchAccents) return false;
+
+  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü'-]/g, ''));
+  const substantiveWords = cleanWords.filter(w => w.length > 1 && !UNIVERSAL_BIO_WORDS.has(w));
+
+  if (substantiveWords.length < 3) return false;
+
+  const frenchCount = substantiveWords.filter(w => FRENCH_BIO_WORDS.has(w)).length;
+  const frenchRatio = frenchCount / substantiveWords.length;
+
+  return frenchRatio < 0.1;
+}
+
 /**
  * Main prospecting pipeline
  */
@@ -289,6 +351,15 @@ export async function runProspector(options = {}) {
              // STEP 3c: Scrape profile data
              const profileData = await scrapeProfileData(workingPage);
              console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+
+             // STEP 3c-bis: Reject profiles with bio entirely in a foreign language
+             if (profileData.bio && isForeignLanguageBio(profileData.bio)) {
+               console.log(`   🌍 @${username}: REJECTED (bio in foreign language)`);
+               stats.leadsSkipped++;
+               saveLeadToDb(username, comment, accountId, 'failed', 'foreign_language', null, null, null, currentSourceRaw);
+               await delay(1000, 2000);
+               continue;
+             }
 
              // STEP 3d: Qualify lead (if not skipped)
              let accompanimentType = null;
