@@ -46,6 +46,46 @@ function isCommonWord(name) {
 }
 
 /**
+ * Check if the AI result is just a fragment extracted from the username (not a real name)
+ * @param {string} result - The AI extraction result
+ * @param {string} username - The Instagram username
+ * @returns {boolean}
+ */
+function isUsernameFragment(result, username) {
+  if (!result || !username) return false;
+  const lower = result.toLowerCase();
+  const user = username.toLowerCase().replace(/[._]/g, '');
+
+  // Reject if result is ALL CAPS or all uppercase (acronyms like "ABC")
+  if (result === result.toUpperCase() && result.length <= 5) return true;
+
+  // Reject if the result appears in the username but is NOT a common first name pattern
+  // e.g. "Wellme" from "wellme_fr", "Abc" from "abctalktv"
+  if (user.includes(lower)) {
+    // Check if it looks like a real name (at least one vowel, not too short, not all consonants)
+    const vowelCount = (lower.match(/[aeiouy]/g) || []).length;
+    const consonantCount = lower.length - vowelCount;
+
+    // Names like "Wellme", "Abc", "Fitpro" → not real names
+    // But "Marie", "Anne", "Julie", "Maxime", "Guilherme" → real names
+    // Heuristic: reject if the extracted word matches a username segment that looks like a brand
+    const usernameSegments = username.toLowerCase().split(/[._-]/);
+    const isExactSegment = usernameSegments.some(seg => seg === lower);
+
+    if (isExactSegment) {
+      // If it's an exact username segment, check for brand-like patterns
+      const brandPatterns = /(?:tv|fr|pro|app|hub|lab|co|io|tech|fit|zen|box|net|web|shop|care|mind|well|talk|vibe|med|health|biz|corp|inc|store|beauty|style|mode|world|global|plus|official)$/i;
+      if (brandPatterns.test(lower)) return true;
+    }
+
+    // If it contains digits or is very short (2-3 chars), likely not a name
+    if (/\d/.test(result) || result.length <= 3) return true;
+  }
+
+  return false;
+}
+
+/**
  * Extract First Name using OpenAI
  *
  * @param {string} username - Instagram username
@@ -67,12 +107,14 @@ Your goal is to identify the **First Name** of the person to use in a friendly m
 Rules:
 1. Look for a human first name in BOTH sources: Full Name and Username.
 2. If the "Full Name" contains a real human first name, use it.
-3. If Full Name is empty, contains only titles/business words, or is NOT a real human name, look at the "Username" to extract a first name (e.g. "annelisebasque_formations" → "Annelise", "marie.yoga.paris" → "Marie").
+3. If Full Name is empty, contains only titles/business words, or is NOT a real human name, look at the "Username" to extract a first name ONLY if it clearly contains one (e.g. "annelisebasque_formations" → "Annelise", "marie.yoga.paris" → "Marie").
 4. Ignore titles like "Coach", "Therapist", "Psychologue", "Formatrice", "Formateur", emojis, or business words — these are NOT names.
 5. If the name is composed (e.g. Jean-Pierre), keep it.
 6. Return ONLY the First Name (Capitalized).
 7. If you CANNOT identify a human First Name with confidence, return exactly "UNKNOWN".
 8. IMPORTANT: Common words, abstract concepts, roles, or brand names are NOT first names. Examples: "Présence", "Harmonie", "Formatrice", "Coaching", "Essence" → return "UNKNOWN".
+9. IMPORTANT: Brand names, acronyms, abbreviations, or made-up words from the username are NOT first names. If the username is a brand/company name (e.g. "wellme_fr", "abctalktv", "fitpro_paris"), do NOT extract parts of it as a name. Return "UNKNOWN".
+10. A valid first name must be a REAL human first name that exists in common name databases (French, English, Arabic, Spanish, etc.). If you're not sure it's a real name, return "UNKNOWN".
 
 Data:
 Username: ${username || 'N/A'}
@@ -115,6 +157,12 @@ Full Name: ${fullName || 'N/A'}
     // Reject common French/English words that are NOT first names
     if (isCommonWord(cleanResult)) {
       console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (common word)`);
+      return null;
+    }
+
+    // Reject results that are clearly from the username (brand/acronym extraction)
+    if (isUsernameFragment(cleanResult, username)) {
+      console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (username fragment)`);
       return null;
     }
 
