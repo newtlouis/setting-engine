@@ -86,6 +86,29 @@ function isUsernameFragment(result, username) {
 }
 
 /**
+ * Validate a name against Genderize.io API (free, 100 req/day)
+ * Returns true if the name is recognized as a real first name (count >= 100)
+ * @param {string} name
+ * @returns {Promise<boolean>}
+ */
+async function isRealFirstName(name) {
+  try {
+    const response = await fetch(`https://api.genderize.io?name=${encodeURIComponent(name)}`);
+    if (!response.ok) return true; // If API fails, don't block — let it through
+    const data = await response.json();
+    // count = number of people with this name in their database
+    // A real first name typically has count >= 100
+    if (data.count < 100) {
+      return false;
+    }
+    return true;
+  } catch {
+    // API error — don't block the extraction
+    return true;
+  }
+}
+
+/**
  * Extract First Name using OpenAI
  *
  * @param {string} username - Instagram username
@@ -163,6 +186,13 @@ Full Name: ${fullName || 'N/A'}
     // Reject results that are clearly from the username (brand/acronym extraction)
     if (isUsernameFragment(cleanResult, username)) {
       console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (username fragment)`);
+      return null;
+    }
+
+    // Final validation: verify it's a real first name via Genderize.io
+    const isReal = await isRealFirstName(cleanResult);
+    if (!isReal) {
+      console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (not a known first name)`);
       return null;
     }
 
