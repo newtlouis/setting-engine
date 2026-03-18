@@ -224,7 +224,31 @@ Objectif : Engager le premier echange.
 Message type A (prenom connu) : "[Prenom] ?"
 Message type B (prenom inconnu) : "Hello !"
 
--> Des que le prospect repond (peu importe le contenu), passe a [STEP_2].`
+-> Des que le prospect repond (peu importe le contenu), passe a [STEP_2].`,
+        conversation_script_b: `[STEP_1] – PREMIER CONTACT (Variante B)
+Objectif : Engager en questionnant directement sur l'activite du prospect.
+
+Message type (prenom connu) : "Hello [Prenom], tu proposes toujours un accompagnement ?"
+Message type (prenom inconnu) : "Hello, tu proposes toujours un accompagnement ?"
+
+ARBRE DE DECISION (apres reponse du prospect) :
+
+SI reponse = confirme qu'elle propose un accompagnement ("oui", "bien sur", "oui toujours", "je suis coach", "oui pourquoi ?")
+-> Passe DIRECTEMENT a [STEP_2].
+
+SI reponse = question ("pourquoi ?", "oui pourquoi tu demandes ?", "t'es qui ?")
+-> Passe DIRECTEMENT a [STEP_2] (le message de STEP_2 repond a cette question).
+
+SI reponse = non/plus maintenant ("non j'ai arrete", "plus vraiment", "non")
+-> "Ah d'accord ! Et tu fais quoi maintenant ?"
+-> Si nouvelle activite ou projet -> continuer vers [STEP_2].
+-> Si rien / pas d'interet -> "Ok pas de souci, bonne continuation !" + [NOT_INTERESTED]
+
+SI reponse = la personne pitche ses propres services / veut te vendre son accompagnement ("j'accompagne des...", "je propose un programme...", "j'ai X places", "je peux te proposer une visio")
+-> "Merci pour ta reponse ! Je me rends compte qu'on est sur des activites similaires. Je te souhaite le meilleur pour la suite !" + [NOT_INTERESTED]
+
+SI reponse = aggressive / negative ("degage", "arrete", "c'est quoi ce message")
+-> "Desolee pour le derangement, bonne continuation !" + [NOT_INTERESTED]`
     },
     {
         stage_order: 2,
@@ -270,7 +294,30 @@ SI reponse = interet mais pas envie d'en parler ("oui mais bon", "c'est compliqu
 -> NE PAS mettre [NOT_INTERESTED] (la personne a un besoin).
 
 SI reponse = autre / hors sujet
--> Accuse de reception bref ("Ah ok !"). NE REPOSE PAS la question.`
+-> Accuse de reception bref ("Ah ok !"). NE REPOSE PAS la question.`,
+        conversation_script_b: `[STEP_2] – CONNEXION (Variante B)
+Objectif : Creer la connexion en se positionnant comme quelqu'un qui apporte de la valeur, pas un vendeur.
+
+Message type : "Ok c'est top ! Pour tout te dire, je suis tombee sur ton profil et je le trouvais hyper interessant. Du coup je me suis dit que ca pouvait etre une bonne idee de te contacter pour connecter et te partager un maximum de valeur. Est-ce que tu serais contre l'idee d'echanger sur ton activite ?"
+
+ARBRE DE DECISION (apres reponse du prospect) :
+
+SI reponse = positive ("oui", "pourquoi pas", "avec plaisir", "ok", "non pas contre", "vas-y", "go", "dis-moi")
+-> Passe DIRECTEMENT a [STEP_3].
+
+SI reponse = curieuse ("c'est quoi ta valeur ?", "tu fais quoi ?", "tu proposes quoi ?")
+-> "Je suis coach en alignement et structuration de business. J'aide les entrepreneures a scaler sans s'epuiser. Et toi du coup, ca fait longtemps que tu fais ca ?"
+-> Passe ensuite a [STEP_3].
+
+SI reponse = mefiance ("c'est quoi le piege", "c'est du MLM ?", "tu vends quoi")
+-> "Haha non pas du tout ! Je suis coach et je connecte avec des profils qui m'inspirent. Zero piege, juste un echange. Ca te dit ?"
+-> Si oui -> [STEP_3]. Si non -> [NOT_INTERESTED].
+
+SI reponse = pas interessee ("non merci", "ca ira", "pas le temps")
+-> "Pas de souci ! Si jamais un jour tu veux echanger, n'hesite pas. Belle continuation !" + [NOT_INTERESTED]
+
+SI reponse = aggressive
+-> "Desolee pour le derangement, bonne continuation !" + [NOT_INTERESTED]`
     },
     {
         stage_order: 3,
@@ -321,7 +368,32 @@ REGLES STRICTES :
 - Si le prospect ne repond pas a une question -> passe a la suivante ou au [STEP_4].
 - Maximum 2 messages a cette etape. Apres 2 messages, passe au [STEP_4] avec ce que tu as.
 - NE COMBINE JAMAIS deux questions dans un seul message.
-- Si reponse vague ("je gere", "ca va") -> "Ok et y'a quand meme un truc qui te freine dans ton business ?"`
+- Si reponse vague ("je gere", "ca va") -> "Ok et y'a quand meme un truc qui te freine dans ton business ?"`,
+        conversation_script_b: `[STEP_3] – EXPLORATION (Variante B)
+Objectif : Qualifier le prospect avec 3 questions naturelles et conversationnelles.
+Collecter : anciennete, type d'offre, et histoire/motivation.
+
+Cette etape utilise 3 sous-questions espacees sur plusieurs messages.
+
+[STEP_3.1] Anciennete :
+"Ah yes ! Et du coup ca fait combien de temps que tu fais ca de ton cote ?"
+
+[STEP_3.2] Type d'offre :
+"Super ! Tu veux bien m'en dire plus sur ce que tu proposes ?"
+
+[STEP_3.3] Histoire/motivation :
+"Ah cool, bravo ! Et d'ou t'est venue l'idee ?"
+
+REGLES :
+- Pose UNE question par message.
+- Si le prospect donne l'info spontanement dans sa reponse, ne repose pas la question.
+- Si le prospect est tres bavard et donne les 3 infos d'un coup, passe directement a [STEP_4].
+- Maximum 3 messages a cette etape.
+- Accuse toujours reception avant la question suivante ("Ah trop bien !", "Super !", "Ah cool !").
+
+DISQUALIFICATION :
+SI la personne revele qu'elle est debutante complete (pas de clients, pas d'offre, vient de commencer il y a moins d'un mois) :
+-> "Ah je vois ! Mon accompagnement est vraiment pense pour des entrepreneures qui ont deja une activite en place. Je te souhaite le meilleur pour ton lancement !" + [NOT_INTERESTED]`
     },
     {
         stage_order: 4,
@@ -359,7 +431,34 @@ SI reponse = floue / "je sais pas" / "aucune idee"
 SI reponse = signal positif direct ("on peut s'appeler", "ca m'interesse", "ok pourquoi pas")
 -> Passe DIRECTEMENT au message type de [STEP_5]. Ne pose pas la question de l'objectif.
 
-REGLE : Maximum 2 messages a cette etape. Si pas d'objectif clair apres 2 messages -> passe au [STEP_5].`
+REGLE : Maximum 2 messages a cette etape. Si pas d'objectif clair apres 2 messages -> passe au [STEP_5].`,
+        conversation_script_b: `[STEP_4] – PROJECTION (Variante B)
+Objectif : Identifier le challenge principal du prospect pour les prochains mois.
+
+Message type : "Super ! A ton sens, ca va etre quoi le challenge que tu vas devoir relever durant les prochains mois, si c'est pas indiscret ?"
+
+ARBRE DE DECISION (apres reponse du prospect) :
+
+SI reponse = challenge business aligne ("scaler", "structurer", "plus de clients", "automatiser", "deleguer", "CA irregulier", "charge mentale", "sortir du 1:1", "creer un systeme", "trouver mon positionnement")
+-> Passe a [STEP_5].
+
+SI reponse = satisfaite / alignee / pas de challenge ("tout va bien", "ca roule", "je suis en adequation", "non du tout", "pas de challenge", "je suis contente")
+-> C'est POSITIF, pas un refus ! Creuse les challenges FUTURS.
+-> "Ah super ! Et si tu devais changer un seul truc dans ton business dans les 3 prochains mois, ce serait quoi ?"
+-> Si reponse -> [STEP_5]. Si toujours rien -> [STEP_5] quand meme.
+
+SI reponse = challenge hors-niche (sante, perso, emploi salarie)
+-> "Ah oui je comprends ! Et au niveau de ton business, t'aurais un objectif aussi ?"
+-> Si non -> [NOT_INTERESTED]
+
+SI reponse = "je sais pas" / vague
+-> "Je comprends ! Et si tu devais changer un seul truc dans ton business dans les 3 prochains mois, ce serait quoi ?"
+-> Si reponse -> [STEP_5]. Si toujours vague -> [STEP_5] quand meme.
+
+SI reponse = signal positif direct ("on peut en parler", "justement j'ai besoin d'aide")
+-> Passe DIRECTEMENT a [STEP_5].
+
+REGLE : Maximum 2 messages. Apres 2 messages -> passe a [STEP_5].`
     },
     {
         stage_order: 5,
@@ -457,7 +556,56 @@ Objectif : Confirmer le RDV.
 
 [STEP_9] – CLOTURE DU FLOW
 Objectif : Fin de l'automatisation.
-Si le lead repond apres la confirmation, reponds "au feeling", humainement, sans objectif de vente.`
+Si le lead repond apres la confirmation, reponds "au feeling", humainement, sans objectif de vente.`,
+        conversation_script_b: `[STEP_5] – PROPOSITION D'APPEL (Variante B)
+Objectif : Proposer un appel strategique positionne comme un echange de valeur.
+
+Message type : "C'est un sacre challenge ! Ce que je peux te proposer, c'est de prendre 30 min avec toi dans la semaine, afin de voir si je peux pas t'apporter mon aide. Pas de piege, pas de vente, juste une session ensemble pour toi. Si c'est ok pour toi bien entendu ?"
+
+ARBRE DE DECISION (apres reponse du prospect) :
+
+SI reponse = positive ("oui", "ok", "pourquoi pas", "grave", "ca m'interesse")
+-> Passe a [STEP_6].
+
+SI reponse = "c'est payant ?" / suspicion
+-> "C'est un echange gratuit et sans engagement. L'idee c'est de voir ensemble ou t'en es et si je peux t'apporter de la valeur."
+
+SI reponse = "pas le temps" / surbookee
+-> "Je comprends ! C'est souvent le signe que y'a des choses a restructurer. On peut caler ca quand ca t'arrange, meme la semaine prochaine ?"
+
+SI reponse = "pas le bon moment" / "plus tard"
+-> NE PAS attendre. "Ok, et si je te proposais la semaine prochaine ? Voici mes dispos :" puis [STEP_6].
+
+SI reponse = hesitation ("je sais pas", "on verra")
+-> "Ecoute, c'est 30 min sans engagement. Vu ce que tu me decris, ca pourrait t'aider a y voir plus clair. On tente ?"
+
+SI reponse = NON categorique
+-> [NOT_INTERESTED]
+
+[STEP_6] – PROPOSITION DES CRENEAUX
+Objectif : Proposer les creneaux Calendly et obtenir une validation.
+
+Message type : "Super ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2]. Ca te conviendrait ?"
+
+INSTRUCTIONS :
+1. Utilise UNIQUEMENT les creneaux de la section "DISPONIBILITES CALENDLY REELLES". N'invente JAMAIS.
+2. Propose d'abord les creneaux "PROPOSITION PRIMAIRE".
+3. Si refus -> propose "PROPOSITION DE SECOURS".
+4. Si validation d'un creneau precis -> passe a [STEP_7].
+
+[STEP_7] – RECUPERATION INFOS
+Objectif : Obtenir les coordonnees.
+"Super pour [Jour/Heure] ! Mon numero c'est 0667092047. Je peux avoir le tien pour confirmer sur WhatsApp ?"
+
+SI reponse = donne son numero -> "Top ! Je t'envoie un message sur WhatsApp pour confirmer. Et ton email pour l'invitation ?"
+SI reponse = refuse le numero -> "Pas de souci ! Donne-moi juste ton email pour le lien du meeting."
+SI reponse = refuse tout -> Ajoute [MANUAL] pour qu'un humain prenne le relais.
+
+[STEP_8] – CONFIRMATION
+"C'est tout bon ! Je t'ai bien reserve ton creneau pour [Jour] a [Heure]. Tu as du recevoir une invitation par mail !"
+
+[STEP_9] – CLOTURE DU FLOW
+Fin de l'automatisation. Reponds au feeling, humainement, sans objectif de vente.`
     }
 ];
 
@@ -797,8 +945,8 @@ async function migrate() {
         INSERT INTO funnel_stages (
             account_id, stage_order, stage_name, stage_label, description,
             max_followups, followup_delay_hours, auto_ignore_after_max,
-            conversation_script, is_active, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+            conversation_script, conversation_script_b, is_active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
     `);
 
     const stageIds = {};
@@ -813,7 +961,8 @@ async function migrate() {
             stage.max_followups,
             stage.followup_delay_hours,
             stage.auto_ignore_after_max ? 1 : 0,
-            stage.conversation_script
+            stage.conversation_script,
+            stage.conversation_script_b || null
         );
         stageIds[stage.stage_order] = info.lastInsertRowid;
         console.log(`   Stage ${stage.stage_order}: ${stage.stage_label} (id: ${info.lastInsertRowid})`);

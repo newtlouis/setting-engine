@@ -143,8 +143,19 @@ function composeStagesSection(stages, currentStep = 0, variant = 'A') {
   let section = `**ÉTAPE ACTUELLE : STEP_${currentStep}**\n`;
   section += `Utilise le script de l'étape ${currentStep} ci-dessous.\n\n`;
 
-  // Skip rule
-  section += `**RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.\n\n`;
+  // Skip rule + history analysis
+  section += `**RÈGLE ANTI-RÉPÉTITION (CRITIQUE) :**
+Avant de répondre, analyse TOUT l'historique de conversation et identifie les informations que le prospect a DÉJÀ données :
+- Activité / métier
+- Ancienneté
+- Type d'offre / ce qu'il propose
+- Blocage / challenge principal
+- Objectif / vision
+- Disponibilités / créneau
+
+NE POSE JAMAIS une question dont la réponse est déjà dans l'historique. Si le prospect a déjà donné l'info demandée par l'étape en cours, SAUTE cette question et passe à la suivante.
+
+**RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.\n\n`;
 
   // Previous step (summary only, for context)
   if (prevStage) {
