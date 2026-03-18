@@ -877,11 +877,11 @@ async function migrate() {
     if (existingAccount) {
         accountId = existingAccount.id;
         console.log(`   Account "${ACCOUNT_NAME}" already exists (id: ${accountId}), updating...`);
-        db.prepare('UPDATE accounts SET ig_username = ?, description = ? WHERE id = ?')
-            .run(IG_USERNAME, ACCOUNT_DESCRIPTION, accountId);
+        db.prepare('UPDATE accounts SET ig_username = ?, description = ?, booking_mode = ?, booking_config = ? WHERE id = ?')
+            .run(IG_USERNAME, ACCOUNT_DESCRIPTION, 'google_calendar', '{"minHour": 10, "maxHour": 20}', accountId);
     } else {
-        const info = db.prepare('INSERT INTO accounts (name, ig_username, description) VALUES (?, ?, ?)')
-            .run(ACCOUNT_NAME, IG_USERNAME, ACCOUNT_DESCRIPTION);
+        const info = db.prepare('INSERT INTO accounts (name, ig_username, description, booking_mode, booking_config) VALUES (?, ?, ?, ?, ?)')
+            .run(ACCOUNT_NAME, IG_USERNAME, ACCOUNT_DESCRIPTION, 'google_calendar', '{"minHour": 10, "maxHour": 20}');
         accountId = info.lastInsertRowid;
         console.log(`   Created account "${ACCOUNT_NAME}" (id: ${accountId})`);
     }
