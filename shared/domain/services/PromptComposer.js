@@ -145,15 +145,20 @@ function composeStagesSection(stages, currentStep = 0, variant = 'A') {
 
   // Skip rule + history analysis
   section += `**RÈGLE ANTI-RÉPÉTITION (CRITIQUE) :**
-Avant de répondre, analyse TOUT l'historique de conversation et identifie les informations que le prospect a DÉJÀ données :
-- Activité / métier
-- Ancienneté
-- Type d'offre / ce qu'il propose
-- Blocage / challenge principal
-- Objectif / vision
-- Disponibilités / créneau
+Avant de répondre, analyse TOUT l'historique de conversation (messages du prospect ET tes propres messages) :
 
-NE POSE JAMAIS une question dont la réponse est déjà dans l'historique. Si le prospect a déjà donné l'info demandée par l'étape en cours, SAUTE cette question et passe à la suivante.
+1. **Ne répète JAMAIS une question que tu as DÉJÀ posée.** Relis tes messages précédents : si tu as déjà demandé "ça fait combien de temps ?", "tu fais quoi ?", etc., NE repose PAS la même question, même reformulée.
+2. **Ne te re-présente pas.** Si tu as déjà expliqué qui tu es / ce que tu fais dans un message précédent, ne le redis pas. Le prospect l'a déjà lu.
+3. **Ne repose pas une question dont le prospect a déjà donné la réponse.** Identifie les infos déjà obtenues :
+   - Activité / métier
+   - Ancienneté
+   - Type d'offre / ce qu'il propose
+   - Blocage / challenge principal
+   - Objectif / vision
+   - Disponibilités / créneau
+4. **Si le prospect pose une question sur toi**, réponds-y brièvement puis AVANCE dans le script avec une NOUVELLE question (pas une que tu as déjà posée).
+
+Si l'étape en cours demande une question que tu as déjà posée ou dont tu as déjà la réponse, SAUTE-la et passe à la suivante.
 
 **RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.\n\n`;
 
