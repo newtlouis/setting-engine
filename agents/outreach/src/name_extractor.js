@@ -1,84 +1,91 @@
 /**
  * AI Name Extractor Module
- * 
- * Uses OpenAI API to extract/guess the first name from Instagram username and profile name.
+ *
+ * Extracts first names from Instagram username and profile name using OpenAI.
+ * Strict "zero false positive" philosophy: returns null on any doubt.
  */
 
 import { CONFIG } from './config.js';
 
-// Common French/English words that AI might mistake for first names
 const COMMON_WORDS = new Set([
-  // Abstract/spiritual/wellness concepts often used as Instagram profile names
-  'présence', 'presence', 'harmonie', 'harmony', 'essence', 'éveil', 'eveil',
-  'lumière', 'lumiere', 'énergie', 'energie', 'energy', 'sérénité', 'serenite',
-  'serenity', 'sagesse', 'wisdom', 'grâce', 'grace', 'esprit', 'spirit',
-  'liberté', 'liberte', 'liberty', 'beauté', 'beaute', 'beauty', 'nature',
+  // French articles, prepositions, pronouns
+  'de', 'du', 'des', 'le', 'la', 'les', 'un', 'une', 'au', 'aux',
+  'et', 'ou', 'en', 'par', 'pour', 'avec', 'sans', 'sur', 'sous',
+  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
+  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles',
+  'ce', 'cette', 'ces', 'tout', 'toute', 'tous', 'toutes',
+  // English articles, prepositions, pronouns
+  'the', 'and', 'for', 'with', 'from', 'your', 'our', 'her', 'his',
+  'my', 'its', 'she', 'not', 'but', 'all', 'are', 'was', 'one',
+  // Abstract/spiritual/wellness concepts
+  'presence', 'harmonie', 'harmony', 'essence', 'eveil', 'lumiere',
+  'energie', 'energy', 'serenite', 'serenity', 'sagesse', 'wisdom',
+  'esprit', 'spirit', 'liberte', 'liberty', 'beaute', 'beauty', 'nature',
   'silence', 'douceur', 'tendresse', 'passion', 'inspiration', 'intuition',
-  'conscience', 'équilibre', 'equilibre', 'balance', 'confiance', 'courage',
-  'force', 'lumineuse', 'lumineux', 'soleil', 'lune', 'étoile', 'etoile',
-  'phoenix', 'phenix', 'papillon', 'butterfly', 'renaissance', 'envol',
-  'souffle', 'flamme', 'flow', 'bloom', 'blossom', 'glow', 'shine', 'spark',
+  'conscience', 'equilibre', 'balance', 'confiance', 'courage', 'force',
+  'lumineuse', 'lumineux', 'soleil', 'lune', 'etoile', 'phoenix', 'phenix',
+  'papillon', 'butterfly', 'renaissance', 'envol', 'souffle', 'flamme',
+  'flow', 'bloom', 'blossom', 'glow', 'shine', 'spark',
   'zen', 'karma', 'yoga', 'pilates', 'reiki', 'mantra', 'chakra',
   // Business/role words
-  'coach', 'coaching', 'mentor', 'thérapeute', 'therapeute', 'therapist',
+  'coach', 'coaching', 'mentor', 'therapeute', 'therapist',
   'praticien', 'praticienne', 'consultant', 'consultante', 'formatrice',
-  'formateur', 'créatrice', 'creatrice', 'fondatrice', 'fondateur',
+  'formateur', 'creatrice', 'fondatrice', 'fondateur',
   'artisan', 'artiste', 'artist', 'wellness', 'holistic', 'holistique',
-  // Common adjectives/words
+  'psychologue', 'infirmiere', 'infirmier', 'medecin', 'docteur',
+  // Common adjectives
   'petit', 'petite', 'grand', 'grande', 'belle', 'beau', 'nouveau', 'nouvelle',
   'libre', 'douce', 'doux', 'pure', 'pur', 'vrai', 'vraie', 'simple',
-  'positive', 'positif', 'creative', 'créative', 'happy', 'love', 'life',
+  'positive', 'positif', 'creative', 'happy', 'love', 'life',
   'dream', 'hope', 'soul', 'heart', 'mind', 'body', 'magic', 'miracle',
   'voyage', 'aventure', 'adventure', 'chemin', 'sentier', 'path',
-  // Generic profile words
+  // Generic profile/brand words
   'official', 'officiel', 'officielle', 'studio', 'atelier', 'maison',
   'plus', 'pro', 'world', 'global', 'design', 'style', 'mode', 'fashion',
+  'fitness', 'health', 'sante', 'bien', 'etre', 'bienvenue', 'welcome',
 ]);
 
 /**
- * Check if a string is a common word (not a real first name)
+ * Normalizes a string for comparison: lowercase, strip accents, trim
+ * @param {string} str
+ * @returns {string}
+ */
+function normalize(str) {
+  return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
+/**
+ * Checks if a string is a common word (not a real first name)
  * @param {string} name
  * @returns {boolean}
  */
 function isCommonWord(name) {
-  return COMMON_WORDS.has(name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim())
-      || COMMON_WORDS.has(name.toLowerCase().trim());
+  return COMMON_WORDS.has(normalize(name)) || COMMON_WORDS.has(name.toLowerCase().trim());
 }
 
 /**
- * Check if the AI result is just a fragment extracted from the username (not a real name)
- * @param {string} result - The AI extraction result
- * @param {string} username - The Instagram username
+ * Checks if the result looks like a brand fragment extracted from the username
+ * @param {string} result
+ * @param {string} username
  * @returns {boolean}
  */
 function isUsernameFragment(result, username) {
   if (!result || !username) return false;
   const lower = result.toLowerCase();
-  const user = username.toLowerCase().replace(/[._]/g, '');
+  const user = username.toLowerCase().replace(/[._-]/g, '');
 
-  // Reject if result is ALL CAPS or all uppercase (acronyms like "ABC")
+  // ALL CAPS short strings are acronyms
   if (result === result.toUpperCase() && result.length <= 5) return true;
 
-  // Reject if the result appears in the username but is NOT a common first name pattern
-  // e.g. "Wellme" from "wellme_fr", "Abc" from "abctalktv"
   if (user.includes(lower)) {
-    // Check if it looks like a real name (at least one vowel, not too short, not all consonants)
-    const vowelCount = (lower.match(/[aeiouy]/g) || []).length;
-    const consonantCount = lower.length - vowelCount;
-
-    // Names like "Wellme", "Abc", "Fitpro" → not real names
-    // But "Marie", "Anne", "Julie", "Maxime", "Guilherme" → real names
-    // Heuristic: reject if the extracted word matches a username segment that looks like a brand
-    const usernameSegments = username.toLowerCase().split(/[._-]/);
-    const isExactSegment = usernameSegments.some(seg => seg === lower);
+    const segments = username.toLowerCase().split(/[._-]/);
+    const isExactSegment = segments.some(seg => seg === lower);
 
     if (isExactSegment) {
-      // If it's an exact username segment, check for brand-like patterns
-      const brandPatterns = /(?:tv|fr|pro|app|hub|lab|co|io|tech|fit|zen|box|net|web|shop|care|mind|well|talk|vibe|med|health|biz|corp|inc|store|beauty|style|mode|world|global|plus|official)$/i;
-      if (brandPatterns.test(lower)) return true;
+      const brandSuffixes = /(?:tv|fr|pro|app|hub|lab|co|io|tech|fit|zen|box|net|web|shop|care|mind|well|talk|vibe|med|health|biz|corp|inc|store|beauty|style|mode|world|global|plus|official)$/i;
+      if (brandSuffixes.test(lower)) return true;
     }
 
-    // If it contains digits or is very short (2-3 chars), likely not a name
     if (/\d/.test(result) || result.length <= 3) return true;
   }
 
@@ -86,63 +93,52 @@ function isUsernameFragment(result, username) {
 }
 
 /**
- * Validate a name against Genderize.io API (free, 100 req/day)
- * Returns true if the name is recognized as a real first name (count >= 100)
+ * Validates a name against Genderize.io API.
+ * Returns false on API error (zero false positive philosophy).
  * @param {string} name
  * @returns {Promise<boolean>}
  */
 async function isRealFirstName(name) {
   try {
     const response = await fetch(`https://api.genderize.io?name=${encodeURIComponent(name)}`);
-    if (!response.ok) return true; // If API fails, don't block — let it through
+    if (!response.ok) return false;
     const data = await response.json();
-    // count = number of people with this name in their database
-    // A real first name typically has count >= 100
-    if (data.count < 100) {
-      return false;
-    }
-    return true;
+    return data.count >= 100;
   } catch {
-    // API error — don't block the extraction
-    return true;
+    return false;
   }
 }
 
+const EXTRACTION_PROMPT = `I will give you an Instagram username and a profile "full name".
+Your goal is to identify the **First Name** of the person to use in a friendly message (e.g. "Hello [Name]").
+
+Rules:
+1. A valid first name is a REAL human first name that exists in common name databases (French, English, Arabic, Spanish, Portuguese, Italian, etc.).
+2. If the "Full Name" contains a real human first name as its FIRST word or clearly identifiable, use it.
+3. If the Full Name is a phrase, slogan, or brand name (e.g. "De Coach a Coach", "La Vie En Rose", "Mind Body Soul", "Coaching Holistique"), it does NOT contain a first name. Ignore it entirely and look at the Username.
+4. When looking at the Username, split it by dots, underscores, or hyphens. Look for a segment that is a REAL first name. Ignore segments that are roles (coach, yoga, pro, therapist), locations (paris, fr, lyon), or brand suffixes (tv, app, hub, fit).
+5. Articles (de, du, le, la, the), prepositions (pour, avec, for, with), and pronouns are NEVER first names.
+6. Business words (Coach, Therapist, Formatrice, Consultant), abstract concepts (Présence, Harmonie, Énergie, Essence), and adjectives (Belle, Pure, Happy) are NEVER first names.
+7. If the name is composed (e.g. Jean-Pierre, Marie-Claire), keep the full composed name.
+8. Return ONLY the First Name, properly capitalized.
+9. If you CANNOT identify a real human first name with HIGH CONFIDENCE, return exactly "UNKNOWN". When in doubt, ALWAYS return "UNKNOWN".`;
+
 /**
- * Extract First Name using OpenAI
+ * Extracts first name from Instagram profile using OpenAI + multi-layer validation.
+ * Returns null on any doubt (zero false positive philosophy).
  *
  * @param {string} username - Instagram username
- * @param {string} fullName - Profile full name (can be empty or contain emojis/titles)
- * @returns {Promise<string|null>} Extracted Name or null if not found
+ * @param {string} fullName - Profile display name
+ * @returns {Promise<string|null>} Validated first name or null
  */
 export async function extractNameWithAI(username, fullName) {
-  // Check requirements
   if (!CONFIG.OPENAI_API_KEY) {
     if (process.env.DEBUG) console.warn('   ⚠️  OPENAI_API_KEY not set - skipping AI name extraction');
     return null;
   }
-  
+
   try {
-    const prompt = `
-I will give you an Instagram username and a profile "full name".
-Your goal is to identify the **First Name** of the person to use in a friendly message (e.g. "Hello [Name]").
-
-Rules:
-1. Look for a human first name in BOTH sources: Full Name and Username.
-2. If the "Full Name" contains a real human first name, use it.
-3. If Full Name is empty, contains only titles/business words, or is NOT a real human name, look at the "Username" to extract a first name ONLY if it clearly contains one (e.g. "annelisebasque_formations" → "Annelise", "marie.yoga.paris" → "Marie").
-4. Ignore titles like "Coach", "Therapist", "Psychologue", "Formatrice", "Formateur", emojis, or business words — these are NOT names.
-5. If the name is composed (e.g. Jean-Pierre), keep it.
-6. Return ONLY the First Name (Capitalized).
-7. If you CANNOT identify a human First Name with confidence, return exactly "UNKNOWN".
-8. IMPORTANT: Common words, abstract concepts, roles, or brand names are NOT first names. Examples: "Présence", "Harmonie", "Formatrice", "Coaching", "Essence" → return "UNKNOWN".
-9. IMPORTANT: Brand names, acronyms, abbreviations, or made-up words from the username are NOT first names. If the username is a brand/company name (e.g. "wellme_fr", "abctalktv", "fitpro_paris"), do NOT extract parts of it as a name. Return "UNKNOWN".
-10. A valid first name must be a REAL human first name that exists in common name databases (French, English, Arabic, Spanish, etc.). If you're not sure it's a real name, return "UNKNOWN".
-
-Data:
-Username: ${username || 'N/A'}
-Full Name: ${fullName || 'N/A'}
-    `.trim();
+    const userPrompt = `Username: ${username || 'N/A'}\nFull Name: ${fullName || 'N/A'}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -153,56 +149,59 @@ Full Name: ${fullName || 'N/A'}
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant that extracts first names from social media profiles.' },
-          { role: 'user', content: prompt }
+          { role: 'system', content: EXTRACTION_PROMPT },
+          { role: 'user', content: userPrompt }
         ],
         max_tokens: 10,
         temperature: 0
       })
     });
-    
+
     if (!response.ok) {
       if (process.env.DEBUG) console.error(`   ❌ OpenAI Name Extraction Error: ${response.statusText}`);
       return null;
     }
-    
+
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content?.trim();
-    
-    // Clean result (remove quotes if any)
-    const cleanResult = result.replace(/["']/g, '');
+    const raw = data.choices?.[0]?.message?.content?.trim();
+    if (!raw) return null;
 
-    if (cleanResult === 'UNKNOWN' || cleanResult.length < 2) {
-      if (process.env.DEBUG) console.log(`   🤖 AI Name Extraction: Failed to find name for @${username}`);
+    const name = raw.replace(/["']/g, '');
+
+    // Layer 1: basic rejection
+    if (name === 'UNKNOWN' || name.length < 3) {
+      if (process.env.DEBUG) console.log(`   🤖 AI: @${username} → no name found`);
       return null;
     }
 
-    // Reject common French/English words that are NOT first names
-    if (isCommonWord(cleanResult)) {
-      console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (common word)`);
+    // Layer 2: common word filter
+    if (isCommonWord(name)) {
+      if (process.env.DEBUG) console.log(`   🤖 AI: @${username} → "${name}" rejected (common word)`);
       return null;
     }
 
-    // Reject results that are clearly from the username (brand/acronym extraction)
-    if (isUsernameFragment(cleanResult, username)) {
-      console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (username fragment)`);
+    // Layer 3: username fragment filter
+    if (isUsernameFragment(name, username)) {
+      if (process.env.DEBUG) console.log(`   🤖 AI: @${username} → "${name}" rejected (username fragment)`);
       return null;
     }
 
-    // Final validation: verify it's a real first name via Genderize.io
-    const isReal = await isRealFirstName(cleanResult);
+    // Layer 4: Genderize.io validation (rejects on API error)
+    const isReal = await isRealFirstName(name);
     if (!isReal) {
-      console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}" rejected (not a known first name)`);
+      if (process.env.DEBUG) console.log(`   🤖 AI: @${username} → "${name}" rejected (not a known first name)`);
       return null;
     }
 
-    if (process.env.DEBUG) console.log(`   🤖 AI Name Extraction: @${username} -> "${cleanResult}"`);
-    return cleanResult;
-    
+    if (process.env.DEBUG) console.log(`   🤖 AI: @${username} → "${name}" ✓`);
+    return name;
   } catch (error) {
     console.error('   ❌ Name Extraction Error:', error.message);
     return null;
   }
 }
+
+// Exported for testing
+export { isCommonWord, isUsernameFragment, isRealFirstName, normalize, COMMON_WORDS };
 
 export default { extractNameWithAI };
