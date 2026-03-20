@@ -44,7 +44,8 @@
         "restore:remote": "node agents/collector/scripts/restore.js --remote",
         "analyze:steps": "cd agents/collector && npm run analyze:steps --",
         "test:e2e": "cd agents/dmresponder && npm run test:e2e",
-        "dm-sync": "cd agents/dmresponder && npm run cron -- --inbox"
+        "dm-sync": "cd agents/dmresponder && npm run cron -- --inbox",
+        "kpi-daily": "node scripts/kpi-daily.js"
     },
     "author": "Louis",
     "license": "ISC",

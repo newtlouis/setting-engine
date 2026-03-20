@@ -95,6 +95,7 @@ const COMMAND_REGISTRY = {
     ],
     Operations: [
         { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode', '--variant'] },
+        { name: 'kpi-daily', description: 'KPI quotidien → Google Sheet', options: ['--profile', '--week'], defaults: '--week' },
         { name: 'backup', description: 'Backup base de donnees', options: ['--upload'] },
         { name: 'restore', description: 'Restaurer base de donnees', options: ['--remote'] },
     ],
