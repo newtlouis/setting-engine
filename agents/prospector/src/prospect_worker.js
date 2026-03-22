@@ -106,10 +106,60 @@ const FRENCH_BIO_WORDS = new Set([
   'naturopathe', 'sophrologue', 'hypnothérapeute', 'réflexologue',
 ]);
 
+// Words shared between French and other Romance languages (Spanish, Portuguese, Italian)
+// These are AMBIGUOUS and should NOT count as French indicators
+const ROMANCE_AMBIGUOUS_WORDS = new Set([
+  'tu', 'la', 'le', 'les', 'un', 'une', 'de', 'du', 'que', 'qui',
+  'ou', 'ne', 'pas', 'plus', 'mon', 'ma', 'son', 'sa', 'si', 'on',
+  'est', 'au', 'par', 'bien',
+]);
+
+// Words that are distinctly Spanish/Portuguese/Italian — NOT French
+const OTHER_ROMANCE_WORDS = new Set([
+  // Spanish
+  'el', 'los', 'las', 'del', 'al', 'con', 'para', 'por', 'como', 'pero',
+  'este', 'esta', 'esto', 'ese', 'esa', 'aqui', 'donde', 'cuando',
+  'muy', 'más', 'ser', 'estar', 'tiene', 'tiene', 'puede', 'hace',
+  'hay', 'soy', 'eres', 'somos', 'fue', 'sido', 'hoy', 'dia',
+  'vida', 'mundo', 'tiempo', 'mujer', 'mujeres', 'hombre', 'amor',
+  'tambien', 'también', 'siempre', 'nunca', 'algo', 'todo', 'nada',
+  'aquí', 'ahora', 'después', 'antes', 'sobre', 'entre', 'hasta',
+  'desde', 'hacia', 'sin', 'según', 'durante', 'contra', 'cada',
+  'otro', 'otra', 'otros', 'otras', 'mismo', 'misma',
+  'yo', 'él', 'ella', 'nosotros', 'ellos', 'ellas', 'usted', 'ustedes',
+  'te', 'nos', 'lo', 'se', 'mi', 'su', 'sus', 'tus', 'mis',
+  'quiero', 'quieres', 'puedo', 'puedes', 'necesito', 'necesitas',
+  'trabajo', 'trabajar', 'ayudo', 'ayudar', 'creo', 'crear',
+  'conecta', 'conectar', 'construi', 'construir', 'potencial', 'conciencia',
+  'experta', 'experto', 'mucho', 'mucha', 'poco', 'bueno', 'buena',
+  'nuevo', 'nueva', 'mejor', 'grande', 'pequeño',
+  // Portuguese
+  'não', 'sim', 'você', 'vocês', 'isso', 'esse', 'essa', 'aquele',
+  'são', 'tem', 'foi', 'ter', 'fazer', 'pode', 'deve', 'quero',
+  'muito', 'pouco', 'bem', 'mal', 'bom', 'meu', 'minha', 'seu', 'sua',
+  'nos', 'das', 'dos', 'nas', 'nos', 'aos', 'pela', 'pelo',
+  'mais', 'menos', 'ainda', 'já', 'aqui', 'ali', 'onde', 'como',
+  'porque', 'quando', 'quem', 'qual', 'tudo', 'nada', 'cada',
+  'ajudo', 'ajudar', 'trabalho', 'trabalhar', 'vida', 'mundo',
+  'mulher', 'mulheres', 'homem', 'pessoas', 'negócio', 'negocio',
+  // Italian
+  'il', 'gli', 'dei', 'del', 'della', 'delle', 'nel', 'nella',
+  'che', 'chi', 'cosa', 'come', 'dove', 'quando', 'perché',
+  'sono', 'sei', 'siamo', 'hanno', 'fatto', 'fare', 'dire',
+  'questo', 'questa', 'quello', 'quella', 'qui', 'qui',
+  'molto', 'poco', 'bene', 'male', 'grande', 'piccolo',
+  'mio', 'mia', 'tuo', 'tua', 'suo', 'sua', 'nostro', 'nostra',
+  'anche', 'ancora', 'sempre', 'mai', 'già', 'poi', 'dopo',
+  'aiuto', 'aiutare', 'lavoro', 'lavorare', 'vita', 'mondo',
+  'donna', 'donne', 'uomo', 'persone',
+]);
+
 /**
  * Detect if a bio is entirely in a foreign (non-French) language.
  * Short bios (< 5 words) are always accepted.
- * Bios with French accents or French words are accepted.
+ * Uses a two-pass approach:
+ *  1. If other Romance language words are detected, ambiguous shared words don't count as French
+ *  2. Only distinctly-French words are counted to determine the language
  */
 function isForeignLanguageBio(bio) {
   if (!bio) return false;
@@ -120,16 +170,30 @@ function isForeignLanguageBio(bio) {
 
   if (words.length < 5) return false;
 
-  const hasFrenchAccents = /[éèêëàâçùûôîïœæ]/i.test(bio);
-  if (hasFrenchAccents) return false;
-
-  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü'-]/g, ''));
+  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûüñ'-]/g, ''));
   const substantiveWords = cleanWords.filter(w => w.length > 1 && !UNIVERSAL_BIO_WORDS.has(w));
 
   if (substantiveWords.length < 3) return false;
 
-  const frenchCount = substantiveWords.filter(w => FRENCH_BIO_WORDS.has(w)).length;
+  // Pass 1: detect other Romance languages
+  const otherRomanceCount = substantiveWords.filter(w => OTHER_ROMANCE_WORDS.has(w)).length;
+  const hasOtherRomance = otherRomanceCount >= 2;
+
+  // Pass 2: count French words — if other Romance detected, exclude ambiguous shared words
+  const frenchCount = substantiveWords.filter(w => {
+    if (!FRENCH_BIO_WORDS.has(w)) return false;
+    if (hasOtherRomance && ROMANCE_AMBIGUOUS_WORDS.has(w)) return false;
+    return true;
+  }).length;
+
   const frenchRatio = frenchCount / substantiveWords.length;
+
+  // Also check for French-specific accents (ç, œ, æ, ù, û are uniquely French)
+  const hasFrenchSpecificAccents = /[çœæùû]/i.test(bio);
+  if (hasFrenchSpecificAccents) return false;
+
+  // If other Romance language is detected and no distinctly French words → reject
+  if (hasOtherRomance && frenchCount === 0) return true;
 
   return frenchRatio < 0.1;
 }

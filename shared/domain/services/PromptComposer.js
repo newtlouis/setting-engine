@@ -176,12 +176,20 @@ Si l'étape en cours demande une question que tu as déjà posée ou dont tu as 
     section += formatStageFull(currStage, variant);
   }
 
-  // Upcoming steps (objective only, so LLM can detect if info is already given)
+  // Upcoming steps: next step gets full script (for seamless transition), rest are objectives only
   if (upcomingStages.length > 0) {
-    section += `--- ÉTAPES SUIVANTES (objectifs, pour détecter si le prospect a déjà répondu) ---\n`;
-    for (const stage of upcomingStages) {
-      section += `[STEP_${stage.stageOrder}] – ${stage.stageLabel}\n`;
-      section += `Objectif : ${stage.description || stage.stageName}\n\n`;
+    const nextStage = upcomingStages[0];
+    const laterStages = upcomingStages.slice(1);
+
+    section += `--- ÉTAPE SUIVANTE (si tu termines l'étape en cours, enchaîne DIRECTEMENT avec ce script) ---\n`;
+    section += formatStageFull(nextStage, variant);
+
+    if (laterStages.length > 0) {
+      section += `--- ÉTAPES ULTÉRIEURES (objectifs, pour détecter si le prospect a déjà répondu) ---\n`;
+      for (const stage of laterStages) {
+        section += `[STEP_${stage.stageOrder}] – ${stage.stageLabel}\n`;
+        section += `Objectif : ${stage.description || stage.stageName}\n\n`;
+      }
     }
   }
 

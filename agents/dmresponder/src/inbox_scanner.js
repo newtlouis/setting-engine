@@ -832,8 +832,13 @@ export async function runInboxScanner(options = {}) {
           }
       }
       
-      // Wait for user to act
+      // Notify user that messages are ready for review
       if (getOpenMessageTabs().length > 0) {
+        try {
+          const { execSync } = await import('child_process');
+          execSync('afplay /System/Library/Sounds/Hero.aiff; afplay /System/Library/Sounds/Hero.aiff; afplay /System/Library/Sounds/Hero.aiff');
+        } catch { /* ignore sound errors */ }
+
         await waitForUserToFinish();
       }
       
