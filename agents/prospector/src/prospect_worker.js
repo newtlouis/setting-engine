@@ -73,130 +73,6 @@ function parseSource(source) {
 }
 
 // ============================================
-// FOREIGN LANGUAGE BIO DETECTION
-// ============================================
-
-const UNIVERSAL_BIO_WORDS = new Set([
-  'hello', 'hi', 'hey', 'ok', 'love', 'life', 'happy', 'free',
-  'cool', 'style', 'design', 'art', 'music', 'photo', 'video',
-  'coach', 'coaching', 'yoga', 'fitness', 'beauty', 'fashion',
-  'diy', 'travel', 'food', 'blog', 'vlog', 'dm', 'link', 'bio',
-  'ceo', 'founder', 'creator', 'artist', 'model', 'digital',
-  'mindset', 'lifestyle', 'wellness', 'flow', 'zen', 'energy',
-  'shop', 'store', 'online', 'new', 'best', 'top', 'pro',
-]);
-
-const FRENCH_BIO_WORDS = new Set([
-  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'on',
-  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'au', 'aux',
-  'est', 'suis', 'sont', 'ai', 'ont', 'été',
-  'et', 'ou', 'mais', 'que', 'qui', 'quoi', 'dont',
-  'ne', 'pas', 'plus',
-  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
-  'ce', 'cette', 'ces', 'ça',
-  'dans', 'sur', 'avec', 'pour', 'par', 'chez', 'entre',
-  'très', 'bien', 'aussi', 'encore', 'toujours', 'trop',
-  'moi', 'toi', 'lui', 'eux', 'leur', 'leurs',
-  'tout', 'toute', 'tous', 'toutes', 'même', 'autre',
-  'peut', 'veux', 'fais', 'fait', 'va', 'vais',
-  'comme', 'quand', 'si', 'alors', 'donc', 'parce',
-  'accompagnement', 'accompagne', 'thérapeute', 'formatrice', 'formateur',
-  'praticienne', 'praticien', 'spécialisée', 'spécialisé',
-  'développement', 'personnel', 'holistique', 'bien-être', 'bienveillance',
-  'naturopathe', 'sophrologue', 'hypnothérapeute', 'réflexologue',
-]);
-
-// Words shared between French and other Romance languages (Spanish, Portuguese, Italian)
-// These are AMBIGUOUS and should NOT count as French indicators
-const ROMANCE_AMBIGUOUS_WORDS = new Set([
-  'tu', 'la', 'le', 'les', 'un', 'une', 'de', 'du', 'que', 'qui',
-  'ou', 'ne', 'pas', 'plus', 'mon', 'ma', 'son', 'sa', 'si', 'on',
-  'est', 'au', 'par', 'bien',
-]);
-
-// Words that are distinctly Spanish/Portuguese/Italian — NOT French
-const OTHER_ROMANCE_WORDS = new Set([
-  // Spanish
-  'el', 'los', 'las', 'del', 'al', 'con', 'para', 'por', 'como', 'pero',
-  'este', 'esta', 'esto', 'ese', 'esa', 'aqui', 'donde', 'cuando',
-  'muy', 'más', 'ser', 'estar', 'tiene', 'tiene', 'puede', 'hace',
-  'hay', 'soy', 'eres', 'somos', 'fue', 'sido', 'hoy', 'dia',
-  'vida', 'mundo', 'tiempo', 'mujer', 'mujeres', 'hombre', 'amor',
-  'tambien', 'también', 'siempre', 'nunca', 'algo', 'todo', 'nada',
-  'aquí', 'ahora', 'después', 'antes', 'sobre', 'entre', 'hasta',
-  'desde', 'hacia', 'sin', 'según', 'durante', 'contra', 'cada',
-  'otro', 'otra', 'otros', 'otras', 'mismo', 'misma',
-  'yo', 'él', 'ella', 'nosotros', 'ellos', 'ellas', 'usted', 'ustedes',
-  'te', 'nos', 'lo', 'se', 'mi', 'su', 'sus', 'tus', 'mis',
-  'quiero', 'quieres', 'puedo', 'puedes', 'necesito', 'necesitas',
-  'trabajo', 'trabajar', 'ayudo', 'ayudar', 'creo', 'crear',
-  'conecta', 'conectar', 'construi', 'construir', 'potencial', 'conciencia',
-  'experta', 'experto', 'mucho', 'mucha', 'poco', 'bueno', 'buena',
-  'nuevo', 'nueva', 'mejor', 'grande', 'pequeño',
-  // Portuguese
-  'não', 'sim', 'você', 'vocês', 'isso', 'esse', 'essa', 'aquele',
-  'são', 'tem', 'foi', 'ter', 'fazer', 'pode', 'deve', 'quero',
-  'muito', 'pouco', 'bem', 'mal', 'bom', 'meu', 'minha', 'seu', 'sua',
-  'nos', 'das', 'dos', 'nas', 'nos', 'aos', 'pela', 'pelo',
-  'mais', 'menos', 'ainda', 'já', 'aqui', 'ali', 'onde', 'como',
-  'porque', 'quando', 'quem', 'qual', 'tudo', 'nada', 'cada',
-  'ajudo', 'ajudar', 'trabalho', 'trabalhar', 'vida', 'mundo',
-  'mulher', 'mulheres', 'homem', 'pessoas', 'negócio', 'negocio',
-  // Italian
-  'il', 'gli', 'dei', 'del', 'della', 'delle', 'nel', 'nella',
-  'che', 'chi', 'cosa', 'come', 'dove', 'quando', 'perché',
-  'sono', 'sei', 'siamo', 'hanno', 'fatto', 'fare', 'dire',
-  'questo', 'questa', 'quello', 'quella', 'qui', 'qui',
-  'molto', 'poco', 'bene', 'male', 'grande', 'piccolo',
-  'mio', 'mia', 'tuo', 'tua', 'suo', 'sua', 'nostro', 'nostra',
-  'anche', 'ancora', 'sempre', 'mai', 'già', 'poi', 'dopo',
-  'aiuto', 'aiutare', 'lavoro', 'lavorare', 'vita', 'mondo',
-  'donna', 'donne', 'uomo', 'persone',
-]);
-
-/**
- * Detect if a bio is entirely in a foreign (non-French) language.
- * Short bios (< 5 words) are always accepted.
- * Uses a two-pass approach:
- *  1. If other Romance language words are detected, ambiguous shared words don't count as French
- *  2. Only distinctly-French words are counted to determine the language
- */
-function isForeignLanguageBio(bio) {
-  if (!bio) return false;
-
-  // Strip emojis and special characters for word count
-  const cleaned = bio.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[|•·—–→←↓↑▪️✨🌿💫🔥✅❤️🙏🎯📩💬📲🌸🌺🌻🌼💐🌈⭐️🏆💪🧘‍♀️🧘‍♂️]/gu, ' ');
-  const words = cleaned.trim().split(/\s+/).filter(w => w.length > 0);
-
-  if (words.length < 5) return false;
-
-  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûüñ'-]/g, ''));
-  const substantiveWords = cleanWords.filter(w => w.length > 1 && !UNIVERSAL_BIO_WORDS.has(w));
-
-  if (substantiveWords.length < 3) return false;
-
-  // Pass 1: detect other Romance languages
-  const otherRomanceCount = substantiveWords.filter(w => OTHER_ROMANCE_WORDS.has(w)).length;
-  const hasOtherRomance = otherRomanceCount >= 2;
-
-  // Pass 2: count French words — if other Romance detected, exclude ambiguous shared words
-  const frenchCount = substantiveWords.filter(w => {
-    if (!FRENCH_BIO_WORDS.has(w)) return false;
-    if (hasOtherRomance && ROMANCE_AMBIGUOUS_WORDS.has(w)) return false;
-    return true;
-  }).length;
-
-  const frenchRatio = frenchCount / substantiveWords.length;
-
-  // Also check for French-specific accents (ç, œ, æ, ù, û are uniquely French)
-  const hasFrenchSpecificAccents = /[çœæùû]/i.test(bio);
-  if (hasFrenchSpecificAccents) return false;
-
-  // If other Romance language is detected and no distinctly French words → reject
-  if (hasOtherRomance && frenchCount === 0) return true;
-
-  return frenchRatio < 0.1;
-}
 
 /**
  * Main prospecting pipeline
@@ -416,16 +292,7 @@ export async function runProspector(options = {}) {
              const profileData = await scrapeProfileData(workingPage);
              console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
 
-             // STEP 3c-bis: Reject profiles with bio entirely in a foreign language
-             if (profileData.bio && isForeignLanguageBio(profileData.bio)) {
-               console.log(`   🌍 @${username}: REJECTED (bio in foreign language)`);
-               stats.leadsSkipped++;
-               saveLeadToDb(username, comment, accountId, 'failed', 'foreign_language', null, null, null, currentSourceRaw);
-               await delay(1000, 2000);
-               continue;
-             }
-
-             // STEP 3d: Qualify lead (if not skipped)
+             // STEP 3d: Qualify lead — language + competitor check via LLM (if not skipped)
              let accompanimentType = null;
              if (!skipQualification) {
                const qualificationPrompt = outreachConfig.qualificationPrompt;
@@ -434,9 +301,11 @@ export async function runProspector(options = {}) {
                const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
 
                if (!qualResult.qualified) {
-                 console.log(`   🚫 @${username}: REJECTED (${qualResult.reason})`);
+                 const failReason = qualResult.reason === 'foreign_language' ? 'foreign_language' : 'competitor';
+                 const icon = failReason === 'foreign_language' ? '🌍' : '🚫';
+                 console.log(`   ${icon} @${username}: REJECTED (${qualResult.reason})`);
                  stats.leadsSkipped++;
-                 saveLeadToDb(username, comment, accountId, 'failed', 'competitor', null, null, null, currentSourceRaw);
+                 saveLeadToDb(username, comment, accountId, 'failed', failReason, null, null, null, currentSourceRaw);
                  await delay(1000, 2000);
                  continue;
                }

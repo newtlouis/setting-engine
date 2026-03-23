@@ -47,15 +47,20 @@ export async function qualifyLead(bio, customPrompt = null, username = 'unknown'
     let maxTokens = 10;
 
     if (extractAccompaniment && !customPrompt) {
-      // Enhanced prompt: qualify + extract accompaniment type in one call
+      // Enhanced prompt: qualify + language check + extract accompaniment type in one call
       prompt = `Analyse cette bio Instagram.
-Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds "NON".
-Sinon, réponds "OUI" suivi d'un pipe "|" et du type d'accompagnement/service que la personne propose (en quelques mots, ex: yoga, sophrologie, coaching en nutrition, hypnothérapie, naturopathie, bien-être, etc.).
-Si tu ne peux pas identifier le type d'accompagnement, réponds "OUI|UNKNOWN".
+
+1. D'abord, vérifie la LANGUE : si la bio n'est PAS en français (espagnol, anglais, portugais, italien, arabe, etc.), réponds uniquement "FOREIGN".
+   Note : les emojis, noms propres et mots universels (coach, yoga, etc.) ne comptent pas pour déterminer la langue. Regarde les vrais mots.
+
+2. Si la bio EST en français :
+   - Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds "NON".
+   - Sinon, réponds "OUI" suivi d'un pipe "|" et du type d'accompagnement/service que la personne propose (en quelques mots, ex: yoga, sophrologie, coaching en nutrition, hypnothérapie, naturopathie, bien-être, etc.).
+   - Si tu ne peux pas identifier le type d'accompagnement, réponds "OUI|UNKNOWN".
 
 Bio: ${bio.trim()}
 
-Réponse (OUI|type ou NON):`;
+Réponse (FOREIGN ou OUI|type ou NON):`;
       maxTokens = 30;
     } else {
       const basePrompt = customPrompt || CONFIG.QUALIFICATION_PROMPT;
@@ -90,6 +95,15 @@ Réponse (OUI|type ou NON):`;
     const answerUpper = answer.toUpperCase();
 
     console.log(`   🤖 OpenAI qualification: "${answer}"`);
+
+    if (answerUpper.includes('FOREIGN')) {
+      console.log(`   🌍 Bio REJETÉE → Langue étrangère détectée`);
+      return {
+        qualified: false,
+        reason: 'foreign_language',
+        raw: answer
+      };
+    }
 
     if (answerUpper.includes('NON')) {
       console.log(`   ❌ Bio REJETÉE → Profil concurrent détecté`);
