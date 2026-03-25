@@ -35,13 +35,17 @@ const MONTH_NAMES = [
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { profile: null, week: false };
+  const result = { profile: null, week: false, from: null };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--profile' && args[i + 1]) {
       result.profile = args[i + 1];
       i++;
     } else if (args[i] === '--week') {
       result.week = true;
+    } else if (args[i] === '--from' && args[i + 1]) {
+      result.from = args[i + 1];
+      result.week = true; // --from implies multi-day mode
+      i++;
     }
   }
   return result;
@@ -232,8 +236,19 @@ async function main() {
   const spreadsheetId = getSheetId(profile);
 
   // Determine which dates to process
+  const { from } = parseArgs();
   let dates;
-  if (week) {
+  if (from) {
+    // --from YYYY-MM-DD: from that date to today
+    const start = new Date(from + 'T00:00:00');
+    const today = new Date();
+    dates = [];
+    const current = new Date(start);
+    while (current <= today) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+  } else if (week) {
     dates = getCurrentWeekDates();
     console.log(`📅 Week mode: ${dates.length} days (${dates[0].toISOString().split('T')[0]} → ${dates[dates.length - 1].toISOString().split('T')[0]})`);
   } else {
@@ -244,7 +259,7 @@ async function main() {
   }
 
   for (const date of dates) {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const kpis = calculateKPIs(db, accountId, dateStr);
     console.log(`📈 ${dateStr}:`, kpis);
     await writeKPIsToSheet(sheets, spreadsheetId, date, kpis);

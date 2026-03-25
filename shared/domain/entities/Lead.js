@@ -352,9 +352,8 @@ export class Lead {
   // ============ PRIVATE HELPERS ============
 
   _extractFirstName() {
-    if (this.fullName) {
-      return this.fullName.split(' ')[0];
-    }
+    // No fallback extraction — only AI-validated first names should be used
+    // fullName.split(' ')[0] is unreliable (returns "Le" from "Le Cocon au Féminin")
     return null;
   }
 

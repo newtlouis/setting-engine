@@ -336,10 +336,10 @@ export async function runProspector(options = {}) {
               let finalMessage = "";
               if (leadVariant === 'B') {
                 // Variant B: "Hello Prénom, est-ce que tu proposes toujours un accompagnement en {type} ?"
-                const name = aiFirstName || profileData.fullName?.split(' ')[0] || '';
+                // Only use AI-validated first name — no fallback to fullName split (too risky)
                 const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
-                finalMessage = name
-                  ? `Hello ${name}, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`
+                finalMessage = aiFirstName
+                  ? `Hello ${aiFirstName}, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`
                   : `Hello, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`;
               } else if (aiFirstName) {
                 // Variant A: Just "[Name] ?"

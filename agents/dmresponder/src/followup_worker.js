@@ -232,8 +232,8 @@ export async function runFollowupWatcher(options = {}) {
             let message = thread.nextMessage;
             
             // Placeholder replacement
-            const rawName = thread.full_name ? thread.full_name.split(' ')[0] : thread.username;
-            const firstName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase() : '';
+            // Use AI-validated first_name only — never split full_name (unreliable)
+            const firstName = thread.first_name || '';
             message = message.replace(/{{firstName}}/g, firstName);
 
             console.log(`\n💬 SENDING FOLLOW-UP:`);

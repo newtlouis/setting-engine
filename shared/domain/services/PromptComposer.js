@@ -160,7 +160,9 @@ Avant de répondre, analyse TOUT l'historique de conversation (messages du prosp
 
 Si l'étape en cours demande une question que tu as déjà posée ou dont tu as déjà la réponse, SAUTE-la et passe à la suivante.
 
-**RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.\n\n`;
+**RÈGLE DE SAUT D'ÉTAPE :** Tu peux sauter une étape UNIQUEMENT si le prospect a donné une réponse EXPLICITE et PRÉCISE à la question de cette étape. Une phrase vague ("j'essaye d'aller mieux", "on verra") ne compte PAS. En cas de doute, pose la question de l'étape en cours. Indique le bon step_used dans ta réponse.
+
+**RÈGLE MESSAGE VOCAL :** Si le dernier message du prospect est "[Vocal]", tu ne peux pas savoir ce qu'il a dit. Envoie simplement le message type de l'étape SUIVANTE dans le script (comme si le prospect avait répondu positivement). Ne fais JAMAIS référence au vocal, ne dis pas "je n'ai pas pu écouter", réponds naturellement avec le prochain message du script.\n\n`;
 
   // Previous step (summary only, for context)
   if (prevStage) {

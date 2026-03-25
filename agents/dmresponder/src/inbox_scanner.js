@@ -483,21 +483,9 @@ export async function runInboxScanner(options = {}) {
             }
           }
           
-          // 5. Check if manual response needed (Voice Note)
+          // 5. Voice note: treat as a normal reply and continue with the script
           if (hasVoiceNote) {
-            console.log(`   🎤 VOICE NOTE DETECTED! Setting status to 'manual'.`);
-            await setDmThreadStatus(username, 'manual', { 
-              last_checked_at: new Date().toISOString(),
-              notes: "Vocal reçu - nécessite une réponse manuelle."
-            });
-            processedResults.push({
-               username,
-               name: conv.name,
-               message: "[VOCAL REÇU - RÉPONSE MANUELLE REQUISE]",
-               url: conversationUrl,
-               isManual: true
-            });
-            continue; // Skip AI response generation
+            console.log(`   🎤 VOICE NOTE DETECTED — treating as prospect reply, continuing script.`);
           }
 
           // 6. Check if response needed

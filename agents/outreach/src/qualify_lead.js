@@ -46,17 +46,16 @@ export async function qualifyLead(bio, customPrompt = null, username = 'unknown'
     let prompt;
     let maxTokens = 10;
 
+    // Language check is ALWAYS prepended, regardless of custom prompt
+    const languagePrefix = `ÉTAPE 1 — LANGUE : Si la bio n'est PAS en français (espagnol, anglais, portugais, italien, hongrois, arabe, allemand, ou toute autre langue non-française), réponds UNIQUEMENT "FOREIGN" et ignore tout le reste. Les emojis, noms propres et mots universels (coach, yoga, app, etc.) ne comptent pas — regarde les vrais mots de la bio.\n\nÉTAPE 2 — Si la bio EST en français :\n`;
+
     if (extractAccompaniment && !customPrompt) {
-      // Enhanced prompt: qualify + language check + extract accompaniment type in one call
       prompt = `Analyse cette bio Instagram.
 
-1. D'abord, vérifie la LANGUE : si la bio n'est PAS en français (espagnol, anglais, portugais, italien, arabe, etc.), réponds uniquement "FOREIGN".
-   Note : les emojis, noms propres et mots universels (coach, yoga, etc.) ne comptent pas pour déterminer la langue. Regarde les vrais mots.
-
-2. Si la bio EST en français :
-   - Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds "NON".
-   - Sinon, réponds "OUI" suivi d'un pipe "|" et du type d'accompagnement/service que la personne propose (en quelques mots, ex: yoga, sophrologie, coaching en nutrition, hypnothérapie, naturopathie, bien-être, etc.).
-   - Si tu ne peux pas identifier le type d'accompagnement, réponds "OUI|UNKNOWN".
+${languagePrefix}
+- Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds "NON".
+- Sinon, réponds "OUI" suivi d'un pipe "|" et du type d'accompagnement/service que la personne propose (en quelques mots, ex: yoga, sophrologie, coaching en nutrition, hypnothérapie, naturopathie, bien-être, etc.).
+- Si tu ne peux pas identifier le type d'accompagnement, réponds "OUI|UNKNOWN".
 
 Bio: ${bio.trim()}
 
@@ -64,8 +63,9 @@ Réponse (FOREIGN ou OUI|type ou NON):`;
       maxTokens = 30;
     } else {
       const basePrompt = customPrompt || CONFIG.QUALIFICATION_PROMPT;
-      prompt = basePrompt.replace('{bio}', bio.trim());
-      prompt = prompt.replace('{username}', username);
+      const filledPrompt = basePrompt.replace('{bio}', bio.trim()).replace('{username}', username);
+      prompt = `${languagePrefix}${filledPrompt}`;
+      maxTokens = 30;
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
