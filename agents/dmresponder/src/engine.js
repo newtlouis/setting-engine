@@ -299,13 +299,14 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     }
   }
 
-  // Inject booking availability if in booking stage (Step 5+)
-  // Also check conversation context: if last assistant message proposed a call, we need slots
+  // Inject booking availability when needed (call proposed or prospect proposes a meeting)
   const currentStep = leadContext?.funnel_step || 0;
   const lastAssistantMsg = conversationHistory.filter(m => m.role === 'assistant').pop()?.text?.toLowerCase() || '';
-  const callProposed = lastAssistantMsg.includes('30 min') || lastAssistantMsg.includes('appel') || lastAssistantMsg.includes('se call') || lastAssistantMsg.includes('on prenne');
-  const needsSlots = currentStep >= 5 || callProposed;
-  console.log(`[Engine] Booking check: step=${currentStep}, callProposed=${callProposed}, needsSlots=${needsSlots}`);
+  const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
+  const callProposedByUs = lastAssistantMsg.includes('30 min') || lastAssistantMsg.includes('appel') || lastAssistantMsg.includes('se call') || lastAssistantMsg.includes('on prenne') || lastAssistantMsg.includes('créneau') || lastAssistantMsg.includes('creneau') || lastAssistantMsg.includes('on se cale');
+  const callProposedByProspect = lastUserMsg.includes('visio') || lastUserMsg.includes('appel') || lastUserMsg.includes('rdv') || lastUserMsg.includes('rendez-vous') || lastUserMsg.includes('créneau') || lastUserMsg.includes('creneau') || lastUserMsg.includes('disponibilité') || lastUserMsg.includes('disponibilite') || lastUserMsg.includes('s\'appeler') || lastUserMsg.includes('on se call') || lastUserMsg.includes('09h') || lastUserMsg.includes('10h') || lastUserMsg.includes('11h') || lastUserMsg.includes('14h') || lastUserMsg.includes('15h') || lastUserMsg.includes('16h') || lastUserMsg.includes('17h') || lastUserMsg.includes('18h');
+  const needsSlots = currentStep >= 4 || callProposedByUs || callProposedByProspect;
+  console.log(`[Engine] Booking check: step=${currentStep}, callProposedByUs=${callProposedByUs}, callProposedByProspect=${callProposedByProspect}, needsSlots=${needsSlots}`);
   if (needsSlots) {
       try {
           const { resolveBookingAdapter } = await import('../../../shared/infrastructure/booking/BookingAdapterFactory.js');
@@ -355,10 +356,11 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
 
               contextDescription += `\nINSTRUCTIONS :\n`;
               contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne précise PAS "heure de Paris" dans ton message SAUF si le prospect a mentionné être dans un autre pays/fuseau (Canada, Belgique, etc.). Dans ce cas seulement, ajoute "(heure de Paris)".\n`;
+              contextDescription += `- ⚠️ RÈGLE CRITIQUE : Si le prospect PROPOSE un créneau (jour + heure), tu DOIS vérifier qu'il figure dans la liste ci-dessus. S'il N'Y EST PAS, ne confirme JAMAIS. Réponds : "Malheureusement je ne suis pas dispo à ce moment-là ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2], ça te conviendrait ?" en proposant 2 créneaux de la liste sur 2 jours différents.\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
-              contextDescription += `- Si le lead a validé un créneau mais n'a pas donné son EMAIL/TÉLÉPHONE -> [STEP_7]. Demande ses coordonnées.\n`;
-              contextDescription += `- Si le lead a donné ses coordonnées -> [STEP_8]. Confirmation chaleureuse.\n`;
+              contextDescription += `- Si le lead a validé un créneau DE LA LISTE mais n'a pas donné son EMAIL/TÉLÉPHONE -> demande ses coordonnées.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> confirmation chaleureuse.\n`;
           } else {
               contextDescription += `\n\n⚠️ AUCUN CRÉNEAU DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
           }

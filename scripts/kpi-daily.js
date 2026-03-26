@@ -86,7 +86,7 @@ function getAccountId(db, profileName) {
 }
 
 function calculateKPIs(db, accountId, dateStr) {
-  // 1. Personnes contactées: distinct leads who received an assistant message that day
+  // 1. Personnes contactées (hors follow-ups): distinct leads who received a non-followup assistant message that day
   const contacted = db.prepare(`
     SELECT COUNT(DISTINCT c.lead_id) as count
     FROM conversations c
@@ -94,6 +94,7 @@ function calculateKPIs(db, accountId, dateStr) {
     WHERE c.role = 'assistant'
       AND l.account_id = ?
       AND date(c.sent_at) = ?
+      AND (c.message_type IS NULL OR c.message_type NOT LIKE 'followup_%')
   `).get(accountId, dateStr);
 
   // 2. Réponses: distinct leads who sent a user message that day
@@ -131,14 +132,7 @@ function calculateKPIs(db, accountId, dateStr) {
       AND date(updated_at) = ?
   `).get(accountId, dateStr);
 
-  // 5. Taux de réponses
-  const contactedCount = contacted.count || 0;
-  const repliesCount = replies.count || 0;
-  const responseRate = contactedCount > 0
-    ? Math.round((repliesCount / contactedCount) * 100)
-    : 0;
-
-  // 6. Vidéos YouTube envoyées
+  // 5. Vidéos YouTube envoyées
   const youtubeVideos = db.prepare(`
     SELECT COUNT(*) as count
     FROM conversations c
@@ -149,12 +143,23 @@ function calculateKPIs(db, accountId, dateStr) {
       AND (c.message_text LIKE '%youtube.com%' OR c.message_text LIKE '%youtu.be%')
   `).get(accountId, dateStr);
 
+  // 6. Nombre de suivis (follow-ups) envoyés ce jour
+  const followups = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM conversations c
+    JOIN leads l ON c.lead_id = l.id
+    WHERE c.role = 'assistant'
+      AND l.account_id = ?
+      AND date(c.sent_at) = ?
+      AND c.message_type LIKE 'followup_%'
+  `).get(accountId, dateStr);
+
   return {
-    contacted: contactedCount,
-    replies: repliesCount,
+    contacted: contacted.count || 0,
+    followups: followups.count || 0,
+    replies: replies.count || 0,
     rdvProposed: rdvProposed.count || 0,
     books: books.count || 0,
-    responseRate: `${responseRate}%`,
     youtubeVideos: youtubeVideos.count || 0
   };
 }
@@ -195,14 +200,19 @@ async function writeKPIsToSheet(sheets, spreadsheetId, date, kpis) {
   const sheetName = MONTH_NAMES[monthIndex];
   const row = day + 1; // Row 1 = header, Row 2 = day 1
 
-  const range = `'${sheetName}'!B${row}:G${row}`;
+  // Columns: B=Contactés (hors followups), C=Suivis, D=Suivi abonnés (vide), E=Réponses, F=Taux (auto, skip), G=YouTube, H=RDV, I=Books
+  // Write B:E then skip F (formula) then G:I
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetName}'!B${row}:E${row}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[kpis.contacted, kpis.followups, '', kpis.replies]] }
+  });
+  const range = `'${sheetName}'!G${row}:I${row}`;
   const values = [[
-    kpis.contacted,
-    kpis.replies,
+    kpis.youtubeVideos,
     kpis.rdvProposed,
-    kpis.books,
-    kpis.responseRate,
-    kpis.youtubeVideos
+    kpis.books
   ]];
 
   await sheets.spreadsheets.values.update({

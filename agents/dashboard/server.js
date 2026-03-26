@@ -551,12 +551,17 @@ app.get('/api/leads/pipeline', (req, res) => {
         if (group_by === 'day') {
             sql = `
                 SELECT
-                    date(COALESCE(last_contact_at, updated_at)) as group_key,
-                    id, username, full_name, first_name, status, funnel_step,
-                    warmth, variant, last_contact_at, updated_at, accompaniment_type
-                FROM leads
-                WHERE account_id = ? AND status IN ${statusFilter} AND is_ignored = 0
-                ORDER BY COALESCE(last_contact_at, updated_at) DESC
+                    COALESCE(fc.first_contact_day, date(l.updated_at)) as group_key,
+                    l.id, l.username, l.full_name, l.first_name, l.status, l.funnel_step,
+                    l.warmth, l.variant, l.last_contact_at, l.updated_at, l.accompaniment_type
+                FROM leads l
+                LEFT JOIN (
+                    SELECT lead_id, DATE(MIN(sent_at)) as first_contact_day
+                    FROM conversations WHERE role = 'assistant'
+                    GROUP BY lead_id
+                ) fc ON fc.lead_id = l.id
+                WHERE l.account_id = ? AND l.status IN ${statusFilter} AND l.is_ignored = 0
+                ORDER BY group_key DESC
             `;
         } else {
             sql = `
