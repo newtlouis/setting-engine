@@ -355,6 +355,13 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               }
 
               contextDescription += `\nINSTRUCTIONS :\n`;
+              // Check if prospect has expressed a clear business objective in conversation history
+              const allUserMsgs = conversationHistory.filter(m => m.role === 'user').map(m => m.text?.toLowerCase() || '').join(' ');
+              const objectiveKeywords = ['client', 'clients', 'scaler', 'structurer', 'automatiser', 'déléguer', 'ca ', 'chiffre', 'revenus', 'visibilité', 'positionnement', 'offre', 'vendre', 'vente', 'développer', 'croissance', 'système', 'prospect', 'business', 'activité', 'lancement', 'connaître', 'audience', 'communauté', 'charge mentale', 'objectif', 'challenge', 'bloquer', 'blocage', 'problème'];
+              const hasExpressedObjective = objectiveKeywords.some(kw => allUserMsgs.includes(kw));
+              if (callProposedByProspect && !hasExpressedObjective && currentStep < 5) {
+                  contextDescription += `- ⚠️ RÈGLE PRIORITAIRE : Le prospect propose un appel MAIS n'a pas encore exprimé d'objectif business clair dans la conversation. Tu ne dois PAS accepter l'appel tout de suite. Réponds avec enthousiasme ("Avec plaisir !") puis enchaîne IMMÉDIATEMENT avec une question sur son objectif : "Avant qu'on se cale ça, dis-moi, c'est quoi ton plus gros challenge dans ton activité en ce moment ?" Une fois l'objectif identifié, tu pourras proposer les créneaux.\n`;
+              }
               contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne précise PAS "heure de Paris" dans ton message SAUF si le prospect a mentionné être dans un autre pays/fuseau (Canada, Belgique, etc.). Dans ce cas seulement, ajoute "(heure de Paris)".\n`;
               contextDescription += `- ⚠️ RÈGLE CRITIQUE : Si le prospect PROPOSE un créneau (jour + heure), tu DOIS vérifier qu'il figure dans la liste ci-dessus. S'il N'Y EST PAS, ne confirme JAMAIS. Réponds : "Malheureusement je ne suis pas dispo à ce moment-là ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2], ça te conviendrait ?" en proposant 2 créneaux de la liste sur 2 jours différents.\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;

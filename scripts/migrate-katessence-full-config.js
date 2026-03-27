@@ -409,7 +409,11 @@ SI la personne révèle qu'elle est débutante complète (pas de clients, pas d'
 ATTENTION : Quelqu'un avec de l'expérience n'est JAMAIS une débutante. Ne disqualifie JAMAIS quelqu'un qui a une activité en place.
 
 RÈGLE : Maximum 3 messages à cette étape. Si après 3 messages aucun objectif business clair n'est identifié, NE PASSE PAS à [STEP_4]. Reformule une dernière fois sous un angle différent. Tu ne proposes JAMAIS d'appel sans objectif business identifié.
-RÈGLE ABSOLUE : En cas de doute, NE JAMAIS ABANDONNER. Continue vers [STEP_4].`,
+RÈGLE ABSOLUE : En cas de doute, NE JAMAIS ABANDONNER. Continue vers [STEP_4].
+
+SI LE PROSPECT PROPOSE LUI-MÊME UN APPEL (ex: "on peut s'appeler ?", "tu fais des visios ?", "on se cale un rdv ?") :
+-> Si un objectif business a déjà été exprimé dans la conversation -> Accepte avec enthousiasme et passe à [STEP_4] pour proposer les créneaux.
+-> Si AUCUN objectif business n'a été identifié -> "Avec plaisir ! Avant qu'on se cale ça, dis-moi, c'est quoi ton plus gros challenge dans ton activité en ce moment ?" Identifie l'objectif AVANT de proposer des créneaux.`,
         conversation_script_b: `[STEP_3] – EXPLORATION (Variante B)
 Objectif : Qualifier le prospect avec 3 questions naturelles et conversationnelles.
 Collecter : ancienneté, type d'offre, et histoire/motivation.
@@ -532,7 +536,11 @@ SI réponse = signal positif direct ("on peut en parler", "justement j'ai besoin
 -> Passe DIRECTEMENT a [STEP_5].
 
 RÈGLES : Maximum 3 messages à cette étape. Si après 3 messages aucun objectif business clair n'est identifié, NE PASSE PAS à [STEP_5]. Reformule une dernière fois sous un angle différent. Tu ne proposes JAMAIS d'appel sans objectif business identifié.
-EN CAS DE DOUTE sur la nature du challenge (business ou pas) : considère-le comme business et passe à [STEP_5]. Mais en cas de DOUTE sur l'existence d'un objectif : reste à cette étape et creuse.`
+EN CAS DE DOUTE sur la nature du challenge (business ou pas) : considère-le comme business et passe à [STEP_5]. Mais en cas de DOUTE sur l'existence d'un objectif : reste à cette étape et creuse.
+
+SI LE PROSPECT PROPOSE LUI-MÊME UN APPEL (ex: "on peut s'appeler ?", "tu fais des visios ?", "on se cale un rdv ?") :
+-> Si un objectif business a déjà été exprimé dans la conversation -> Accepte avec enthousiasme et passe à [STEP_5] pour proposer les créneaux.
+-> Si AUCUN objectif business n'a été identifié -> "Avec plaisir ! Avant qu'on se cale ça, dis-moi, c'est quoi ton plus gros challenge dans ton activité en ce moment ?" Identifie l'objectif AVANT de proposer des créneaux.`
     },
     {
         stage_order: 5,
