@@ -40,7 +40,7 @@ program
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
   .option('--skip-qualification', 'Skip bio qualification check', false)
   .option('--mode <mode>', 'Prospecting mode: "comments" (leads = commenters) or "authors" (leads = post authors)', 'comments')
-  .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'A')
+  .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'random')
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');

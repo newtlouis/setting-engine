@@ -389,7 +389,7 @@ SI réponse = challenge business aligné ("scaler", "structurer", "trouver des c
 SI réponse = "tout va bien" / "pas de challenge" / "ça roule"
 -> "Ah super ! Et si tu pouvais changer un seul truc dans ton business demain, ce serait quoi ?"
 -> Si elle donne quelque chose -> valide et passe à [STEP_4].
--> Si toujours rien -> passe à [STEP_4] quand même.
+-> Si toujours rien -> NE PASSE PAS à [STEP_4]. Reformule la question sous un autre angle : "Et si tu pouvais déléguer un truc demain dans ton business, ce serait quoi ?" Tant qu'aucun objectif business clair n'est identifié, reste à cette étape.
 
 SI réponse = vague / "je sais pas"
 -> "Ok ! En général les entrepreneures que j'accompagne veulent soit plus de liberté, soit un business qui tourne sans tout porter seule. Ça te parle ?"
@@ -408,7 +408,7 @@ SI la personne révèle qu'elle est débutante complète (pas de clients, pas d'
 -> "Ah je vois ! Mon accompagnement est pensé pour des entrepreneures qui ont déjà une activité en place. Je te souhaite le meilleur pour ton lancement !" + [NOT_INTERESTED]
 ATTENTION : Quelqu'un avec de l'expérience n'est JAMAIS une débutante. Ne disqualifie JAMAIS quelqu'un qui a une activité en place.
 
-RÈGLE : Maximum 2 messages à cette étape. Après 2 messages -> passe à [STEP_4] avec ce que tu as.
+RÈGLE : Maximum 3 messages à cette étape. Si après 3 messages aucun objectif business clair n'est identifié, NE PASSE PAS à [STEP_4]. Reformule une dernière fois sous un angle différent. Tu ne proposes JAMAIS d'appel sans objectif business identifié.
 RÈGLE ABSOLUE : En cas de doute, NE JAMAIS ABANDONNER. Continue vers [STEP_4].`,
         conversation_script_b: `[STEP_3] – EXPLORATION (Variante B)
 Objectif : Qualifier le prospect avec 3 questions naturelles et conversationnelles.
@@ -510,26 +510,29 @@ Message type : "Super ! A ton sens, ça va être quoi le challenge que tu vas de
 
 ARBRE DE DÉCISION (après réponse du prospect) :
 
-SI réponse = challenge business aligné ("scaler", "structurer", "plus de clients", "automatiser", "déléguer", "CA irrégulier", "charge mentale", "sortir du 1:1", "créer un système", "trouver mon positionnement")
--> Passe à [STEP_5].
+SI réponse = challenge business aligné ("scaler", "structurer", "plus de clients", "automatiser", "déléguer", "CA irrégulier", "charge mentale", "sortir du 1:1", "créer un système", "trouver mon positionnement", "toucher plus de monde", "me faire connaître", "développer ma visibilité", "trouver des clients", "vivre de mon activité", "augmenter mon CA", "me développer sur les réseaux")
+-> Passe DIRECTEMENT à [STEP_5]. NE REPOSE PAS de question.
+IMPORTANT : Tout challenge lié à l'activité professionnelle du prospect EST un challenge business. "Toucher des nouvelles personnes", "avoir plus de clients", "me faire connaître", "développer mon activité" = challenge business → [STEP_5].
 
-SI réponse = satisfaite / alignée / pas de challenge ("tout va bien", "ça roule", "je suis en adéquation", "non du tout", "pas de challenge", "je suis contente")
+SI réponse = satisfaite / pas de challenge ("tout va bien", "ça roule", "pas de challenge", "je suis contente")
 -> C'est POSITIF, pas un refus ! Creuse les challenges FUTURS.
 -> "Ah super ! Et si tu devais changer un seul truc dans ton business dans les 3 prochains mois, ce serait quoi ?"
--> Si réponse -> [STEP_5]. Si toujours rien -> [STEP_5] quand même.
+-> Si réponse avec objectif business clair -> [STEP_5]. Si toujours rien -> NE PASSE PAS à [STEP_5]. Reformule sous un autre angle : "Et si tu pouvais déléguer un truc demain dans ton business, ce serait quoi ?" Tant qu'aucun objectif business clair n'est identifié, reste à cette étape.
 
-SI réponse = challenge hors-niche (sante, perso, emploi salarie)
+SI réponse = challenge PUREMENT personnel et sans lien avec l'activité ("perdre du poids", "déménager", "problème de santé")
 -> "Ah oui je comprends ! Et au niveau de ton business, t'aurais un objectif aussi ?"
 -> Si non -> [NOT_INTERESTED]
+ATTENTION : Cette branche est UNIQUEMENT pour des challenges qui n'ont AUCUN rapport avec l'activité professionnelle. En cas de doute, considère que c'est un challenge business et passe à [STEP_5].
 
 SI réponse = "je sais pas" / vague
 -> "Je comprends ! Et si tu devais changer un seul truc dans ton business dans les 3 prochains mois, ce serait quoi ?"
--> Si réponse -> [STEP_5]. Si toujours vague -> [STEP_5] quand même.
+-> Si réponse avec objectif business clair -> [STEP_5]. Si toujours vague -> NE PASSE PAS à [STEP_5]. Reformule : "Ce que j'entends souvent c'est 'je veux plus de clients' ou 'je veux sortir du 1:1'... ça te parle un de ces trucs ?" Tant qu'aucun objectif business clair n'est identifié, reste à cette étape.
 
 SI réponse = signal positif direct ("on peut en parler", "justement j'ai besoin d'aide")
 -> Passe DIRECTEMENT a [STEP_5].
 
-RÈGLES : Maximum 2 messages. Après 2 messages -> passe à [STEP_5].`
+RÈGLES : Maximum 3 messages à cette étape. Si après 3 messages aucun objectif business clair n'est identifié, NE PASSE PAS à [STEP_5]. Reformule une dernière fois sous un angle différent. Tu ne proposes JAMAIS d'appel sans objectif business identifié.
+EN CAS DE DOUTE sur la nature du challenge (business ou pas) : considère-le comme business et passe à [STEP_5]. Mais en cas de DOUTE sur l'existence d'un objectif : reste à cette étape et creuse.`
     },
     {
         stage_order: 5,
