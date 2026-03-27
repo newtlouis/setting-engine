@@ -435,9 +435,60 @@ export async function scrapeConversationMessages(page) {
           role: isUser ? 'user' : 'assistant',
           text,
           type: messageType,
+          sentAt,
+          _y: rect.top
+        });
+      }
+
+      // Standalone voice note detection: find waveform/timer elements NOT already captured via div[dir="auto"]
+      // Covers: waveform SVGs, timer roles, audio play buttons, aria-labels mentioning audio/vocal
+      const voiceContainers = document.querySelectorAll('[role="timer"], svg clipPath[id*="waveform"], [aria-label*="audio" i], [aria-label*="vocal" i], [aria-label*="voice" i], [aria-label*="Écouter" i], [aria-label*="Play" i][aria-label*="message" i]');
+      const capturedYPositions = new Set(result.map(r => Math.round(r._y || 0)));
+
+      for (const vc of voiceContainers) {
+        // Walk up to find the message row container
+        let container = vc.closest('[role="row"]') || vc.closest('[role="listitem"]');
+        if (!container) {
+          // Fallback: walk up to find a reasonable container
+          container = vc;
+          for (let d = 0; d < 8; d++) {
+            if (!container.parentElement) break;
+            container = container.parentElement;
+            if (container.getAttribute('role') === 'row' || container.getAttribute('role') === 'listitem') break;
+          }
+        }
+
+        const rect = container.getBoundingClientRect();
+        const roundedY = Math.round(rect.top);
+
+        // Skip if we already captured a message at this Y position (already detected via div[dir="auto"])
+        const alreadyCaptured = result.some(r => Math.abs((r._y || 0) - rect.top) < 30);
+        if (alreadyCaptured) continue;
+
+        const leftRatio = rect.left / windowWidth;
+        // Voice notes from prospect are left-aligned; but also check inner elements
+        const innerRect = vc.getBoundingClientRect();
+        const isUser = (innerRect.left / windowWidth) < 0.5 || leftRatio < 0.5;
+
+        // Find closest timestamp
+        let sentAt = null;
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+          if (timestamps[i].y <= rect.top) {
+            sentAt = timestamps[i].datetime;
+            break;
+          }
+        }
+
+        result.push({
+          role: isUser ? 'user' : 'assistant',
+          text: '[Vocal]',
+          type: 'voice_note',
           sentAt
         });
       }
+
+      // Clean up internal _y field
+      result.forEach(r => delete r._y);
 
       return result;
     });
@@ -483,8 +534,34 @@ export async function scrapeConversationMessages(page) {
             for (let i = timestamps.length - 1; i >= 0; i--) {
               if (timestamps[i].y <= msgY) { sentAt = timestamps[i].datetime; break; }
             }
-            result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text', sentAt });
+            result.push({ role: isUser ? 'user' : 'assistant', text, type: 'text', sentAt, _y: rect.top });
           }
+
+          // Standalone voice note detection (same as main block)
+          const voiceContainers = document.querySelectorAll('[role="timer"], svg clipPath[id*="waveform"], [aria-label*="audio" i], [aria-label*="vocal" i], [aria-label*="voice" i], [aria-label*="Écouter" i], [aria-label*="Play" i][aria-label*="message" i]');
+          for (const vc of voiceContainers) {
+            let container = vc.closest('[role="row"]') || vc.closest('[role="listitem"]');
+            if (!container) {
+              container = vc;
+              for (let d = 0; d < 8; d++) {
+                if (!container.parentElement) break;
+                container = container.parentElement;
+                if (container.getAttribute('role') === 'row' || container.getAttribute('role') === 'listitem') break;
+              }
+            }
+            const rect = container.getBoundingClientRect();
+            const alreadyCaptured = result.some(r => Math.abs((r._y || 0) - rect.top) < 30);
+            if (alreadyCaptured) continue;
+            const innerRect = vc.getBoundingClientRect();
+            const isUser = (innerRect.left / windowWidth) < 0.5 || (rect.left / windowWidth) < 0.5;
+            let sentAt = null;
+            for (let i = timestamps.length - 1; i >= 0; i--) {
+              if (timestamps[i].y <= rect.top) { sentAt = timestamps[i].datetime; break; }
+            }
+            result.push({ role: isUser ? 'user' : 'assistant', text: '[Vocal]', type: 'voice_note', sentAt });
+          }
+
+          result.forEach(r => delete r._y);
           return result;
         });
         if (retry.length > 0) {
