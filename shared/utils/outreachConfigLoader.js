@@ -27,7 +27,7 @@ export function loadOutreachConfig(accountId, profileConfig) {
 
     // 2. Persona data from account_personas
     const persona = db.prepare(
-        'SELECT qualification_prompt, niche, post_booking_message FROM account_personas WHERE account_id = ?'
+        'SELECT qualification_prompt, niche, post_booking_message, prospect_mode_hashtag, prospect_mode_profile FROM account_personas WHERE account_id = ?'
     ).get(accountId);
 
     // 3. CTA resources
@@ -60,6 +60,8 @@ export function loadOutreachConfig(accountId, profileConfig) {
         ctaResources: dbCta.length > 0 ? ctaFromDb : (profileConfig?.outreach?.cta_resources || {}),
         prospectorSources: dbSources.length > 0
             ? dbSources.map(s => s.source_value)
-            : (profileConfig?.prospector?.sources || [])
+            : (profileConfig?.prospector?.sources || []),
+        prospectModeHashtag: persona?.prospect_mode_hashtag || 'comments',
+        prospectModeProfile: persona?.prospect_mode_profile || 'comments'
     };
 }

@@ -313,8 +313,9 @@ async function migrate() {
         INSERT INTO account_personas (
             account_id, persona_name, niche, communication_rules,
             objections_script, knowledge_base, post_booking_message,
+            prospect_mode_hashtag, prospect_mode_profile,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `);
 
     personaStmt.run(
@@ -324,7 +325,9 @@ async function migrate() {
         personaData.communication_rules,
         personaData.objections_script,
         personaData.knowledge_base,
-        personaData.post_booking_message
+        personaData.post_booking_message,
+        'comments',
+        'comments'
     );
     console.log(`   ✅ Persona created: ${personaData.persona_name}`);
 

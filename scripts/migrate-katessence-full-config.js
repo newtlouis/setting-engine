@@ -220,7 +220,10 @@ En cas de doute, reponds "OUI".
 
 Bio: {bio}
 
-Reponse (OUI ou NON):`
+Reponse (OUI ou NON):`,
+
+    prospect_mode_hashtag: 'authors',
+    prospect_mode_profile: 'comments'
 };
 
 // ============================================
@@ -898,6 +901,15 @@ async function migrate() {
     const db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
 
+    // Ensure prospect_mode columns exist
+    const personaCols = db.prepare("PRAGMA table_info(account_personas)").all();
+    if (!personaCols.some(c => c.name === 'prospect_mode_hashtag')) {
+        db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_mode_hashtag TEXT DEFAULT 'comments'`);
+    }
+    if (!personaCols.some(c => c.name === 'prospect_mode_profile')) {
+        db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_mode_profile TEXT DEFAULT 'comments'`);
+    }
+
     // ========================================
     // 1. CREATE ACCOUNT
     // ========================================
@@ -953,9 +965,9 @@ async function migrate() {
         INSERT INTO account_personas (
             account_id, persona_name, niche, communication_rules,
             objections_script, knowledge_base, post_booking_message,
-            qualification_prompt,
+            qualification_prompt, prospect_mode_hashtag, prospect_mode_profile,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
         accountId,
         personaData.persona_name,
@@ -964,7 +976,9 @@ async function migrate() {
         personaData.objections_script,
         personaData.knowledge_base,
         personaData.post_booking_message,
-        personaData.qualification_prompt
+        personaData.qualification_prompt,
+        personaData.prospect_mode_hashtag || 'comments',
+        personaData.prospect_mode_profile || 'comments'
     );
     console.log(`   Persona created: ${personaData.persona_name}`);
 

@@ -497,6 +497,16 @@ function runMigrations() {
       db.exec(`ALTER TABLE account_personas ADD COLUMN qualification_prompt TEXT`);
     }
 
+    // Migration: Add prospect_mode_hashtag and prospect_mode_profile to account_personas
+    if (!personaColumns.some(col => col.name === 'prospect_mode_hashtag')) {
+      console.log('🔄 Migrating: Adding prospect_mode_hashtag to account_personas...');
+      db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_mode_hashtag TEXT DEFAULT 'comments'`);
+    }
+    if (!personaColumns.some(col => col.name === 'prospect_mode_profile')) {
+      console.log('🔄 Migrating: Adding prospect_mode_profile to account_personas...');
+      db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_mode_profile TEXT DEFAULT 'comments'`);
+    }
+
     console.log('📋 Outreach config tables ready');
 
     // ---------------------------------------------------------

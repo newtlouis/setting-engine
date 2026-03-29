@@ -783,6 +783,8 @@ function renderPersonaForm(data) {
     const knowledge = data?.knowledgeBase || data?.knowledge_base || '';
     const postBooking = data?.postBookingMessage || data?.post_booking_message || '';
     const qualification = data?.qualificationPrompt || data?.qualification_prompt || '';
+    const prospectModeHashtag = data?.prospect_mode_hashtag || 'comments';
+    const prospectModeProfile = data?.prospect_mode_profile || 'comments';
 
     container.innerHTML = `
         <div class="persona-section">
@@ -797,6 +799,22 @@ function renderPersonaForm(data) {
                 <input type="text" class="form-input" id="persona-niche"
                        value="${escapeHtml(niche)}"
                        placeholder="Ex: Dependance affective, hypersensibilite">
+            </div>
+            <div class="form-group">
+                <label>Mode Prospection — Hashtags</label>
+                <select class="form-input" id="persona-prospect-mode-hashtag">
+                    <option value="comments" ${prospectModeHashtag === 'comments' ? 'selected' : ''}>Commentateurs (comments)</option>
+                    <option value="authors" ${prospectModeHashtag === 'authors' ? 'selected' : ''}>Auteurs des posts (authors)</option>
+                </select>
+                <p class="form-hint">Mode utilise quand la source de prospection est un hashtag (#tag).</p>
+            </div>
+            <div class="form-group">
+                <label>Mode Prospection — Profils</label>
+                <select class="form-input" id="persona-prospect-mode-profile">
+                    <option value="comments" ${prospectModeProfile === 'comments' ? 'selected' : ''}>Commentateurs (comments)</option>
+                    <option value="authors" ${prospectModeProfile === 'authors' ? 'selected' : ''}>Auteurs des posts (authors)</option>
+                </select>
+                <p class="form-hint">Mode utilise quand la source de prospection est un profil (@username).</p>
             </div>
             <div class="form-group full-width">
                 <label>Regles de Communication</label>
@@ -841,7 +859,9 @@ async function savePersona() {
         objections_script: document.getElementById('persona-objections').value,
         knowledge_base: document.getElementById('persona-knowledge').value,
         post_booking_message: document.getElementById('persona-postbooking').value,
-        qualification_prompt: document.getElementById('persona-qualification').value
+        qualification_prompt: document.getElementById('persona-qualification').value,
+        prospect_mode_hashtag: document.getElementById('persona-prospect-mode-hashtag').value,
+        prospect_mode_profile: document.getElementById('persona-prospect-mode-profile').value
     };
 
     if (!data.persona_name) {

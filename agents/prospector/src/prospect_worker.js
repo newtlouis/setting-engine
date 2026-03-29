@@ -84,7 +84,6 @@ export async function runProspector(options = {}) {
     maxPosts = 3,
     totalLimit = 20,
     skipQualification = false,
-    mode = 'comments',
     variantMode = 'A'
   } = options;
 
@@ -98,7 +97,7 @@ export async function runProspector(options = {}) {
   const profileConfig = await loadProfileConfig(profile);
   const outreachConfig = loadOutreachConfig(accountId, profileConfig);
   console.log(`🧠 Niche: ${outreachConfig.niche || 'default'}`);
-  console.log(`🔍 Mode: ${mode === 'authors' ? 'AUTHORS (post publishers)' : 'COMMENTS (commenters)'}`);
+  console.log(`🔍 Mode par source: hashtag=${outreachConfig.prospectModeHashtag}, profil=${outreachConfig.prospectModeProfile}`);
 
   if (source) {
     const sourceInfo = parseSource(source);
@@ -204,10 +203,15 @@ export async function runProspector(options = {}) {
         console.log(`\n📝 Processing Post ${postIdx + 1}/${posts.length} in batch: ${postUrl}`);
 
         try {
+          // Determine mode based on source type and DB config
+          const effectiveMode = currentSource.type === 'hashtag'
+            ? outreachConfig.prospectModeHashtag
+            : outreachConfig.prospectModeProfile;
+
           // Build list of candidate leads depending on mode
           let candidates = []; // Array of { username, comment }
 
-          if (mode === 'authors') {
+          if (effectiveMode === 'authors') {
             // AUTHORS MODE: extract the post author as the lead
             console.log('   Extracting post author...');
             const authorUsername = await extractPostAuthor(workingPage, postUrl);

@@ -39,7 +39,6 @@ program
   .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
   .option('--total <number>', 'Maximum total leads to contact in this session', '20')
   .option('--skip-qualification', 'Skip bio qualification check', false)
-  .option('--mode <mode>', 'Prospecting mode: "comments" (leads = commenters) or "authors" (leads = post authors)', 'comments')
   .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'random')
   .action(async (options) => {
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
@@ -48,7 +47,6 @@ program
     console.log(`   Source: ${options.source}`);
     console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Total limit: ${options.total}`);
-    console.log(`   Mode: ${options.mode}`);
     console.log(`   Variant: ${options.variant}`);
     console.log('');
 
@@ -60,7 +58,6 @@ program
         maxPosts: parseInt(options.posts, 10),
         totalLimit: parseInt(options.total, 10),
         skipQualification: options.skipQualification,
-        mode: options.mode,
         variantMode: options.variant
       });
       process.exit(0);
