@@ -1359,8 +1359,40 @@ async function saveSourcesOrder() {
     }
 }
 
-async function addProspectorSource() {
-    const value = prompt('Source (ex: #dependanceaffective ou @username):');
+function addProspectorSource() {
+    const container = document.getElementById('sourcesContainer');
+    // Check if inline form already exists
+    if (document.getElementById('new-source-input')) {
+        document.getElementById('new-source-input').focus();
+        return;
+    }
+
+    const form = document.createElement('div');
+    form.style.cssText = 'display: flex; gap: 8px; padding: 12px 20px; align-items: center;';
+    form.innerHTML = `
+        <input type="text" id="new-source-input"
+               placeholder="#hashtag ou @profil"
+               style="flex: 1; padding: 8px 12px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary);">
+        <button onclick="submitNewSource()" style="padding: 8px 14px; font-size: 13px; white-space: nowrap; cursor: pointer; background: var(--primary); color: white; border: none; border-radius: 6px;">OK</button>
+        <button onclick="cancelNewSource()" style="padding: 8px 14px; font-size: 13px; white-space: nowrap; cursor: pointer; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px;">Annuler</button>
+    `;
+    container.insertBefore(form, container.firstChild);
+    const input = document.getElementById('new-source-input');
+    input.focus();
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitNewSource();
+        if (e.key === 'Escape') cancelNewSource();
+    });
+}
+
+function cancelNewSource() {
+    const input = document.getElementById('new-source-input');
+    if (input) input.closest('div').remove();
+}
+
+async function submitNewSource() {
+    const input = document.getElementById('new-source-input');
+    const value = input?.value?.trim();
     if (!value) return;
 
     try {

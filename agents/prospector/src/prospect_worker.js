@@ -338,13 +338,14 @@ export async function runProspector(options = {}) {
 
               // Final Message preparation
               let finalMessage = "";
-              if (leadVariant === 'B') {
-                // Variant B: "Hello Prénom, est-ce que tu proposes toujours un accompagnement en {type} ?"
-                // Only use AI-validated first name — no fallback to fullName split (too risky)
+              const prospectMessageB = outreachConfig.prospectMessageB;
+              if (leadVariant === 'B' && prospectMessageB) {
+                // Variant B with custom template from DB (e.g. Katessence: "Hello {name}, est-ce que tu proposes toujours un accompagnement ?")
                 const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
-                finalMessage = aiFirstName
-                  ? `Hello ${aiFirstName}, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`
-                  : `Hello, est-ce que tu proposes toujours un accompagnement${accompSuffix} ?`;
+                finalMessage = prospectMessageB
+                  .replace('{name}', aiFirstName || '')
+                  .replace('{accomp}', accompSuffix)
+                  .replace(/^Hello\s+,/, 'Hello,'); // Clean up if no name
               } else if (aiFirstName) {
                 // Variant A: Just "[Name] ?"
                 finalMessage = `${aiFirstName} ?`;

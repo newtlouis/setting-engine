@@ -506,6 +506,10 @@ function runMigrations() {
       console.log('🔄 Migrating: Adding prospect_mode_profile to account_personas...');
       db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_mode_profile TEXT DEFAULT 'comments'`);
     }
+    if (!personaColumns.some(col => col.name === 'prospect_message_b')) {
+      console.log('🔄 Migrating: Adding prospect_message_b to account_personas...');
+      db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_message_b TEXT`);
+    }
 
     console.log('📋 Outreach config tables ready');
 
