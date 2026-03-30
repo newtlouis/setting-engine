@@ -82,7 +82,7 @@ export async function runProspector(options = {}) {
     profile,
     source,
     maxPosts = 3,
-    totalLimit = 20,
+    totalLimit = 60,
     skipQualification = false,
     variantMode = 'A'
   } = options;

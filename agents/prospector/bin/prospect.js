@@ -37,7 +37,7 @@ program
   .requiredOption('--profile <name>', 'Instagram profile/account name (REQUIRED)')
   .option('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
   .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
-  .option('--total <number>', 'Maximum total leads to contact in this session', '20')
+  .option('--total <number>', 'Maximum total leads to contact in this session', '60')
   .option('--skip-qualification', 'Skip bio qualification check', false)
   .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'random')
   .action(async (options) => {
