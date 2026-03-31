@@ -559,6 +559,46 @@ function runMigrations() {
 
     console.log('📋 Accompaniment type column ready');
 
+    // ---------------------------------------------------------
+    // BROADCAST TABLES
+    // ---------------------------------------------------------
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS account_followers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        username TEXT NOT NULL,
+        scraped_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(account_id, username)
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_account_followers_account ON account_followers(account_id)`);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        message_text TEXT NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS broadcast_sends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER NOT NULL REFERENCES broadcast_campaigns(id),
+        follower_username TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        sent_at TEXT,
+        error TEXT,
+        UNIQUE(campaign_id, follower_username)
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_broadcast_sends_campaign ON broadcast_sends(campaign_id)`);
+
+    console.log('📢 Broadcast tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }

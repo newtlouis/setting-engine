@@ -68,6 +68,8 @@ const COMMAND_REGISTRY = {
         { name: 'reply:followup', description: 'Relances', options: ['--profile', '--slow'] },
         { name: 'harvest', description: 'Recolter leads', options: ['--target', '--profile', '--prospect-mode', '--variant'] },
         { name: 'test:e2e', description: 'Test E2E LLM (real API)', options: [] },
+        { name: 'scrape-followers', description: 'Recuperer tous les abonnes', options: ['--profile'] },
+        { name: 'broadcast', description: 'Broadcast aux abonnes', options: ['--profile', '--campaign', '--batch'], defaults: '--batch 20' },
     ],
     Collection: [
         { name: 'scrape', description: 'Scrape profiles Instagram', options: ['--profile', '--max'] },
@@ -2414,6 +2416,68 @@ app.get('/api/commands/running', (req, res) => {
         });
     }
     res.json(list);
+});
+
+// ============================================
+// BROADCAST API
+// ============================================
+
+// GET /api/broadcast/campaigns - List campaigns for an account
+app.get('/api/broadcast/campaigns', (req, res) => {
+    const { account_id } = req.query;
+    if (!account_id) return res.status(400).json({ error: 'account_id required' });
+
+    const campaigns = db.prepare(`
+        SELECT bc.*,
+            (SELECT COUNT(*) FROM broadcast_sends bs WHERE bs.campaign_id = bc.id AND bs.status = 'sent') as sent_count,
+            (SELECT COUNT(*) FROM account_followers af WHERE af.account_id = bc.account_id) as total_followers
+        FROM broadcast_campaigns bc
+        WHERE bc.account_id = ?
+        ORDER BY bc.created_at DESC
+    `).all(parseInt(account_id));
+
+    res.json(campaigns);
+});
+
+// POST /api/broadcast/campaigns - Create a new campaign
+app.post('/api/broadcast/campaigns', (req, res) => {
+    const { account_id, message_text } = req.body;
+    if (!account_id || !message_text) return res.status(400).json({ error: 'account_id and message_text required' });
+
+    const result = db.prepare(
+        "INSERT INTO broadcast_campaigns (account_id, message_text, status, created_at) VALUES (?, ?, 'active', datetime('now'))"
+    ).run(parseInt(account_id), message_text);
+
+    res.json({ id: result.lastInsertRowid, message: 'Campaign created' });
+});
+
+// PATCH /api/broadcast/campaigns/:id - Update campaign status
+app.patch('/api/broadcast/campaigns/:id', (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status || !['active', 'paused', 'completed'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+    }
+    db.prepare('UPDATE broadcast_campaigns SET status = ? WHERE id = ?').run(status, parseInt(id));
+    res.json({ success: true });
+});
+
+// DELETE /api/broadcast/campaigns/:id - Delete a campaign
+app.delete('/api/broadcast/campaigns/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    db.prepare('DELETE FROM broadcast_sends WHERE campaign_id = ?').run(id);
+    db.prepare('DELETE FROM broadcast_campaigns WHERE id = ?').run(id);
+    res.json({ success: true });
+});
+
+// GET /api/broadcast/followers/count - Get follower count for an account
+app.get('/api/broadcast/followers/count', (req, res) => {
+    const { account_id } = req.query;
+    if (!account_id) return res.status(400).json({ error: 'account_id required' });
+
+    const count = db.prepare('SELECT COUNT(*) as c FROM account_followers WHERE account_id = ?').get(parseInt(account_id));
+    const lastScraped = db.prepare('SELECT MAX(scraped_at) as last FROM account_followers WHERE account_id = ?').get(parseInt(account_id));
+    res.json({ count: count.c, last_scraped: lastScraped.last });
 });
 
 // Start Server

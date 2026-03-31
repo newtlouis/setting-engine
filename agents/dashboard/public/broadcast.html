@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadcast | Instagram Lead Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .broadcast-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            padding: 20px 0;
+        }
+
+        .broadcast-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .broadcast-panel h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 4px 0;
+        }
+
+        .broadcast-panel .subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .campaign-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .campaign-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .campaign-card:hover {
+            border-color: var(--accent);
+        }
+
+        .campaign-card .msg {
+            font-size: 13px;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .campaign-card .meta {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .campaign-card .meta .badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .badge-active { background: rgba(86, 211, 100, 0.15); color: var(--success); }
+        .badge-paused { background: rgba(227, 179, 65, 0.15); color: #e3b341; }
+        .badge-completed { background: rgba(139, 148, 158, 0.15); color: var(--text-secondary); }
+
+        .progress-bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        .campaign-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .campaign-actions input[type="number"] {
+            width: 55px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 5px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            text-align: center;
+        }
+
+        .campaign-actions label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+
+        .btn-action {
+            border: none;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover { transform: translateY(-1px); }
+        .btn-launch { background: var(--success); color: white; }
+        .btn-launch:hover { background: #34a13e; }
+        .btn-pause { background: var(--bg-input); color: #e3b341; border: 1px solid var(--border) !important; }
+        .btn-resume { background: var(--accent); color: white; }
+        .btn-delete { background: none; color: var(--error); padding: 5px 8px; }
+        .btn-delete:hover { text-decoration: underline; }
+
+        /* New campaign form */
+        .new-campaign {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .new-campaign textarea {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 80px;
+            box-sizing: border-box;
+            line-height: 1.5;
+        }
+
+        .new-campaign textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .new-campaign textarea::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .btn-create {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .btn-create:hover { background: #4393e6; transform: translateY(-1px); }
+
+        /* Follower info */
+        .follower-info {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .follower-count {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .follower-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>Instagram Lead Engine</h1>
+            </div>
+
+            <nav style="margin-left: 32px; display: flex; gap: 20px;">
+                <a href="/" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Dashboard</a>
+                <a href="/lead_details.html" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Lead Details</a>
+                <a href="/pipeline.html" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Pipeline</a>
+                <a href="/funnel_config.html" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Config Funnel</a>
+                <a href="/knowledge_base.html" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Knowledge Base</a>
+                <a href="/broadcast.html" style="color: var(--text-primary); text-decoration: none; font-weight: 600;">Broadcast</a>
+                <a href="/commands.html" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Commands</a>
+                <a href="#" onclick="fetch('/api/open-db',{method:'POST'});return false;" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">DB</a>
+            </nav>
+
+            <div class="account-selector" style="margin-left: auto;">
+                <label for="accountSelect">Profil:</label>
+                <select id="accountSelect">
+                    <option value="">Chargement...</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="broadcast-layout">
+            <!-- Left: Campaigns -->
+            <div class="broadcast-panel">
+                <h2>Campagnes</h2>
+                <p class="subtitle">Gerez vos campagnes de broadcast</p>
+                <div id="followerInfo"></div>
+                <div id="campaignList">
+                    <div class="empty-state">Chargement...</div>
+                </div>
+            </div>
+
+            <!-- Right: New campaign -->
+            <div class="broadcast-panel">
+                <h2>Nouvelle campagne</h2>
+                <p class="subtitle">Creer un message a envoyer a tous vos abonnes</p>
+                <div class="new-campaign">
+                    <textarea id="broadcastMessage" placeholder="Ecrivez votre message ici...&#10;&#10;Ce message sera envoye tel quel a chaque abonne."></textarea>
+                    <button class="btn-create" onclick="createCampaign()">Creer la campagne</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAccountId = null;
+
+        function escapeHtml(str) {
+            return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        async function loadAccounts() {
+            const select = document.getElementById('accountSelect');
+            try {
+                const res = await fetch('/api/accounts');
+                const accounts = await res.json();
+                select.innerHTML = '';
+                accounts.forEach(acc => {
+                    if (acc.id) {
+                        const opt = document.createElement('option');
+                        opt.value = acc.id;
+                        opt.textContent = acc.name;
+                        select.appendChild(opt);
+                    }
+                });
+                const defRes = await fetch('/api/accounts/default');
+                const defAcc = await defRes.json();
+                if (defAcc && defAcc.id) select.value = defAcc.id;
+                currentAccountId = select.value;
+            } catch (e) {
+                select.innerHTML = '<option value="">Erreur</option>';
+            }
+        }
+
+        async function loadCampaigns() {
+            if (!currentAccountId) return;
+
+            try {
+                const [campRes, followerRes] = await Promise.all([
+                    fetch(`/api/broadcast/campaigns?account_id=${currentAccountId}`),
+                    fetch(`/api/broadcast/followers/count?account_id=${currentAccountId}`)
+                ]);
+                const campaigns = await campRes.json();
+                const followers = await followerRes.json();
+                renderFollowerInfo(followers);
+                renderCampaigns(campaigns);
+            } catch (err) {
+                console.error('Load error:', err);
+            }
+        }
+
+        function renderFollowerInfo(data) {
+            const el = document.getElementById('followerInfo');
+            const lastStr = data.last_scraped
+                ? `Dernier scrape: ${data.last_scraped.substring(0, 16).replace('T', ' ')}`
+                : 'Jamais scrape';
+            el.innerHTML = `
+                <div class="follower-info">
+                    <div>
+                        <div class="follower-count">${data.count}</div>
+                        <div class="follower-label">abonnes en base</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="follower-label">${lastStr}</div>
+                        <button class="btn-action btn-launch" style="margin-top: 6px;" onclick="scrapeFollowers()">Recuperer les abonnes</button>
+                    </div>
+                </div>`;
+        }
+
+        function renderCampaigns(campaigns) {
+            const el = document.getElementById('campaignList');
+
+            if (campaigns.length === 0) {
+                el.innerHTML = '<div class="empty-state">Aucune campagne. Creez-en une a droite.</div>';
+                return;
+            }
+
+            el.innerHTML = '<div class="campaign-list">' + campaigns.map(c => {
+                const pct = c.total_followers > 0 ? Math.round((c.sent_count / c.total_followers) * 100) : 0;
+                const progressText = c.total_followers > 0
+                    ? `${c.sent_count} / ${c.total_followers} (${pct}%)`
+                    : `${c.sent_count} envoyes`;
+
+                const badgeClass = c.status === 'active' ? 'badge-active'
+                    : c.status === 'paused' ? 'badge-paused' : 'badge-completed';
+
+                let actionsHtml = '';
+                if (c.status === 'active') {
+                    actionsHtml = `
+                        <div class="campaign-actions">
+                            <span style="font-size: 11px; color: var(--text-secondary);">Batch:</span>
+                            <input type="number" id="batch-${c.id}" value="20" min="1" max="200">
+                            <button class="btn-action btn-launch" onclick="launchCampaign(${c.id})">Lancer</button>
+                            <button class="btn-action btn-pause" onclick="updateStatus(${c.id}, 'paused')">Pause</button>
+                            <button class="btn-action btn-delete" onclick="deleteCampaign(${c.id})">Supprimer</button>
+                        </div>`;
+                } else if (c.status === 'paused') {
+                    actionsHtml = `
+                        <div class="campaign-actions">
+                            <button class="btn-action btn-resume" onclick="updateStatus(${c.id}, 'active')">Reprendre</button>
+                            <button class="btn-action btn-delete" onclick="deleteCampaign(${c.id})">Supprimer</button>
+                        </div>`;
+                } else {
+                    actionsHtml = `
+                        <div class="campaign-actions">
+                            <button class="btn-action btn-delete" onclick="deleteCampaign(${c.id})">Supprimer</button>
+                        </div>`;
+                }
+
+                return `
+                    <div class="campaign-card">
+                        <div class="msg">${escapeHtml(c.message_text)}</div>
+                        <div class="meta">
+                            <span class="badge ${badgeClass}">${c.status}</span>
+                            <span>${progressText}</span>
+                            <span>${c.created_at?.substring(0, 10) || ''}</span>
+                        </div>
+                        <div class="progress-bar"><div class="fill" style="width: ${pct}%"></div></div>
+                        ${actionsHtml}
+                    </div>`;
+            }).join('') + '</div>';
+        }
+
+        async function createCampaign() {
+            const message = document.getElementById('broadcastMessage')?.value?.trim();
+            if (!currentAccountId || !message) {
+                alert('Ecrivez un message');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/broadcast/campaigns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_id: parseInt(currentAccountId), message_text: message })
+                });
+                const data = await res.json();
+                if (data.id) {
+                    document.getElementById('broadcastMessage').value = '';
+                    await loadCampaigns();
+                }
+            } catch (err) {
+                console.error('Create error:', err);
+            }
+        }
+
+        function launchCampaign(id) {
+            const batch = document.getElementById(`batch-${id}`)?.value || '20';
+            const args = `--campaign ${id} --batch ${batch}`;
+            window.location.href = `/commands.html?run=broadcast&args=${encodeURIComponent(args)}`;
+        }
+
+        function scrapeFollowers() {
+            window.location.href = `/commands.html?run=scrape-followers`;
+        }
+
+        async function updateStatus(id, status) {
+            await fetch(`/api/broadcast/campaigns/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            });
+            await loadCampaigns();
+        }
+
+        async function deleteCampaign(id) {
+            if (!confirm('Supprimer cette campagne et tous ses envois ?')) return;
+            await fetch(`/api/broadcast/campaigns/${id}`, { method: 'DELETE' });
+            await loadCampaigns();
+        }
+
+        // Init
+        loadAccounts().then(() => {
+            const select = document.getElementById('accountSelect');
+            select.addEventListener('change', () => {
+                currentAccountId = select.value;
+                loadCampaigns();
+            });
+            loadCampaigns();
+        });
+    </script>
+</body>
+
+</html>

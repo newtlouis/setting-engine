@@ -326,14 +326,31 @@ async function loadAccounts() {
     }
 }
 
+// ============================================
+// Init
+// ============================================
+
 // Init — load accounts first, then commands (so profile is set when defaults resolve)
-loadAccounts().then(() => {
+loadAccounts().then(async () => {
     const select = document.getElementById('accountSelect');
     if (select) {
         select.addEventListener('change', () => {
             if (cachedRegistry) renderCommands(cachedRegistry);
         });
     }
-    return loadCommands();
+    await loadCommands();
+
+    // Auto-run command from URL params (e.g. ?run=broadcast&args=--campaign 1 --batch 20)
+    const params = new URLSearchParams(window.location.search);
+    const autoRun = params.get('run');
+    if (autoRun) {
+        const autoArgs = params.get('args') || '';
+        const input = document.getElementById(`args-${autoRun}`);
+        if (input && autoArgs) input.value = autoArgs;
+        // Small delay to let UI render
+        setTimeout(() => runCommand(autoRun), 300);
+        // Clean URL
+        window.history.replaceState({}, '', '/commands.html');
+    }
 });
 checkRunningProcesses();

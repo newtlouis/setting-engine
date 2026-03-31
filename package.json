@@ -45,6 +45,8 @@
         "analyze:steps": "cd agents/collector && npm run analyze:steps --",
         "test:e2e": "cd agents/dmresponder && npm run test:e2e",
         "dm-sync": "cd agents/dmresponder && npm run cron -- --inbox",
+        "broadcast": "cd agents/dmresponder && npm run broadcast --",
+        "scrape-followers": "cd agents/dmresponder && npm run scrape-followers --",
         "kpi-daily": "node scripts/kpi-daily.js",
         "hourly-cycle": "node scripts/hourly-cycle.js"
     },
