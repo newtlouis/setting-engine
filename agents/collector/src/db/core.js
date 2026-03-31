@@ -510,6 +510,10 @@ function runMigrations() {
       console.log('🔄 Migrating: Adding prospect_message_b to account_personas...');
       db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_message_b TEXT`);
     }
+    if (!personaColumns.some(col => col.name === 'prospect_message_a')) {
+      console.log('🔄 Migrating: Adding prospect_message_a to account_personas...');
+      db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_message_a TEXT`);
+    }
 
     console.log('📋 Outreach config tables ready');
 

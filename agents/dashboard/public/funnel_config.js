@@ -785,6 +785,8 @@ function renderPersonaForm(data) {
     const qualification = data?.qualificationPrompt || data?.qualification_prompt || '';
     const prospectModeHashtag = data?.prospect_mode_hashtag || 'comments';
     const prospectModeProfile = data?.prospect_mode_profile || 'comments';
+    const prospectMessageA = data?.prospect_message_a || '';
+    const prospectMessageB = data?.prospect_message_b || '';
 
     container.innerHTML = `
         <div class="persona-section">
@@ -815,6 +817,20 @@ function renderPersonaForm(data) {
                     <option value="authors" ${prospectModeProfile === 'authors' ? 'selected' : ''}>Auteurs des posts (authors)</option>
                 </select>
                 <p class="form-hint">Mode utilise quand la source de prospection est un profil (@username).</p>
+            </div>
+            <div class="form-group full-width">
+                <label>Message Prospection — Trame A</label>
+                <input type="text" class="form-input" id="persona-prospect-message-a"
+                       value="${escapeHtml(prospectMessageA)}"
+                       placeholder="Ex: Hello {name}, j'ai vu ton profil... Placeholders: {name}">
+                <p class="form-hint">Message trame A. Laisser vide pour le format par defaut (Prenom ? / Hello !). Placeholder {name} = prenom.</p>
+            </div>
+            <div class="form-group full-width">
+                <label>Message Prospection — Trame B</label>
+                <input type="text" class="form-input" id="persona-prospect-message-b"
+                       value="${escapeHtml(prospectMessageB)}"
+                       placeholder="Ex: Hello {name}, est-ce que tu proposes... Placeholders: {name}, {accomp}">
+                <p class="form-hint">Message trame B. Laisser vide pour le format par defaut. Placeholders: {name} = prenom, {accomp} = type d'accompagnement.</p>
             </div>
             <div class="form-group full-width">
                 <label>Regles de Communication</label>
@@ -861,7 +877,9 @@ async function savePersona() {
         post_booking_message: document.getElementById('persona-postbooking').value,
         qualification_prompt: document.getElementById('persona-qualification').value,
         prospect_mode_hashtag: document.getElementById('persona-prospect-mode-hashtag').value,
-        prospect_mode_profile: document.getElementById('persona-prospect-mode-profile').value
+        prospect_mode_profile: document.getElementById('persona-prospect-mode-profile').value,
+        prospect_message_a: document.getElementById('persona-prospect-message-a').value || null,
+        prospect_message_b: document.getElementById('persona-prospect-message-b').value || null
     };
 
     if (!data.persona_name) {
@@ -1245,8 +1263,6 @@ async function loadProspectorSources() {
     }
 }
 
-let dragSrcIndex = null;
-
 function renderSourcesList() {
     const container = document.getElementById('sourcesContainer');
 
@@ -1265,9 +1281,14 @@ function renderSourcesList() {
     prospectorSources.sort((a, b) => (a.source_order ?? 0) - (b.source_order ?? 0));
 
     const rows = prospectorSources.map((s, i) => `
-        <div class="source-row" draggable="true" data-index="${i}" data-id="${s.id}"
-             style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; cursor: grab; transition: opacity 0.2s, border-color 0.2s;">
-            <span style="cursor: grab; color: var(--text-secondary); font-size: 16px; user-select: none;">⠿</span>
+        <div class="source-row" data-index="${i}" data-id="${s.id}"
+             style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;">
+            <div style="display: flex; gap: 3px; align-items: center;">
+                <button onclick="moveSource(${i}, -Infinity)" class="btn-small" style="padding: 4px 6px; font-size: 11px; line-height: 1; opacity: ${i === 0 ? '0.3' : '1'};" ${i === 0 ? 'disabled' : ''} title="Tout en haut">⤒</button>
+                <button onclick="moveSource(${i}, -1)" class="btn-small" style="padding: 4px 6px; font-size: 11px; line-height: 1; opacity: ${i === 0 ? '0.3' : '1'};" ${i === 0 ? 'disabled' : ''} title="Monter">▲</button>
+                <button onclick="moveSource(${i}, 1)" class="btn-small" style="padding: 4px 6px; font-size: 11px; line-height: 1; opacity: ${i === prospectorSources.length - 1 ? '0.3' : '1'};" ${i === prospectorSources.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
+                <button onclick="moveSource(${i}, Infinity)" class="btn-small" style="padding: 4px 6px; font-size: 11px; line-height: 1; opacity: ${i === prospectorSources.length - 1 ? '0.3' : '1'};" ${i === prospectorSources.length - 1 ? 'disabled' : ''} title="Tout en bas">⤓</button>
+            </div>
             <span class="template-order">${i + 1}</span>
             <span style="flex: 1; font-size: 14px;">${escapeHtml(s.source_value)}</span>
             <button onclick="deleteProspectorSource(${s.id})" class="btn-small" style="color: var(--error);">Suppr</button>
@@ -1277,71 +1298,28 @@ function renderSourcesList() {
     container.innerHTML = `
         <div style="padding: 20px;">
             <p style="color: var(--text-secondary); margin-bottom: 16px;">
-                ${prospectorSources.length} source(s) configuree(s). Glissez-deposez pour changer l'ordre de priorite.
+                ${prospectorSources.length} source(s) configuree(s). Utilisez les fleches pour changer l'ordre de priorite.
             </p>
             <div id="sourcesDragList" style="display: flex; flex-direction: column; gap: 6px;">
                 ${rows}
             </div>
         </div>
     `;
-
-    // Attach drag events
-    const list = document.getElementById('sourcesDragList');
-    list.querySelectorAll('.source-row').forEach(row => {
-        row.addEventListener('dragstart', onSourceDragStart);
-        row.addEventListener('dragover', onSourceDragOver);
-        row.addEventListener('dragenter', onSourceDragEnter);
-        row.addEventListener('dragleave', onSourceDragLeave);
-        row.addEventListener('drop', onSourceDrop);
-        row.addEventListener('dragend', onSourceDragEnd);
-    });
 }
 
-function onSourceDragStart(e) {
-    dragSrcIndex = parseInt(e.currentTarget.dataset.index);
-    e.currentTarget.style.opacity = '0.4';
-    e.dataTransfer.effectAllowed = 'move';
-}
+function moveSource(index, direction) {
+    let newIndex;
+    if (direction === -Infinity) newIndex = 0;
+    else if (direction === Infinity) newIndex = prospectorSources.length - 1;
+    else newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= prospectorSources.length || newIndex === index) return;
 
-function onSourceDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-}
+    const [moved] = prospectorSources.splice(index, 1);
+    prospectorSources.splice(newIndex, 0, moved);
 
-function onSourceDragEnter(e) {
-    e.currentTarget.style.borderColor = 'var(--accent)';
-}
-
-function onSourceDragLeave(e) {
-    e.currentTarget.style.borderColor = 'var(--border)';
-}
-
-function onSourceDrop(e) {
-    e.preventDefault();
-    const targetIndex = parseInt(e.currentTarget.dataset.index);
-    e.currentTarget.style.borderColor = 'var(--border)';
-
-    if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
-
-    // Reorder array
-    const [moved] = prospectorSources.splice(dragSrcIndex, 1);
-    prospectorSources.splice(targetIndex, 0, moved);
-
-    // Update local source_order so re-render keeps the new order
     prospectorSources.forEach((s, i) => s.source_order = i);
-
-    // Re-render immediately
     renderSourcesList();
-
-    // Save new order to backend
     saveSourcesOrder();
-}
-
-function onSourceDragEnd(e) {
-    e.currentTarget.style.opacity = '1';
-    dragSrcIndex = null;
-    // Reset all borders
-    document.querySelectorAll('.source-row').forEach(r => r.style.borderColor = 'var(--border)');
 }
 
 async function saveSourcesOrder() {

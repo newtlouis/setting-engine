@@ -490,7 +490,19 @@ export async function runInboxScanner(options = {}) {
 
           // 6. Check if response needed
           const lastMsg = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1] : null;
-          if (!lastMsg || lastMsg.role !== 'user') {
+
+          // If conversation was unread in inbox but last scraped message is ours,
+          // the prospect replied with something we can't read (voice note, image, sticker, etc.)
+          // Treat it as a user reply so we continue the script.
+          if (lastMsg && lastMsg.role === 'assistant' && !hasVoiceNote) {
+            console.log(`   🎤 Conversation was unread but last message is ours — prospect likely sent media (voice/image/sticker). Treating as reply.`);
+            hasVoiceNote = true;
+            // Add a placeholder message so the LLM knows the prospect replied
+            await addMessage(username, 'user', '[Message non-texte : vocal, image ou sticker]', null, null, null);
+            updatedHistory.push({ role: 'user', text: '[Message non-texte : vocal, image ou sticker]', type: 'media' });
+          }
+
+          if (!lastMsg || (lastMsg.role !== 'user' && !hasVoiceNote)) {
             console.log(`   ⏳ Last message was not from user.`);
             continue;
           }

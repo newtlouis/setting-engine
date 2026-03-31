@@ -224,6 +224,7 @@ Reponse (OUI ou NON):`,
 
     prospect_mode_hashtag: 'authors',
     prospect_mode_profile: 'comments',
+    prospect_message_a: 'Hello {name}, j\u0027ai vu ton profil et franchement j\u0027adore ce que tu fais ! Je peux te poser une question ?',
     prospect_message_b: 'Hello {name}, est-ce que tu proposes toujours un accompagnement{accomp} ?'
 };
 
@@ -913,6 +914,9 @@ async function migrate() {
     if (!personaCols.some(c => c.name === 'prospect_message_b')) {
         db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_message_b TEXT`);
     }
+    if (!personaCols.some(c => c.name === 'prospect_message_a')) {
+        db.exec(`ALTER TABLE account_personas ADD COLUMN prospect_message_a TEXT`);
+    }
 
     // ========================================
     // 1. CREATE ACCOUNT
@@ -970,8 +974,8 @@ async function migrate() {
             account_id, persona_name, niche, communication_rules,
             objections_script, knowledge_base, post_booking_message,
             qualification_prompt, prospect_mode_hashtag, prospect_mode_profile,
-            prospect_message_b, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            prospect_message_a, prospect_message_b, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
         accountId,
         personaData.persona_name,
@@ -983,6 +987,7 @@ async function migrate() {
         personaData.qualification_prompt,
         personaData.prospect_mode_hashtag || 'comments',
         personaData.prospect_mode_profile || 'comments',
+        personaData.prospect_message_a || null,
         personaData.prospect_message_b || null
     );
     console.log(`   Persona created: ${personaData.persona_name}`);

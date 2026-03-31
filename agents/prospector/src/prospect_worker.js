@@ -338,34 +338,28 @@ export async function runProspector(options = {}) {
 
               // Final Message preparation
               let finalMessage = "";
+              const prospectMessageA = outreachConfig.prospectMessageA;
               const prospectMessageB = outreachConfig.prospectMessageB;
+
               if (leadVariant === 'B' && prospectMessageB) {
-                // Variant B with custom template from DB (e.g. Katessence: "Hello {name}, est-ce que tu proposes toujours un accompagnement ?")
+                // Variant B with custom template from DB
                 const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
                 finalMessage = prospectMessageB
                   .replace('{name}', aiFirstName || '')
                   .replace('{accomp}', accompSuffix)
-                  .replace(/^Hello\s+,/, 'Hello,'); // Clean up if no name
+                  .replace(/^Hello\s+,/, 'Hello,');
+              } else if (leadVariant === 'A' && prospectMessageA) {
+                // Variant A with custom template from DB
+                finalMessage = prospectMessageA
+                  .replace('{name}', aiFirstName || '')
+                  .replace(/Hello\s+,/, 'Hello,')
+                  .replace(/Hello\s+!/, 'Hello !');
               } else if (aiFirstName) {
-                // Variant A: Just "[Name] ?"
+                // Fallback: Just "[Name] ?"
                 finalMessage = `${aiFirstName} ?`;
               } else {
-                const nameToUse = 'there';
-                const leadForTemplate = {
-                  username,
-                  full_name: profileData.fullName,
-                  bio: profileData.bio,
-                  warmth: 'cold',
-                  comments: [comment]
-                };
-
-                const messageResult = generateFirstMessage(leadForTemplate, [comment], {
-                  niche: outreachConfig.niche || 'personal development',
-                  isSimple: true,
-                  profileConfig,
-                  forceFirstName: nameToUse
-                });
-                finalMessage = messageResult.message;
+                // Fallback: "Hello !"
+                finalMessage = 'Hello !';
               }
 
               const validation = validateMessage(finalMessage);

@@ -1242,7 +1242,7 @@ app.patch('/api/personas/:accountId', async (req, res) => {
             return res.status(404).json({ error: 'Persona not found' });
         }
 
-        const allowedFields = ['persona_name', 'niche', 'communication_rules', 'objections_script', 'knowledge_base', 'post_booking_message', 'qualification_prompt', 'prospect_mode_hashtag', 'prospect_mode_profile'];
+        const allowedFields = ['persona_name', 'niche', 'communication_rules', 'objections_script', 'knowledge_base', 'post_booking_message', 'qualification_prompt', 'prospect_mode_hashtag', 'prospect_mode_profile', 'prospect_message_a', 'prospect_message_b'];
         const fields = Object.keys(updates).filter(key => allowedFields.includes(key));
 
         if (fields.length === 0) {

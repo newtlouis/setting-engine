@@ -234,6 +234,12 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     if (leadContext.notes) contextDescription += `- Notes: ${leadContext.notes}\n`;
   }
 
+  // Check if last message is a non-text media (voice note, image, sticker)
+  const lastConvMsg = conversationHistory?.length > 0 ? conversationHistory[conversationHistory.length - 1] : null;
+  if (lastConvMsg && lastConvMsg.text && lastConvMsg.text.includes('[Message non-texte')) {
+    contextDescription += `\n⚠️ Le prospect a répondu avec un message vocal/image/sticker qu'on ne peut pas lire. Considère que c'est une réponse positive et continue normalement avec la prochaine étape du script. Ne mentionne PAS que tu n'as pas pu lire le message.\n`;
+  }
+
   // Determine System Prompt (priority: database > profileConfig > default)
   let systemPrompt = SYSTEM_PROMPT;
 

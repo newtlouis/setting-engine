@@ -37,7 +37,7 @@ export async function qualifyLead(bio, customPrompt = null, username = 'unknown'
   }
 
   const wordCount = bio.trim().split(/\s+/).length;
-  if (wordCount <= 2) {
+  if (wordCount <= 1) {
     console.log(`   ℹ️  Bio too short to qualify ("${bio.trim()}") - proceeding with outreach`);
     return { qualified: true, reason: 'bio_too_short' };
   }
