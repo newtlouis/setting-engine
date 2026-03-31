@@ -750,7 +750,7 @@ export async function runInboxScanner(options = {}) {
             booking_intent: bookingIntent,
             booking_url: bookingUrl,
             booking_attempts: bookingAttempts,
-            funnel_step: detectedStep ? Math.floor(parseFloat(detectedStep)) : null
+            funnel_step: detectedStep ? Math.max(Math.floor(parseFloat(detectedStep)), leadContext.funnel_step || 0) : null
           });
           
           processedResults.push({

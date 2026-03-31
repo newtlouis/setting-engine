@@ -352,11 +352,16 @@ async function processThread(thread, options) {
     // Save suggestion to file
     const suggestionPath = await saveSuggestion(username, response, options.outputDir || DEFAULT_OUTPUT_DIR);
     
-    // Step 5: Update funnel step if LLM detected one
+    // Step 5: Update funnel step if LLM detected one (never go backward)
     if (response.step_used) {
-        console.log(`   📈 Updating funnel step to: ${response.step_used}`);
+        const newStep = Math.floor(parseFloat(response.step_used));
+        const currentStep = leadContext.funnel_step || 0;
+        const effectiveStep = Math.max(newStep, currentStep);
+        if (effectiveStep !== currentStep) {
+            console.log(`   📈 Updating funnel step: ${currentStep} → ${effectiveStep}`);
+        }
         await fullUpsertLead(username, options.accountId, {
-            funnel_step: Math.floor(parseFloat(response.step_used))
+            funnel_step: effectiveStep
         });
     }
 

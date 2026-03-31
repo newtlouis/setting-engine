@@ -483,52 +483,67 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
         const json = JSON.parse(rawContent);
         let message = json.message;
 
-        // Safety net: detect closing messages missing [NOT_INTERESTED] tag
-        if (message && !message.includes('[NOT_INTERESTED]')) {
-          const closingPatterns = [
-            'si jamais tu changes d\'avis',
-            'si tu changes d\'avis',
-            'n\'hésite pas à revenir',
-            'n\'hésite pas à me contacter',
-            'si ça te parle un jour',
-            'si un jour tu',
-            'si jamais tu',
-            'si jamais t\'',
-            'prends soin de toi',
-            'belle journée',
-            'bonne journée',
-            'passe une belle',
-            'bonne continuation',
-            'belle continuation',
-            'pas de souci',
-            'au plaisir',
-            'te souhaite le meilleur',
-            'je te souhaite',
-            'bonne route',
+        // Safety net: detect closing/abandon messages
+        const closingPatterns = [
+          'si jamais tu changes d\'avis',
+          'si tu changes d\'avis',
+          'n\'hésite pas à revenir',
+          'n\'hésite pas à me contacter',
+          'si ça te parle un jour',
+          'si un jour tu',
+          'si jamais tu',
+          'si jamais t\'',
+          'prends soin de toi',
+          'belle journée',
+          'bonne journée',
+          'passe une belle',
+          'bonne continuation',
+          'belle continuation',
+          'au plaisir',
+          'te souhaite le meilleur',
+          'je te souhaite',
+          'bonne route',
+          'bonne chance',
+        ];
+        const lowerMsg = message.toLowerCase();
+        const closingMatchCount = closingPatterns.filter(p => lowerMsg.includes(p)).length;
+        const looksLikeClosing = closingMatchCount >= 1;
+        const hasQuestion = message.includes('?');
+
+        // Check if user EXPLICITLY refused (hard refusal only)
+        const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
+        const hardRefusalPatterns = ['non merci', 'pas intéress', 'ça m\'intéresse pas', 'arrête', 'laisse-moi', 'stop', 'ne m\'écris plus', 'je veux pas'];
+        const userHardRefused = hardRefusalPatterns.some(p => lastUserMsg.includes(p));
+
+        if (looksLikeClosing && !userHardRefused) {
+          // LLM tried to abandon but user did NOT explicitly refuse → BLOCK and force continuation
+          console.log(`[Engine] 🚫 BLOCKED abandon message: "${message.substring(0, 80)}..."`);
+          console.log('[Engine] User did NOT explicitly refuse. Forcing continuation...');
+
+          // Strip the closing message and add [NOT_INTERESTED] tag with forced retry instruction
+          const retryMessages = [
+            ...messages,
+            { role: 'assistant', content: JSON.stringify({ message, step_used: json.step_used, booking_intent: null }) },
+            { role: 'user', content: '⚠️ ERREUR: Tu viens d\'abandonner la conversation alors que le prospect n\'a PAS dit non. Tu ne dois JAMAIS abandonner. Le prospect est encore engagé. Génère un nouveau message qui CONTINUE la conversation : pose une question, propose l\'appel gratuit, ou rebondis sur ce qu\'il a dit. Ne dis JAMAIS "bonne continuation" ou "je te souhaite le meilleur". JSON uniquement.' }
           ];
-          const lowerMsg = message.toLowerCase();
-          const closingMatchCount = closingPatterns.filter(p => lowerMsg.includes(p)).length;
-          const looksLikeClosing = closingMatchCount >= 1;
 
-          // Check if the message has NO question (= not continuing the conversation)
-          const hasQuestion = message.includes('?');
-
-          // Also check if the last user message was a refusal
-          const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
-          const refusalPatterns = ['non merci', 'non ça va', 'pas intéress', 'ça m\'intéresse pas', 'non c\'est bon', 'pas pour moi', 'juste par curiosité', 'par curiosité', 'pas besoin', 'c\'est bon merci', 'je gère', 'ça ira', 'j\'ai été', 'j\'étais', 'c\'est du passé', 'c\'est plus le cas', 'plus maintenant'];
-          const userRefused = refusalPatterns.some(p => lastUserMsg.includes(p));
-
-          // Strong closing: LLM itself decided to close (2+ closing signals = definitive closing)
-          const strongClosingPatterns = ['tu sais où me trouver', 'tu sais ou me trouver', 'je suis là', 'hésite pas à revenir', 'ma porte reste ouverte'];
-          const strongClosing = looksLikeClosing && strongClosingPatterns.some(p => lowerMsg.includes(p));
-          const multipleClosingSignals = closingMatchCount >= 2;
-          // Closing message with no question = the LLM decided to end the conversation
-          const closingWithNoQuestion = looksLikeClosing && !hasQuestion;
-
-          if ((looksLikeClosing && userRefused) || strongClosing || multipleClosingSignals || closingWithNoQuestion) {
-            message = '[NOT_INTERESTED] ' + message;
-            console.log('[Engine] Safety net: added [NOT_INTERESTED] tag to closing message');
+          const retryResp = await axios.post(OPENAI_API_URL, { ...data, messages: retryMessages }, { headers });
+          if (retryResp.data.choices?.[0]) {
+            try {
+              const retryJson = JSON.parse(retryResp.data.choices[0].message.content.trim());
+              console.log(`[Engine] ✅ Retry succeeded: "${retryJson.message?.substring(0, 80)}..."`);
+              return { message: retryJson.message, step_used: retryJson.step_used, booking_intent: retryJson.booking_intent || null };
+            } catch {
+              console.log('[Engine] Retry JSON parse failed, using retry raw content');
+              return { message: retryResp.data.choices[0].message.content.trim(), step_used: json.step_used };
+            }
           }
+        }
+
+        // If user explicitly refused AND LLM is closing, tag as NOT_INTERESTED
+        if (message && !message.includes('[NOT_INTERESTED]') && looksLikeClosing && userHardRefused) {
+          message = '[NOT_INTERESTED] ' + message;
+          console.log('[Engine] Safety net: added [NOT_INTERESTED] tag (user explicitly refused)');
         }
 
         return { message, step_used: json.step_used, booking_intent: json.booking_intent || null };
