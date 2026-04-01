@@ -12,8 +12,6 @@ import { getContainer } from '../../../shared/container.js';
 import { typeFast, delay as browserDelay } from '../../../shared/browser/index.js';
 import { MESSAGE_INPUT } from '../../../shared/config/selectors.js';
 
-const DELAY_BETWEEN_LINES_MS = 2000; // 2 seconds between each Enter
-
 function delay(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
@@ -36,65 +34,30 @@ async function findMessageInput(page) {
  * Paste message lines and send with Enter (no letter-by-letter typing)
  * Splits message by newlines, pastes each line, presses Enter to send.
  */
-async function waitForConversationLoaded(tab) {
-  // Check if conversation is stuck on loading spinner
-  const loadingSelector = 'div[role="row"] div[data-visualcompletion="loading-state"]';
-
-  // Wait up to 10 seconds for spinner to disappear (if present)
-  try {
-    const spinner = await tab.$(loadingSelector);
-    if (spinner) {
-      console.log(`   ⏳ Conversation loading...`);
-      await tab.waitForSelector(loadingSelector, { state: 'hidden', timeout: 15000 });
-      console.log(`   ✅ Conversation loaded`);
-      await delay(1000);
-    }
-  } catch {
-    // Spinner still visible after 15s — conversation failed to load
-    return false;
-  }
-
-  // Also check for "Chargement…" text
-  const loadingText = await tab.$('text="Chargement…"').catch(() => null);
-  if (loadingText) {
-    try {
-      await tab.waitForSelector('text="Chargement…"', { state: 'hidden', timeout: 10000 });
-      await delay(1000);
-    } catch {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 async function pasteAndSend(tab, message) {
-  // Wait for conversation to be loaded before sending anything
-  const loaded = await waitForConversationLoaded(tab);
-  if (!loaded) {
-    return { success: false, error: 'conversation_stuck_loading' };
-  }
+  // Wait a moment for conversation to settle, then check if input is ready
+  await delay(2000);
 
   const input = await findMessageInput(tab);
   if (!input) {
-    return { success: false, error: 'message_input_not_found' };
-  }
-
-  await input.click();
-  await delay(500);
-
-  // Split message into lines — each line becomes a separate sent message
-  const lines = message.split('\n').filter(l => l.trim().length > 0);
-
-  for (let i = 0; i < lines.length; i++) {
-    await typeFast(tab, lines[i]);
-    await delay(300);
-    await tab.keyboard.press('Enter');
-    // Wait 2 seconds before next line (except after the last one)
-    if (i < lines.length - 1) {
-      await delay(DELAY_BETWEEN_LINES_MS);
+    // Input not found — conversation might still be loading, wait longer
+    console.log(`   ⏳ Waiting for message input...`);
+    await delay(5000);
+    const retryInput = await findMessageInput(tab);
+    if (!retryInput) {
+      return { success: false, error: 'message_input_not_found' };
     }
+    await retryInput.click();
+    await delay(500);
+  } else {
+    await input.click();
+    await delay(500);
   }
+
+  // Paste the entire message and send with Enter
+  await typeFast(tab, message);
+  await delay(300);
+  await tab.keyboard.press('Enter');
 
   return { success: true };
 }
