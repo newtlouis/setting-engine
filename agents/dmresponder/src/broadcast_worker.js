@@ -101,11 +101,11 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
 
   try {
     const totalFollowers = db.prepare('SELECT COUNT(*) as c FROM account_followers WHERE account_id = ?').get(accountId).c;
-    const alreadySent = db.prepare('SELECT COUNT(*) as c FROM broadcast_sends WHERE campaign_id = ?').get(campaignId).c;
+    const alreadySent = db.prepare("SELECT COUNT(*) as c FROM broadcast_sends WHERE campaign_id = ? AND status = 'sent'").get(campaignId).c;
     const remainingTotal = db.prepare(`
       SELECT COUNT(*) as c FROM account_followers af
       WHERE af.account_id = ? AND af.username NOT IN (
-        SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ?
+        SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ? AND bs.status = 'sent'
       )
     `).get(accountId, campaignId).c;
 
@@ -113,11 +113,9 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
     console.log(`🎯 Target: ${batch} successful sends\n`);
 
     if (remainingTotal === 0) {
-      console.log('✅ No more followers to contact for this campaign.');
-      if (alreadySent >= totalFollowers) {
-        db.prepare("UPDATE broadcast_campaigns SET status = 'completed' WHERE id = ?").run(campaignId);
-        console.log('🏁 Campaign marked as completed.');
-      }
+      console.log('✅ All followers have been successfully contacted for this campaign.');
+      db.prepare("UPDATE broadcast_campaigns SET status = 'completed' WHERE id = ?").run(campaignId);
+      console.log('🏁 Campaign marked as completed.');
       return;
     }
 
@@ -134,7 +132,7 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
         FROM account_followers af
         WHERE af.account_id = ?
           AND af.username NOT IN (
-            SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ?
+            SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ? AND bs.status = 'sent'
           )
         ORDER BY af.id
         LIMIT ?
