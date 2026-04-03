@@ -28,20 +28,13 @@ export async function delay(ms, max = null) {
  * @param {string} text - Text to paste
  */
 export async function typeFast(page, text) {
-  // Use evaluate to set value directly via DOM + dispatch events
-  await page.evaluate((txt) => {
-    const input = document.activeElement;
-    if (input && (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT' || input.isContentEditable || input.getAttribute('contenteditable') === 'true')) {
-      // For contenteditable elements (Instagram uses these)
-      if (input.isContentEditable || input.getAttribute('contenteditable') === 'true') {
-        input.textContent = txt;
-        input.dispatchEvent(new InputEvent('input', { bubbles: true, data: txt }));
-      } else {
-        input.value = txt;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    }
+  // Use real clipboard paste — handles long text and newlines correctly
+  // on contenteditable elements (Instagram DM input)
+  await page.evaluate(async (txt) => {
+    await navigator.clipboard.writeText(txt);
   }, text);
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.keyboard.press(`${modifier}+KeyV`);
   await delay(100, 200);
 }
 
