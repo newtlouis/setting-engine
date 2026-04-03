@@ -574,6 +574,9 @@ function runMigrations() {
     `);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_account_followers_account ON account_followers(account_id)`);
 
+    // Migration: add contactable column (NULL = unknown, 1 = yes, 0 = no DM button)
+    try { db.exec(`ALTER TABLE account_followers ADD COLUMN contactable INTEGER DEFAULT NULL`); } catch (e) { /* already exists */ }
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS broadcast_campaigns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

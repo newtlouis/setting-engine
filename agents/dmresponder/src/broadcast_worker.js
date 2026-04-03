@@ -138,15 +138,18 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
 
   try {
     const totalFollowers = db.prepare('SELECT COUNT(*) as c FROM account_followers WHERE account_id = ?').get(accountId).c;
+    const contactable = db.prepare('SELECT COUNT(*) as c FROM account_followers WHERE account_id = ? AND contactable != 0').get(accountId).c;
+    const notContactable = db.prepare('SELECT COUNT(*) as c FROM account_followers WHERE account_id = ? AND contactable = 0').get(accountId).c;
     const alreadySent = db.prepare("SELECT COUNT(*) as c FROM broadcast_sends WHERE campaign_id = ? AND status = 'sent'").get(campaignId).c;
     const remainingTotal = db.prepare(`
       SELECT COUNT(*) as c FROM account_followers af
-      WHERE af.account_id = ? AND af.username NOT IN (
-        SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ? AND bs.status = 'sent'
-      )
+      WHERE af.account_id = ? AND (af.contactable IS NULL OR af.contactable != 0)
+        AND af.username NOT IN (
+          SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ? AND bs.status = 'sent'
+        )
     `).get(accountId, campaignId).c;
 
-    console.log(`📊 Followers: ${totalFollowers} total, ${alreadySent} already sent, ${remainingTotal} remaining`);
+    console.log(`📊 Followers: ${totalFollowers} total, ${notContactable} not contactable, ${alreadySent} already sent, ${remainingTotal} remaining`);
     console.log(`🎯 Target: ${batch} successful sends\n`);
 
     if (remainingTotal === 0) {
@@ -168,6 +171,7 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
         SELECT af.username
         FROM account_followers af
         WHERE af.account_id = ?
+          AND (af.contactable IS NULL OR af.contactable != 0)
           AND af.username NOT IN (
             SELECT bs.follower_username FROM broadcast_sends bs WHERE bs.campaign_id = ? AND bs.status = 'sent'
           )
@@ -192,7 +196,8 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
 
           if (!openResult.success) {
             console.log(`   ⏭️ Skipped (no DM button): ${openResult.error}`);
-            db.prepare("INSERT OR REPLACE INTO broadcast_sends (campaign_id, follower_username, status, error) VALUES (?, ?, 'skipped', ?)").run(campaignId, follower.username, openResult.error);
+            // Mark follower as not contactable so we skip them in future batches
+            db.prepare("UPDATE account_followers SET contactable = 0 WHERE account_id = ? AND username = ?").run(accountId, follower.username);
             failedCount++;
             continue;
           }
@@ -201,6 +206,7 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
           const sendResult = await pasteAndSend(page, campaign.message_text);
           if (sendResult.success) {
             db.prepare("INSERT OR REPLACE INTO broadcast_sends (campaign_id, follower_username, status, sent_at) VALUES (?, ?, 'sent', datetime('now'))").run(campaignId, follower.username);
+            db.prepare("UPDATE account_followers SET contactable = 1 WHERE account_id = ? AND username = ?").run(accountId, follower.username);
             sentCount++;
             console.log(`   ✅ Message sent to @${follower.username} (${sentCount}/${batch})`);
           } else {
