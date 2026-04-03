@@ -28,13 +28,11 @@ export async function delay(ms, max = null) {
  * @param {string} text - Text to paste
  */
 export async function typeFast(page, text) {
-  // Use real clipboard paste — handles long text and newlines correctly
-  // on contenteditable elements (Instagram DM input)
-  await page.evaluate(async (txt) => {
-    await navigator.clipboard.writeText(txt);
+  // Insert text via execCommand('insertText') — works on contenteditable,
+  // handles newlines correctly, no clipboard permissions needed
+  await page.evaluate((txt) => {
+    document.execCommand('insertText', false, txt);
   }, text);
-  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-  await page.keyboard.press(`${modifier}+KeyV`);
   await delay(100, 200);
 }
 
