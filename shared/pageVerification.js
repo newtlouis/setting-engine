@@ -808,6 +808,16 @@ export async function checkForChallenge(page) {
     return !result.success;
   } catch (err) {
     if (err.message === 'CAPTCHA_NON_INTERACTIVE') {
+      // Page might just be slow to load — wait and retry before concluding it's a real challenge
+      console.log(`   ⏳ Page may still be loading — waiting 5s before retrying...`);
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const retryResult = await verifyPage(page, { expectedType: 'any', blockOnFailure: false });
+        if (retryResult.success) {
+          console.log(`   ✅ Page loaded after retry — no challenge`);
+          return false;
+        }
+      } catch (e) { /* ignore */ }
       console.log(`   ⚠️ CAPTCHA detected in non-interactive mode — treating as challenge`);
       return true;
     }

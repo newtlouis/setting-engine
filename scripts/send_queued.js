@@ -132,6 +132,12 @@ async function main() {
                   notes: `Outreach failed: ${error}`
                 });
                 failedCount++;
+            } else if (error.includes('challenge_detected')) {
+                // Challenge/CAPTCHA on the account — stop the entire batch, no point trying more leads
+                console.log(`   🛑 Challenge detected — stopping batch (no point trying other leads)`);
+                await outreachQueue.incrementRetry(lead.username, error);
+                if (manual && currentPage !== page) await currentPage.close().catch(() => {});
+                break;
             } else {
                 // Retryable error (network, timing, click_did_not_open_dm, etc.)
                 // Keep in queue as pending for next batch
