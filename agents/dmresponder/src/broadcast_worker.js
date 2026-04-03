@@ -34,13 +34,35 @@ async function findMessageInput(page) {
  * Paste message lines and send with Enter (no letter-by-letter typing)
  * Splits message by newlines, pastes each line, presses Enter to send.
  */
+/**
+ * Split message into chunks at paragraph boundaries (\n\n) to stay under Instagram's DM char limit
+ */
+function splitMessage(message, maxLen = 900) {
+  if (message.length <= maxLen) return [message];
+
+  const chunks = [];
+  const paragraphs = message.split('\n\n');
+  let current = '';
+
+  for (const para of paragraphs) {
+    const candidate = current ? current + '\n\n' + para : para;
+    if (candidate.length > maxLen && current) {
+      chunks.push(current);
+      current = para;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 async function pasteAndSend(tab, message) {
   // Wait a moment for conversation to settle, then check if input is ready
   await delay(2000);
 
   const input = await findMessageInput(tab);
   if (!input) {
-    // Input not found — conversation might still be loading, wait longer
     console.log(`   ⏳ Waiting for message input...`);
     await delay(5000);
     const retryInput = await findMessageInput(tab);
@@ -54,10 +76,25 @@ async function pasteAndSend(tab, message) {
     await delay(500);
   }
 
-  // Paste the entire message and send with Enter
-  await typeFast(tab, message);
-  await delay(300);
-  await tab.keyboard.press('Enter');
+  // Split long messages into chunks to avoid Instagram's character limit
+  const chunks = splitMessage(message);
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0) {
+      // Re-focus input for next chunk
+      const nextInput = await findMessageInput(tab);
+      if (nextInput) {
+        await nextInput.click();
+        await delay(500);
+      }
+    }
+    await typeFast(tab, chunks[i]);
+    await delay(300);
+    await tab.keyboard.press('Enter');
+    if (i < chunks.length - 1) {
+      await delay(1500); // wait between messages
+    }
+  }
 
   return { success: true };
 }

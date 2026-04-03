@@ -28,11 +28,19 @@ export async function delay(ms, max = null) {
  * @param {string} text - Text to paste
  */
 export async function typeFast(page, text) {
-  // Insert text via execCommand('insertText') — works on contenteditable,
-  // handles newlines correctly, no clipboard permissions needed
-  await page.evaluate((txt) => {
-    document.execCommand('insertText', false, txt);
-  }, text);
+  // Split by newlines, insertText each line, Shift+Enter for line breaks
+  // This handles contenteditable (Instagram DM) correctly
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length > 0) {
+      await page.evaluate((line) => {
+        document.execCommand('insertText', false, line);
+      }, lines[i]);
+    }
+    if (i < lines.length - 1) {
+      await page.keyboard.press('Shift+Enter');
+    }
+  }
   await delay(100, 200);
 }
 
