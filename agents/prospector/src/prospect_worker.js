@@ -30,7 +30,7 @@ import { generateFirstMessage, validateMessage } from '../../outreach/src/templa
 // Shared utilities
 import { loadProfileConfig } from '../../../shared/utils/configLoader.js';
 import { loadOutreachConfig } from '../../../shared/utils/outreachConfigLoader.js';
-import { getBrowserDataDir } from '../../../shared/paths.js';
+// getBrowserDataDir no longer needed — BrowserService handles it via purpose
 import { checkForChallenge } from '../../../shared/pageVerification.js';
 import { delay } from '../../../shared/browser/index.js';
 
@@ -118,9 +118,8 @@ export async function runProspector(options = {}) {
   // Initialize browser with dedicated prospector account
   // Uses INSTAGRAM_USERNAME_PROSPECTOR / INSTAGRAM_PASSWORD_PROSPECTOR from .env
   // Profile is still used for DB/account association, not for browser session
-  const userDataDir = getBrowserDataDir('prospector');
-  console.log('\n🌐 Initializing browser (prospector account)...');
-  const browserObj = await initBrowser({ userDataDir });
+  console.log(`\n🌐 Initializing browser (prospector for ${profile})...`);
+  const browserObj = await initBrowser({ profile, purpose: 'prospector' });
   const workingPage = getWorkingPage();
 
   try {

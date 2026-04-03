@@ -39,19 +39,25 @@ let browserSession = null; // BrowserService session reference
  */
 export async function initBrowser(options = {}) {
   const {
-    userDataDir = './browser-data',
+    userDataDir,
+    profile: explicitProfile,
+    purpose,
     headless = CONFIG.HEADLESS
   } = options;
 
-  // Extract profile name from userDataDir if possible
-  const profileMatch = userDataDir.match(/browser-data-(.+)$/);
-  const profile = profileMatch ? profileMatch[1] : 'default';
+  // Resolve profile: explicit > extracted from userDataDir > default
+  let profile = explicitProfile || 'default';
+  if (!explicitProfile && userDataDir) {
+    const profileMatch = userDataDir.match(/browser-data-(.+)$/);
+    if (profileMatch) profile = profileMatch[1];
+  }
 
   const timeout = CONFIG.PAGE_TIMEOUT || 90000;
 
   // Use BrowserService for initialization
   browserSession = await BrowserService.initSession({
     profile,
+    purpose,
     headless,
     timeout,
     slowMo: CONFIG.SLOW_MO,

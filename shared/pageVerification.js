@@ -18,9 +18,15 @@ import { createInterface } from 'readline';
  * Wait for user to press Enter
  */
 async function waitForEnter(message = 'Press [ENTER] to continue...') {
+  // In non-interactive mode (cron), don't block — throw to skip
+  if (!process.stdin.isTTY) {
+    console.log(`   ⚠️ Non-interactive mode (cron) — cannot wait for input. Skipping.`);
+    throw new Error('CAPTCHA_NON_INTERACTIVE');
+  }
+
   console.log(`   ⌨️  ${message}`);
   process.stdout.write('\x07'); // Beep
-  
+
   return new Promise((resolve) => {
     const rl = createInterface({
       input: process.stdin,
@@ -797,6 +803,14 @@ export async function verifyHashtagPage(page, hashtag) {
  * Compatible with existing detectChallenge usage pattern
  */
 export async function checkForChallenge(page) {
-  const result = await verifyPage(page, { expectedType: 'any', blockOnFailure: true });
-  return !result.success;
+  try {
+    const result = await verifyPage(page, { expectedType: 'any', blockOnFailure: true });
+    return !result.success;
+  } catch (err) {
+    if (err.message === 'CAPTCHA_NON_INTERACTIVE') {
+      console.log(`   ⚠️ CAPTCHA detected in non-interactive mode — treating as challenge`);
+      return true;
+    }
+    throw err;
+  }
 }

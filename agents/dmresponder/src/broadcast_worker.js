@@ -151,30 +151,27 @@ export async function runBroadcast({ profile, campaignId, batch = 20 }) {
         console.log(`\n--- Sent ${sentCount}/${batch} | @${follower.username} ---`);
 
         try {
-          const tab = await createNewTab();
+          // Reuse the same page — just navigate to the next profile
           const profileUrl = `https://www.instagram.com/${follower.username}/`;
-          const openResult = await goToProfileAndOpenDM(tab, profileUrl);
+          const openResult = await goToProfileAndOpenDM(page, profileUrl);
 
           if (!openResult.success) {
             console.log(`   ⏭️ Skipped (no DM button): ${openResult.error}`);
             db.prepare("INSERT OR REPLACE INTO broadcast_sends (campaign_id, follower_username, status, error) VALUES (?, ?, 'skipped', ?)").run(campaignId, follower.username, openResult.error);
             failedCount++;
-            await tab.close().catch(() => {});
             continue;
           }
 
           // Paste each line and press Enter to send immediately
-          const sendResult = await pasteAndSend(tab, campaign.message_text);
+          const sendResult = await pasteAndSend(page, campaign.message_text);
           if (sendResult.success) {
             db.prepare("INSERT OR REPLACE INTO broadcast_sends (campaign_id, follower_username, status, sent_at) VALUES (?, ?, 'sent', datetime('now'))").run(campaignId, follower.username);
             sentCount++;
             console.log(`   ✅ Message sent to @${follower.username} (${sentCount}/${batch})`);
-            await tab.close().catch(() => {});
           } else {
             console.log(`   ⏭️ Failed to send: ${sendResult.error}`);
             db.prepare("INSERT OR REPLACE INTO broadcast_sends (campaign_id, follower_username, status, error) VALUES (?, ?, 'skipped', ?)").run(campaignId, follower.username, sendResult.error);
             failedCount++;
-            await tab.close().catch(() => {});
           }
 
         } catch (err) {
