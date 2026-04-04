@@ -42,7 +42,8 @@ export async function initBrowser(options = {}) {
     userDataDir,
     profile: explicitProfile,
     purpose,
-    headless = CONFIG.HEADLESS
+    headless = CONFIG.HEADLESS,
+    forceAfterMinutes = 0
   } = options;
 
   // Resolve profile: explicit > extracted from userDataDir > default
@@ -61,7 +62,8 @@ export async function initBrowser(options = {}) {
     headless,
     timeout,
     slowMo: CONFIG.SLOW_MO,
-    autoLogin: true
+    autoLogin: true,
+    forceAfterMinutes
   });
 
   // Get references for module-level state

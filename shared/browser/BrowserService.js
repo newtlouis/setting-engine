@@ -18,7 +18,7 @@
  */
 
 import { chromium } from 'playwright';
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, cpSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, cpSync, statSync } from 'fs';
 import path from 'path';
 import { cleanupBrowserLocks, getBrowserDataDir } from '../paths.js';
 import { getStealthContextOptions, applyStealthToPage } from '../stealth.js';
@@ -348,7 +348,8 @@ const BrowserService = {
       timeout = 90000,
       slowMo = 50,
       autoLogin = true,
-      diagnostic = false
+      diagnostic = false,
+      forceAfterMinutes = 0
     } = options;
 
     // When purpose is provided, isolate browser data dir per purpose
@@ -378,12 +379,35 @@ const BrowserService = {
     if (existsSync(lockFile)) {
       const existingPid = parseInt(readFileSync(lockFile, 'utf8'), 10);
       if (existingPid && isProcessRunning(existingPid)) {
-        throw new Error(
-          `🔒 Another session is already using this browser (PID: ${existingPid}, profile: ${dataProfile}). ` +
-          `Wait for it to finish or kill it (kill ${existingPid}).`
-        );
+        // Check if the process has been running too long (zombie detection)
+        if (forceAfterMinutes > 0) {
+          const lockStat = statSync(lockFile);
+          const lockAgeMinutes = (Date.now() - lockStat.mtimeMs) / 60000;
+          if (lockAgeMinutes >= forceAfterMinutes) {
+            console.log(`   ⚠️ Process ${existingPid} has been running for ${Math.round(lockAgeMinutes)}min (limit: ${forceAfterMinutes}min) — force killing`);
+            try { process.kill(existingPid, 'SIGTERM'); } catch {}
+            // Wait a moment for the process to exit
+            await new Promise(r => setTimeout(r, 3000));
+            if (isProcessRunning(existingPid)) {
+              try { process.kill(existingPid, 'SIGKILL'); } catch {}
+              await new Promise(r => setTimeout(r, 1000));
+            }
+            try { unlinkSync(lockFile); } catch {}
+          } else {
+            throw new Error(
+              `🔒 Another session is already using this browser (PID: ${existingPid}, profile: ${dataProfile}). ` +
+              `Wait for it to finish or kill it (kill ${existingPid}).`
+            );
+          }
+        } else {
+          throw new Error(
+            `🔒 Another session is already using this browser (PID: ${existingPid}, profile: ${dataProfile}). ` +
+            `Wait for it to finish or kill it (kill ${existingPid}).`
+          );
+        }
+      } else {
+        console.log(`   🧹 Removed stale lock (PID ${existingPid} no longer running)`);
       }
-      console.log(`   🧹 Removed stale lock (PID ${existingPid} no longer running)`);
     }
     writeFileSync(lockFile, String(process.pid));
 

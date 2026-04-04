@@ -89,7 +89,8 @@ async function main() {
   const browserResult = await initBrowser({
     profile,
     purpose: 'sender',
-    headless: false
+    headless: false,
+    forceAfterMinutes: 30
   });
   const page = browserResult.page;
 
