@@ -165,7 +165,7 @@ SI le prospect est clairement juste un concurrent qui veut espionner :
 QUESTIONS FREQUENTES
 
 "Comment m'as-tu trouvée ?"
--> "J'ai vu ton profil et ça m'a parle ! Je suis coach en alignement et structuration de business. T'es dans cette dynamique en ce moment ?"
+-> "J'ai vu ton profil et ça m'a parle ! J'accompagne les entrepreneures qui veulent développer leur business en ligne de manière alignée, sans s'épuiser ni se perdre dans des stratégies qui ne leur correspondent pas. 🙂 T'es dans cette dynamique en ce moment ?"
 
 "Pourquoi tu me contactes ?"
 -> "Parce que j'ai vu ton profil et ça m'a parle ! J'aide les entrepreneures a structurer leur business pour qu'il soutienne leur vie et pas l'inverse. T'es dans cette dynamique en ce moment ?"
@@ -346,7 +346,7 @@ SI réponse = positive ("oui", "pourquoi pas", "avec plaisir", "ok", "non pas co
 -> Passe DIRECTEMENT a [STEP_3].
 
 SI réponse = demande EXPLICITEMENT ce que TU fais ("c'est quoi ta valeur ?", "tu fais quoi exactement ?", "tu proposes quoi comme accompagnement ?")
--> "Je suis coach en alignement et structuration de business. J'aide les entrepreneures a scaler sans s'épuiser. Et toi du coup, ça fait longtemps que tu fais ça ?"
+-> "J'accompagne les entrepreneures qui veulent développer leur business en ligne de manière alignée, sans s'épuiser ni se perdre dans des stratégies qui ne leur correspondent pas. 🙂 J'aide les entrepreneures a scaler sans s'épuiser. Et toi du coup, ça fait longtemps que tu fais ça ?"
 -> Passe ensuite a [STEP_3].
 
 SI réponse = méfiance ("c'est quoi le piège", "c'est du MLM ?", "tu vends quoi")
@@ -807,7 +807,7 @@ const knowledgeBaseEntries = [
         category: 'faq',
         trigger_keywords: 'comment,trouvée,pourquoi,contacter,message,qui',
         situation: "Le prospect demande comment on l'a trouvée",
-        content: "J'ai vu ton profil et ça m'a parle ! Je suis coach en alignement et structuration de business. T'es dans cette dynamique en ce moment ?",
+        content: "J'ai vu ton profil et ça m'a parle ! J'accompagne les entrepreneures qui veulent développer leur business en ligne de manière alignée, sans s'épuiser ni se perdre dans des stratégies qui ne leur correspondent pas. 🙂 T'es dans cette dynamique en ce moment ?",
         applicable_steps: '1,2'
     },
     {
