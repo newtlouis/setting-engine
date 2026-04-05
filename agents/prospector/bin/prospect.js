@@ -36,6 +36,7 @@ program
   .description('Unified prospecting: scrape posts, qualify leads, send outreach in one browser session')
   .requiredOption('--profile <name>', 'Instagram profile/account name (REQUIRED)')
   .option('--source <value>', 'Source to scrape: hashtag (e.g., "#dependanceaffective") or competitor profile (e.g., "@competitor_username")')
+  .option('--mode <mode>', 'Prospecting mode: "comments" (default), "authors", or "followers" (scrape competitor followers)')
   .option('--posts <number>', 'Batch size: number of posts to scrape at a time before processing', '3')
   .option('--total <number>', 'Maximum total leads to contact in this session', '60')
   .option('--skip-qualification', 'Skip bio qualification check', false)
@@ -44,7 +45,8 @@ program
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');
     console.log(`   Profile: ${options.profile}`);
-    console.log(`   Source: ${options.source}`);
+    console.log(`   Source: ${options.source || '(from config)'}`);
+    console.log(`   Mode: ${options.mode || 'default'}`);
     console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Total limit: ${options.total}`);
     console.log(`   Variant: ${options.variant}`);
@@ -55,6 +57,7 @@ program
       await runProspector({
         profile: options.profile,
         source: options.source,
+        mode: options.mode || null,
         maxPosts: parseInt(options.posts, 10),
         totalLimit: parseInt(options.total, 10),
         skipQualification: options.skipQualification,

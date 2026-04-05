@@ -353,7 +353,36 @@ export async function scrapeProfileData(page) {
     const data = await page.evaluate(() => {
       let foundBio = null;
       let foundFullName = null;
-      
+      let foundFollowersCount = null;
+
+      // Extract follower count from the profile header
+      // Instagram shows "X abonnés" or "X followers" as a link
+      const followerLinks = document.querySelectorAll('a[href*="/followers/"] span, a[href*="/followers/"]');
+      for (const el of followerLinks) {
+        const text = el.textContent.trim();
+        // Match patterns like "1 234", "12,5k", "1.2M", "856"
+        const match = text.replace(/\s/g, '').match(/^([\d.,]+)\s*([kKmM])?/);
+        if (match) {
+          let num = parseFloat(match[1].replace(',', '.'));
+          const suffix = (match[2] || '').toLowerCase();
+          if (suffix === 'k') num *= 1000;
+          else if (suffix === 'm') num *= 1000000;
+          foundFollowersCount = Math.round(num);
+          break;
+        }
+      }
+      // Fallback: look for "X abonnés" in header meta sections
+      if (!foundFollowersCount) {
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+        const metaMatch = metaDesc.match(/([\d.,]+)\s*(?:k|K|m|M)?\s*(?:Followers|abonnés)/i);
+        if (metaMatch) {
+          let num = parseFloat(metaMatch[1].replace(',', '.'));
+          if (/k/i.test(metaMatch[0])) num *= 1000;
+          if (/m/i.test(metaMatch[0])) num *= 1000000;
+          foundFollowersCount = Math.round(num);
+        }
+      }
+
       // Helper to validate if a string looks like a real name/bio part (not stats like "499 publications")
       function isValidName(text) {
         if (!text || text.length < 2 || text.length > 500) return false; 
@@ -413,19 +442,20 @@ export async function scrapeProfileData(page) {
          }
       }
 
-      return { bio: foundBio, fullName: foundFullName };
+      return { bio: foundBio, fullName: foundFullName, followersCount: foundFollowersCount };
     });
-    
+
     if (data.fullName) console.log(`   👤 Nom trouvé : "${data.fullName}"`);
     else console.log(`   👤 Nom non trouvé (sera fallback sur username)`);
-    
+
     if (data.bio) console.log(`   📋 Bio trouvée (${data.bio.length} chars)`);
-    
+    if (data.followersCount != null) console.log(`   👥 Followers: ${data.followersCount}`);
+
     return data;
-    
+
   } catch (error) {
     console.error('   ⚠️  Erreur scraping profile data:', error.message);
-    return { bio: null, fullName: null };
+    return { bio: null, fullName: null, followersCount: null };
   }
 }
 

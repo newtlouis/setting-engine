@@ -17,7 +17,7 @@ const MAX_SCROLL_ATTEMPTS_WITHOUT_NEW = 20;
  * @param {number} accountId - Account ID in database
  * @returns {Promise<string[]>} Array of follower usernames
  */
-export async function scrapeFollowers(page, profileUsername, accountId) {
+export async function scrapeFollowers(page, profileUsername, accountId, { saveToDb = true } = {}) {
   console.log(`\n📋 Scraping followers for @${profileUsername}...`);
 
   // Navigate to profile
@@ -108,20 +108,22 @@ export async function scrapeFollowers(page, profileUsername, accountId) {
 
   console.log(`   ✅ Total followers scraped: ${allUsernames.size}`);
 
-  // Save to database
-  const db = getDb();
-  const insert = db.prepare(
-    "INSERT OR REPLACE INTO account_followers (account_id, username, scraped_at) VALUES (?, ?, datetime('now'))"
-  );
+  // Save to database (only for broadcast — prospector handles its own table)
+  if (saveToDb) {
+    const db = getDb();
+    const insert = db.prepare(
+      "INSERT OR REPLACE INTO account_followers (account_id, username, scraped_at) VALUES (?, ?, datetime('now'))"
+    );
 
-  const insertMany = db.transaction((usernames) => {
-    for (const username of usernames) {
-      insert.run(accountId, username);
-    }
-  });
+    const insertMany = db.transaction((usernames) => {
+      for (const username of usernames) {
+        insert.run(accountId, username);
+      }
+    });
 
-  insertMany([...allUsernames]);
-  console.log(`   💾 Saved ${allUsernames.size} followers to database`);
+    insertMany([...allUsernames]);
+    console.log(`   💾 Saved ${allUsernames.size} followers to database`);
+  }
 
   // Close modal
   await page.keyboard.press('Escape');

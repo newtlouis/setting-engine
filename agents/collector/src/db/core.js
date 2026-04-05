@@ -602,6 +602,27 @@ function runMigrations() {
 
     console.log('📢 Broadcast tables ready');
 
+    // Prospect followers table (followers scraped from competitor profiles for prospecting)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS prospect_followers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        source_profile TEXT NOT NULL,
+        username TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        scraped_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(account_id, username)
+      );
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_prospect_followers_account ON prospect_followers(account_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_prospect_followers_status ON prospect_followers(account_id, status)`);
+
+    // Migration: add bio_keywords and max_followers to account_personas
+    try { db.exec(`ALTER TABLE account_personas ADD COLUMN bio_keywords TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
+    try { db.exec(`ALTER TABLE account_personas ADD COLUMN max_followers INTEGER DEFAULT NULL`); } catch (e) { /* already exists */ }
+
+    console.log('🔍 Prospect followers tables ready');
+
   } catch (err) {
     console.error('⚠️ Migration check failed:', err.message);
   }
