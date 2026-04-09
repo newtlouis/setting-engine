@@ -1176,14 +1176,11 @@ export async function scrapePostLikers(page) {
             // Helper for human delay
             const randomDelay = (min, max) => new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
 
-            // Human-like scrolling loop
-            // Goal: Scroll enough to capture a good batch of leads, mimicking a user browsing
-            let previousHeight = 0;
-            let noChangeCount = 0;
-            const MAX_SCROLLS = 15; // Limit to avoid infinite loops, but enough for ~100+ likers
+            // Dynamic scrolling loop — scroll until no new usernames are found
+            let noNewCount = 0;
+            let scrollCount = 0;
 
-            for (let i = 0; i < MAX_SCROLLS; i++) {
-                // Collect visible usernames BEFORE scrolling
+            const collectUsernames = () => {
                 const links = Array.from(modal.querySelectorAll('a[href^="/"]._a6hd, a[href^="/"][role="link"]'));
                 links.forEach(link => {
                     const href = link.getAttribute('href');
@@ -1192,47 +1189,41 @@ export async function scrapePostLikers(page) {
                         results.add(username);
                     }
                 });
+            };
 
-                // Scroll logic - REVISED: Focus on robustness
-                // Try standard scroll first
+            while (noNewCount < 5) {
+                const sizeBefore = results.size;
+                collectUsernames();
+
+                // Scroll
                 if (scroller.scrollHeight > scroller.clientHeight) {
-                     // Try multiple ways to scroll
-                     const currentTop = scroller.scrollTop;
-                     const scrollAmount = 600 + Math.random() * 400; // Variable scroll amount
+                     const scrollAmount = 600 + Math.random() * 400;
                      scroller.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-                     
-                     // Helper: if JS scroll failed (scrollTop didn't change), try focusing and using keys
-                     // This often works better for dynamic lists
-                     /*
-                     if (scroller.scrollTop === currentTop) {
-                         scroller.focus();
-                         // We can't actually trigger real keyboard press from inside evaluate, 
-                         // but we can try to force scroll via scrollTo if scrollBy failed
-                         scroller.scrollTop += scrollAmount;
-                     }
-                     */
                 } else {
-                     // Fallback for when we picked the wrong scroller: try scrolling the modal itself
                      modal.scrollBy({ top: 600, behavior: 'smooth' });
                 }
 
-                // Variable pause to read/load
                 await randomDelay(1000, 2500);
+                scrollCount++;
 
-                // Check if we hit bottom
-                const currentHeight = scroller.scrollHeight;
-                if (currentHeight === previousHeight) {
-                    noChangeCount++;
-                    if (noChangeCount >= 3) break; // Increased patience to 3
+                // Collect again after scroll
+                collectUsernames();
+
+                if (results.size === sizeBefore) {
+                    noNewCount++;
                 } else {
-                    noChangeCount = 0;
-                    previousHeight = currentHeight;
+                    noNewCount = 0;
                 }
-                
-                // Occasional "micro-scroll" up/down to simulate reading/adjusting
+
+                // Occasional micro-scroll to simulate human
                 if (Math.random() > 0.8) {
                      scroller.scrollBy({ top: -100, behavior: 'smooth' });
                      await randomDelay(500, 800);
+                }
+
+                // Log progress every 10 scrolls
+                if (scrollCount % 10 === 0) {
+                    console.log(`      → Scroll ${scrollCount}: ${results.size} likers found so far`);
                 }
             }
             
