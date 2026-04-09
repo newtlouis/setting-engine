@@ -149,20 +149,22 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
       return !!row;
     },
 
-    async getStats() {
+    async getStats(accountId = null) {
       const db = getDb();
+      const filter = accountId ? ' AND account_id = ?' : '';
+      const params = accountId ? [accountId] : [];
 
-      const pending = db.prepare(`
-        SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending'
-      `).get();
+      const pending = db.prepare(
+        `SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'pending'${filter}`
+      ).get(...params);
 
-      const sent = db.prepare(`
-        SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'sent'
-      `).get();
+      const sent = db.prepare(
+        `SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'sent'${filter}`
+      ).get(...params);
 
-      const failed = db.prepare(`
-        SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'failed'
-      `).get();
+      const failed = db.prepare(
+        `SELECT COUNT(*) as count FROM outreach_queue WHERE status = 'failed'${filter}`
+      ).get(...params);
 
       return {
         pending: pending?.count || 0,

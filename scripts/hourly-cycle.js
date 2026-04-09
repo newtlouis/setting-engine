@@ -11,7 +11,7 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync, unlinkSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -43,12 +43,39 @@ function isProcessRunning(pid) {
   }
 }
 
+const FORCE_KILL_AFTER_MINUTES = 60;
+
 function isBrowserSessionOpen(profile) {
   const lockFile = path.join(PROJECT_ROOT, 'browser-data', `browser-data-${profile}-responder`, '.session.pid');
   if (!existsSync(lockFile)) return false;
   try {
     const pid = parseInt(readFileSync(lockFile, 'utf8'), 10);
-    return pid && isProcessRunning(pid);
+    if (!pid || !isProcessRunning(pid)) {
+      // Stale lock — clean up
+      try { unlinkSync(lockFile); } catch {}
+      return false;
+    }
+
+    // Check how long this process has been running
+    const lockStat = statSync(lockFile);
+    const lockAgeMinutes = (Date.now() - lockStat.mtimeMs) / 60000;
+
+    if (lockAgeMinutes >= FORCE_KILL_AFTER_MINUTES) {
+      console.log(`   ⚠️ Zombie detected: PID ${pid} running for ${Math.round(lockAgeMinutes)}min — killing`);
+      try { process.kill(pid, 'SIGTERM'); } catch {}
+      // Wait 3s then force kill if still alive
+      const start = Date.now();
+      while (Date.now() - start < 3000 && isProcessRunning(pid)) {
+        // busy wait
+      }
+      if (isProcessRunning(pid)) {
+        try { process.kill(pid, 'SIGKILL'); } catch {}
+      }
+      try { unlinkSync(lockFile); } catch {}
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }

@@ -88,71 +88,83 @@ async function main() {
   // Initialize container for queue access
   const container = await getContainer();
 
-  // Helper to get pending queue count
+  // Resolve account_id for this profile
+  const db = container.getDb();
+  const accountRow = db?.prepare('SELECT id FROM accounts WHERE name = ?').get(profile);
+  const accountId = accountRow?.id || null;
+  console.log(`🔑 Account: ${profile} (id: ${accountId})`);
+
+  // Helper to get pending queue count (filtered by profile)
   const getQueueCount = async () => {
-    const stats = await container.repositories.outreachQueue.getStats();
+    const stats = await container.repositories.outreachQueue.getStats(accountId);
     return stats.pending;
   };
 
-  let initialCount = await getQueueCount();
-  let currentCount = initialCount;
-  console.log(`📊 Current queue: ${currentCount} pending leads`);
+  let added = 0;
+  const initialCount = await getQueueCount();
+  console.log(`📊 Current queue: ${initialCount} pending leads`);
+  console.log(`🎯 Will add ${target} NEW leads\n`);
 
   // Phase 1: Followers
-  console.log('\n--- PHASE 1: NEW FOLLOWERS ---');
+  console.log('--- PHASE 1: NEW FOLLOWERS ---');
+  let countBefore = await getQueueCount();
   try {
-    const remaining = target - currentCount;
-    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--track-week', '--target-message-count', String(remaining)]);
+    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--track-week', '--target-message-count', String(target)]);
   } catch (err) {
     console.error(`⚠️ Followers phase error: ${err.message}`);
   }
+  let countAfter = await getQueueCount();
+  let phaseAdded = Math.max(0, countAfter - countBefore);
+  added += phaseAdded;
+  console.log(`\n📊 Followers added: +${phaseAdded} leads (Total added: ${added}/${target})`);
 
-  currentCount = await getQueueCount();
-  let newLeads = currentCount - initialCount;
-  console.log(`\n📊 Followers added: ${newLeads} leads (Total queue: ${currentCount})`);
-
-  if (currentCount >= target) {
+  if (added >= target) {
     console.log(`\n✅ Target reached after Followers phase!`);
-    return finish(currentCount);
+    return finish(added, countAfter);
   }
 
   // Phase 2: Engagement
   console.log('\n--- PHASE 2: ENGAGEMENT ---');
+  countBefore = await getQueueCount();
   try {
-    const remaining = target - currentCount;
+    const remaining = target - added;
     await runScript('npm', ['run', 'engagement', '--', '--profile', profile, '--prepare-only', '--target-message-count', String(remaining)]);
   } catch (err) {
     console.error(`⚠️ Engagement phase error: ${err.message}`);
   }
+  countAfter = await getQueueCount();
+  phaseAdded = Math.max(0, countAfter - countBefore);
+  added += phaseAdded;
+  console.log(`\n📊 Engagement added: +${phaseAdded} leads (Total added: ${added}/${target})`);
 
-  currentCount = await getQueueCount();
-  console.log(`\n📊 After Engagement: ${currentCount} total pending leads`);
-
-  if (currentCount >= target) {
+  if (added >= target) {
     console.log(`\n✅ Target reached after Engagement phase!`);
-    return finish(currentCount);
+    return finish(added, countAfter);
   }
 
   // Phase 3: Prospector
-  const remaining = target - currentCount;
+  const remaining = target - added;
   console.log(`\n--- PHASE 3: PROSPECTOR (need ${remaining} more) ---`);
+  countBefore = await getQueueCount();
   try {
     await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--total', String(remaining), '--mode', prospectMode, '--variant', variant]);
   } catch (err) {
     console.error(`⚠️ Prospector phase error: ${err.message}`);
   }
+  countAfter = await getQueueCount();
+  phaseAdded = Math.max(0, countAfter - countBefore);
+  added += phaseAdded;
+  console.log(`\n📊 Prospector added: +${phaseAdded} leads (Total added: ${added}/${target})`);
 
-  currentCount = await getQueueCount();
-  console.log(`\n📊 After Prospector: ${currentCount} total pending leads`);
-
-  return finish(currentCount);
+  return finish(added, countAfter);
 }
 
-function finish(totalQueued) {
+function finish(added, totalQueued) {
   console.log('\n========================================');
   console.log('   HARVEST COMPLETE');
   console.log('========================================');
-  console.log(`   Total leads queued: ${totalQueued}`);
+  console.log(`   New leads added: ${added}`);
+  console.log(`   Total queue: ${totalQueued}`);
   console.log(`   Ready for: npm run send-queued`);
   console.log('========================================\n');
 }

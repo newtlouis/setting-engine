@@ -133,7 +133,7 @@ function filterAvailableSlots(candidates, busyPeriods) {
  * @returns {{ primary: Array, backup: Array }}
  */
 function pickPrimaryAndBackup(slots) {
-  if (slots.length === 0) return { primary: [], backup: [] };
+  if (slots.length === 0) return { primary: [], backup: [], all: [] };
 
   const slotsByDay = {};
   slots.forEach(slot => {
@@ -163,7 +163,7 @@ function pickPrimaryAndBackup(slots) {
     }
   }
 
-  return { primary, backup };
+  return { primary, backup, all: slots };
 }
 
 /**

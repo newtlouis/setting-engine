@@ -61,7 +61,7 @@ try {
 const COMMAND_REGISTRY = {
     Favoris: [
         { name: 'respond:inbox', description: 'Traiter inbox', options: ['--profile', '--all'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5 --manual' },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 15' },
         { name: 'open:session', description: 'Ouvrir Instagram (session Chrome)', options: ['--profile'] },
         { name: 'analyze:steps', description: 'Analyse steps vs scripts funnel', options: ['--profile', '--username', '--save'] },
         { name: 'sync+analyze', description: 'Sync DMs puis analyse des conversations converties', options: ['--profile', '--max'], combo: ['dm-sync', 'analyze'] },
@@ -83,7 +83,7 @@ const COMMAND_REGISTRY = {
     ],
     Outreach: [
         { name: 'send', description: 'Envoyer DMs d\'outreach', options: ['--profile', '--max'] },
-        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 5 --manual' },
+        { name: 'send-queued', description: 'Envoyer messages en attente', options: ['--limit', '--profile', '--manual'], defaults: '--limit 15' },
     ],
     Responder: [
         { name: 'reply', description: 'Repondre a un lead', options: ['--profile'] },

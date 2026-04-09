@@ -101,7 +101,7 @@ export async function runProspector(options = {}) {
   const outreachConfig = loadOutreachConfig(accountId, profileConfig);
   console.log(`🧠 Niche: ${outreachConfig.niche || 'default'}`);
   console.log(`🔍 Mode par source: hashtag=${outreachConfig.prospectModeHashtag}, profil=${outreachConfig.prospectModeProfile}`);
-  if (outreachConfig.bioKeywords) console.log(`🏷️ Bio keywords filter: ${outreachConfig.bioKeywords.join(', ')}`);
+  console.log(`🚫 Reject filter: ${REJECT_WORDS.join(', ')}`);
   if (outreachConfig.maxFollowers) console.log(`👥 Max followers filter: ${outreachConfig.maxFollowers}`);
 
   if (source) {
@@ -120,9 +120,9 @@ export async function runProspector(options = {}) {
     leadsFailed: 0
   };
 
-  // Initialize browser with dedicated prospector account
-  // Uses INSTAGRAM_USERNAME_PROSPECTOR / INSTAGRAM_PASSWORD_PROSPECTOR from .env
-  // Profile is still used for DB/account association, not for browser session
+  // Initialize browser with per-profile isolation but shared prospector credentials
+  // Each profile gets its own browser data dir (katessence-prospector, melanie-prospector)
+  // so they can run concurrently without lock conflicts
   console.log(`\n🌐 Initializing browser (prospector for ${profile})...`);
   const browserObj = await initBrowser({ profile, purpose: 'prospector' });
   const workingPage = getWorkingPage();
@@ -321,11 +321,11 @@ export async function runProspector(options = {}) {
                continue;
              }
 
-             // STEP 3c.2: Filter by bio keywords (if configured)
-             if (!matchesBioKeywords(profileData.bio, outreachConfig.bioKeywords)) {
-               console.log(`   🏷️ @${username}: Bio doesn't match keywords`);
+             // STEP 3c.2: Filter — reject présentiel businesses (massage, etc.)
+             if (bioContainsRejectWord(profileData.bio, profileData.fullName)) {
+               console.log(`   🚫 @${username}: Rejected (présentiel business)`);
                stats.leadsSkipped++;
-               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', 'bio_no_keyword_match', profileData, null, null, currentSourceRaw);
+               if (!existingLead) saveLeadToDb(username, comment, accountId, 'failed', 'presentiel_business', profileData, null, null, currentSourceRaw);
                continue;
              }
 
@@ -375,25 +375,20 @@ export async function runProspector(options = {}) {
               const prospectMessageB = outreachConfig.prospectMessageB;
 
               if (leadVariant === 'B' && prospectMessageB) {
-                // Variant B with custom template from DB
                 const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
                 finalMessage = prospectMessageB
                   .replace('{name}', aiFirstName || '')
-                  .replace('{accomp}', accompSuffix)
-                  .replace(/^Hello\s+,/, 'Hello,');
+                  .replace('{accomp}', accompSuffix);
               } else if (leadVariant === 'A' && prospectMessageA) {
-                // Variant A with custom template from DB
                 finalMessage = prospectMessageA
-                  .replace('{name}', aiFirstName || '')
-                  .replace(/Hello\s+,/, 'Hello,')
-                  .replace(/Hello\s+!/, 'Hello !');
+                  .replace('{name}', aiFirstName || '');
               } else if (aiFirstName) {
-                // Fallback: Just "[Name] ?"
                 finalMessage = `${aiFirstName} ?`;
               } else {
-                // Fallback: "Hello !"
                 finalMessage = 'Hello !';
               }
+              // Clean up spacing when name is missing
+              finalMessage = finalMessage.replace(/\s+,/g, ',').replace(/\s+!/g, ' !').trim();
 
               const validation = validateMessage(finalMessage);
               if (!validation.valid) {
@@ -483,6 +478,17 @@ function matchesBioKeywords(bio, keywords) {
   return keywords.some(kw => lowerBio.includes(kw));
 }
 
+// Reject words — if bio or name contains any of these, skip the lead
+const REJECT_WORDS = ['massage', 'massages', 'masseuse', 'masseur', 'esthétique', 'esthéticienne', 'onglerie', 'manucure', 'pédicure', 'tatouage', 'coiffure', 'coiffeuse', 'setter', 'setting', 'closer', 'closing'];
+
+/**
+ * Check if bio/name contains words indicating a local/présentiel business to reject
+ */
+function bioContainsRejectWord(bio, fullName) {
+  const text = [(bio || ''), (fullName || '')].join(' ').toLowerCase();
+  return REJECT_WORDS.some(w => text.includes(w));
+}
+
 /**
  * Check if follower count is within the max limit
  * @param {number|null} followersCount
@@ -502,6 +508,8 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
   const { getDb } = await import('../../../agents/collector/src/db/core.js');
   const pdb = getDb();
 
+  const BATCH_SIZE = 200; // Scrape 200 followers at a time per competitor
+
   console.log(`\n🎯 FOLLOWERS MODE — Contact ${totalLimit} new leads from competitor followers`);
   const apiKey = process.env.OPENAI_API_KEY;
   console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
@@ -517,109 +525,143 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
 
   console.log(`📡 Competitor profiles to scrape: ${sourceList.map(s => '@' + s).join(', ')}`);
 
+  const insertStmt = pdb.prepare(
+    "INSERT OR IGNORE INTO prospect_followers (account_id, source_profile, username, status) VALUES (?, ?, ?, 'pending')"
+  );
+
   for (const sourceProfile of sourceList) {
     if (stats.leadsContacted >= totalLimit) break;
 
-    console.log(`\n🔄 Scraping followers of @${sourceProfile}...`);
+    console.log(`\n🔄 Processing competitor @${sourceProfile}...`);
 
-    // Scrape all followers from this competitor profile
-    let followerUsernames;
-    try {
-      followerUsernames = await scrapeFollowersList(workingPage, sourceProfile, accountId, { saveToDb: false });
-    } catch (err) {
-      console.error(`   ❌ Failed to scrape followers of @${sourceProfile}: ${err.message}`);
-      continue;
-    }
+    // Loop: scrape batches of 200, analyze pending, repeat until all followers exhausted or goal reached
+    let batchRound = 0;
+    let allFollowersExhausted = false;
 
-    // Save all to prospect_followers as pending (skip already known)
-    const insertStmt = pdb.prepare(
-      "INSERT OR IGNORE INTO prospect_followers (account_id, source_profile, username, status) VALUES (?, ?, ?, 'pending')"
-    );
-    const insertMany = pdb.transaction((usernames) => {
-      let inserted = 0;
-      for (const u of usernames) {
-        const result = insertStmt.run(accountId, sourceProfile, u);
-        if (result.changes > 0) inserted++;
-      }
-      return inserted;
-    });
-    const newCount = insertMany(followerUsernames);
-    console.log(`   💾 ${newCount} new followers saved to prospect_followers (${followerUsernames.length - newCount} already known)`);
+    while (stats.leadsContacted < totalLimit && !allFollowersExhausted) {
+      batchRound++;
 
-    // Get pending followers for this account (not yet analyzed)
-    const pendingFollowers = pdb.prepare(
-      "SELECT username, source_profile FROM prospect_followers WHERE account_id = ? AND status = 'pending' ORDER BY id"
-    ).all(accountId);
+      // Check how many pending followers we have for this source before scraping more
+      const pendingCount = pdb.prepare(
+        "SELECT COUNT(*) as cnt FROM prospect_followers WHERE account_id = ? AND source_profile = ? AND status = 'pending'"
+      ).get(accountId, sourceProfile).cnt;
 
-    console.log(`   📋 ${pendingFollowers.length} pending followers to analyze`);
+      // If no pending left, scrape a new batch
+      if (pendingCount === 0) {
+        // How many do we already know from this source? That's our scroll offset
+        const knownCount = pdb.prepare(
+          "SELECT COUNT(*) as cnt FROM prospect_followers WHERE account_id = ? AND source_profile = ?"
+        ).get(accountId, sourceProfile).cnt;
 
-    for (const follower of pendingFollowers) {
-      if (stats.leadsContacted >= totalLimit) {
-        console.log(`\n🎯 Goal reached (${stats.leadsContacted}/${totalLimit}). Stopping.`);
-        break;
-      }
+        const targetTotal = knownCount + BATCH_SIZE;
+        console.log(`\n   📥 Batch #${batchRound}: Scraping up to ${targetTotal} followers (already known: ${knownCount})...`);
 
-      const username = follower.username;
+        let followerUsernames;
+        try {
+          followerUsernames = await scrapeFollowersList(workingPage, sourceProfile, accountId, { saveToDb: false, maxToScrape: targetTotal });
+        } catch (err) {
+          console.error(`   ❌ Failed to scrape followers of @${sourceProfile}: ${err.message}`);
+          break;
+        }
 
-      // Skip if already a lead in the system
-      const existingLead = dbFunctions.getLeadByUsername(username, accountId);
-      const skipStatuses = ['contacted', 'queued', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
-      if (existingLead && skipStatuses.includes(existingLead.status)) {
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-        continue;
-      }
+        // Save new ones as pending
+        const insertMany = pdb.transaction((usernames) => {
+          let inserted = 0;
+          for (const u of usernames) {
+            const result = insertStmt.run(accountId, sourceProfile, u);
+            if (result.changes > 0) inserted++;
+          }
+          return inserted;
+        });
+        const newCount = insertMany(followerUsernames);
+        console.log(`   💾 ${newCount} new followers saved (${followerUsernames.length} total scraped)`);
 
-      console.log(`\n   --- Processing @${username} (${stats.leadsContacted + 1}/${totalLimit}) ---`);
-      stats.leadsProcessed++;
+        // If we got fewer than targetTotal, we've reached the end of this competitor's followers
+        if (followerUsernames.length < targetTotal) {
+          allFollowersExhausted = true;
+          console.log(`   📭 All followers of @${sourceProfile} have been scraped`);
+        }
 
-      // Visit profile
-      const profileResult = await goToProfile(workingPage, username);
-      if (!profileResult.success) {
-        console.log(`   ❌ Could not open profile: ${profileResult.error}`);
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-        stats.leadsFailed++;
-        continue;
+        if (newCount === 0) {
+          console.log(`   ⚠️ No new followers found, moving to next competitor`);
+          break;
+        }
       }
 
-      if (await checkForChallenge(workingPage)) {
-        console.log('   ⚠️  Challenge detected during prospecting');
-      }
+      // Get pending followers for this source
+      const pendingFollowers = pdb.prepare(
+        "SELECT username, source_profile FROM prospect_followers WHERE account_id = ? AND source_profile = ? AND status = 'pending' ORDER BY id"
+      ).all(accountId, sourceProfile);
 
-      // Check contactability
-      const contactCheck = await checkCanContact(workingPage);
-      if (!contactCheck.canContact) {
-        console.log(`   🔒 @${username}: No Contact button`);
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-        stats.leadsSkipped++;
-        continue;
-      }
+      console.log(`   📋 ${pendingFollowers.length} pending followers to analyze`);
 
-      // Scrape profile data (bio, fullName, followersCount)
-      const profileData = await scrapeProfileData(workingPage);
-      console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+      for (const follower of pendingFollowers) {
+        if (stats.leadsContacted >= totalLimit) {
+          console.log(`\n🎯 Goal reached (${stats.leadsContacted}/${totalLimit}). Stopping.`);
+          break;
+        }
 
-      // Filter: max followers
-      if (!withinFollowersLimit(profileData.followersCount, outreachConfig.maxFollowers)) {
-        console.log(`   👥 @${username}: Too many followers (${profileData.followersCount} > ${outreachConfig.maxFollowers})`);
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-        stats.leadsSkipped++;
-        continue;
-      }
+        const username = follower.username;
 
-      // Filter: bio keywords
-      if (!matchesBioKeywords(profileData.bio, outreachConfig.bioKeywords)) {
-        console.log(`   🏷️ @${username}: Bio doesn't match keywords`);
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-        stats.leadsSkipped++;
-        continue;
-      }
+        // Skip if already a lead in the system
+        const existingLead = dbFunctions.getLeadByUsername(username, accountId);
+        const skipStatuses = ['contacted', 'queued', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
+        if (existingLead && skipStatuses.includes(existingLead.status)) {
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          continue;
+        }
 
-      // LLM qualification
-      let accompanimentType = null;
-      if (!skipQualification) {
-        const qualificationPrompt = outreachConfig.qualificationPrompt;
-        const extractAccompaniment = !qualificationPrompt && !!outreachConfig.niche;
-        const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
+        console.log(`\n   --- Processing @${username} (${stats.leadsContacted + 1}/${totalLimit}) ---`);
+        stats.leadsProcessed++;
+
+        // Visit profile
+        const profileResult = await goToProfile(workingPage, username);
+        if (!profileResult.success) {
+          console.log(`   ❌ Could not open profile: ${profileResult.error}`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsFailed++;
+          continue;
+        }
+
+        if (await checkForChallenge(workingPage)) {
+          console.log('   ⚠️  Challenge detected during prospecting');
+        }
+
+        // Check contactability
+        const contactCheck = await checkCanContact(workingPage);
+        if (!contactCheck.canContact) {
+          console.log(`   🔒 @${username}: No Contact button`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsSkipped++;
+          continue;
+        }
+
+        // Scrape profile data (bio, fullName, followersCount)
+        const profileData = await scrapeProfileData(workingPage);
+        console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+
+        // Filter: max followers
+        if (!withinFollowersLimit(profileData.followersCount, outreachConfig.maxFollowers)) {
+          console.log(`   👥 @${username}: Too many followers (${profileData.followersCount} > ${outreachConfig.maxFollowers})`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsSkipped++;
+          continue;
+        }
+
+        // Filter: reject présentiel businesses (massage, etc.)
+        if (bioContainsRejectWord(profileData.bio, profileData.fullName)) {
+          console.log(`   🚫 @${username}: Rejected (présentiel business)`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsSkipped++;
+          continue;
+        }
+
+        // LLM qualification
+        let accompanimentType = null;
+        if (!skipQualification) {
+          const qualificationPrompt = outreachConfig.qualificationPrompt;
+          const extractAccompaniment = !qualificationPrompt && !!outreachConfig.niche;
+          const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
 
         if (!qualResult.qualified) {
           const failReason = qualResult.reason === 'foreign_language' ? 'foreign_language' : 'competitor';
@@ -658,18 +700,17 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         const accompSuffix = accompanimentType ? ` en ${accompanimentType}` : '';
         finalMessage = prospectMessageB
           .replace('{name}', aiFirstName || '')
-          .replace('{accomp}', accompSuffix)
-          .replace(/^Hello\s+,/, 'Hello,');
+          .replace('{accomp}', accompSuffix);
       } else if (leadVariant === 'A' && prospectMessageA) {
         finalMessage = prospectMessageA
-          .replace('{name}', aiFirstName || '')
-          .replace(/Hello\s+,/, 'Hello,')
-          .replace(/Hello\s+!/, 'Hello !');
+          .replace('{name}', aiFirstName || '');
       } else if (aiFirstName) {
         finalMessage = `${aiFirstName} ?`;
       } else {
         finalMessage = 'Hello !';
       }
+      // Clean up spacing when name is missing: "Coucou , " → "Coucou, "
+      finalMessage = finalMessage.replace(/\s+,/g, ',').replace(/\s+!/g, ' !').trim();
 
       const validation = validateMessage(finalMessage);
       if (!validation.valid) {
@@ -706,8 +747,9 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
       }
 
       await delay(2000, 4000);
-    }
-  }
+      } // end for (follower of pendingFollowers)
+    } // end while (batch loop per competitor)
+  } // end for (sourceProfile of sourceList)
 
   // Print stats and close
   console.log(`\n🎯 PROSPECTING COMPLETE (followers mode)`);

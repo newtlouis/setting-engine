@@ -14,6 +14,28 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 // Cache for prompt data to avoid repeated DB queries
 const promptCache = new Map();
 
+// Retry wrapper for OpenAI API calls (handles rate limits)
+const MAX_RETRIES = 3;
+async function openaiPost(url, data, config) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await axios.post(url, data, config);
+    } catch (err) {
+      const status = err.response?.status;
+      const errorData = err.response?.data?.error;
+      const isRateLimit = status === 429 || errorData?.code === 'rate_limit_exceeded';
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        const retryAfter = parseFloat(errorData?.message?.match(/try again in ([\d.]+)s/)?.[1]) || 15;
+        const waitMs = Math.ceil((retryAfter + 2) * 1000);
+        console.log(`[Engine] ⏳ Rate limit hit (attempt ${attempt}/${MAX_RETRIES}), waiting ${waitMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // ============================================
 // FOREIGN LANGUAGE DETECTION
 // ============================================
@@ -350,6 +372,9 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
                   if (availability.thisWeek.backup.length > 0) {
                       contextDescription += `- PROPOSITION DE SECOURS : ${availability.thisWeek.backup.map(formatSlot).join(', ')}\n`;
                   }
+                  if (availability.thisWeek.all?.length > 0) {
+                      contextDescription += `- TOUS LES CRÉNEAUX DISPONIBLES : ${availability.thisWeek.all.map(formatSlot).join(', ')}\n`;
+                  }
               }
 
               if (hasNextWeek) {
@@ -357,6 +382,9 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
                   contextDescription += `- PROPOSITION PRIMAIRE : ${availability.nextWeek.primary.map(formatSlot).join(', ')}\n`;
                   if (availability.nextWeek.backup.length > 0) {
                       contextDescription += `- PROPOSITION DE SECOURS : ${availability.nextWeek.backup.map(formatSlot).join(', ')}\n`;
+                  }
+                  if (availability.nextWeek.all?.length > 0) {
+                      contextDescription += `- TOUS LES CRÉNEAUX DISPONIBLES : ${availability.nextWeek.all.map(formatSlot).join(', ')}\n`;
                   }
               }
 
@@ -369,11 +397,11 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
                   contextDescription += `- ⚠️ RÈGLE PRIORITAIRE : Le prospect propose un appel MAIS n'a pas encore exprimé d'objectif business clair dans la conversation. Tu ne dois PAS accepter l'appel tout de suite. Réponds avec enthousiasme ("Avec plaisir !") puis enchaîne IMMÉDIATEMENT avec une question sur son objectif : "Avant qu'on se cale ça, dis-moi, c'est quoi ton plus gros challenge dans ton activité en ce moment ?" Une fois l'objectif identifié, tu pourras proposer les créneaux.\n`;
               }
               contextDescription += `- ⚠️ TOUS les créneaux ci-dessus sont en HEURE DE PARIS (Europe/Paris). Ne précise PAS "heure de Paris" dans ton message SAUF si le prospect a mentionné être dans un autre pays/fuseau (Canada, Belgique, etc.). Dans ce cas seulement, ajoute "(heure de Paris)".\n`;
-              contextDescription += `- ⚠️ RÈGLE CRITIQUE : Si le prospect PROPOSE un créneau (jour + heure), tu DOIS vérifier qu'il figure dans la liste ci-dessus. S'il N'Y EST PAS, ne confirme JAMAIS. Réponds : "Malheureusement je ne suis pas dispo à ce moment-là ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2], ça te conviendrait ?" en proposant 2 créneaux de la liste sur 2 jours différents.\n`;
+              contextDescription += `- ⚠️ RÈGLE CRITIQUE : Si le prospect PROPOSE un créneau (jour + heure), tu DOIS vérifier qu'il figure dans "TOUS LES CRÉNEAUX DISPONIBLES" ci-dessus. S'il Y FIGURE, confirme-le immédiatement. S'il N'Y EST PAS, ne confirme JAMAIS. Réponds : "Malheureusement je ne suis pas dispo à ce moment-là ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2], ça te conviendrait ?" en proposant 2 créneaux de la liste sur 2 jours différents.\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
-              contextDescription += `- Si le lead a validé un créneau DE LA LISTE mais n'a pas donné son EMAIL/TÉLÉPHONE -> demande ses coordonnées.\n`;
-              contextDescription += `- Si le lead a donné ses coordonnées -> confirmation chaleureuse.\n`;
+              contextDescription += `- Si le lead a validé un créneau DE LA LISTE -> suis le script de l'étape suivante (STEP_6 ou équivalent) pour récupérer ses coordonnées. Ne demande PAS d'email/téléphone de ta propre initiative — utilise EXACTEMENT le message type du script.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> confirmation chaleureuse selon le script.\n`;
           } else {
               contextDescription += `\n\n⚠️ AUCUN CRÉNEAU DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
           }
@@ -460,7 +488,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   const lastUserMsgText = conversationHistory.filter(m => m.role === 'user').pop()?.text || '';
   if (isForeignLanguageMessage(lastUserMsgText)) {
     console.log('[Engine] Foreign language detected, generating closing message');
-    const closingResp = await axios.post(OPENAI_API_URL, {
+    const closingResp = await openaiPost(OPENAI_API_URL, {
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: 'Generate a very short, polite closing message in the SAME language as the user message. Say that unfortunately you only communicate in French and wish them well. 1-2 sentences max. Return ONLY the message text, no JSON.' },
@@ -475,7 +503,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
     }
   }
 
-  const response = await axios.post(OPENAI_API_URL, data, { headers });
+  const response = await openaiPost(OPENAI_API_URL, data, { headers });
 
   if (response.data.choices && response.data.choices.length > 0) {
     const rawContent = response.data.choices[0].message.content.trim();
@@ -527,7 +555,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
             { role: 'user', content: '⚠️ ERREUR: Tu viens d\'abandonner la conversation alors que le prospect n\'a PAS dit non. Tu ne dois JAMAIS abandonner. Le prospect est encore engagé. Génère un nouveau message qui CONTINUE la conversation : pose une question, propose l\'appel gratuit, ou rebondis sur ce qu\'il a dit. Ne dis JAMAIS "bonne continuation" ou "je te souhaite le meilleur". JSON uniquement.' }
           ];
 
-          const retryResp = await axios.post(OPENAI_API_URL, { ...data, messages: retryMessages }, { headers });
+          const retryResp = await openaiPost(OPENAI_API_URL, { ...data, messages: retryMessages }, { headers });
           if (retryResp.data.choices?.[0]) {
             try {
               const retryJson = JSON.parse(retryResp.data.choices[0].message.content.trim());
