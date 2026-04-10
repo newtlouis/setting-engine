@@ -245,23 +245,14 @@ export async function runFollowerWatcher(options = {}) {
         console.log(`      - Already known/contacted in DB: ${alreadyKnownCount}`);
         console.log(`      - New followers to process: ${leadsToProceed.length}`);
         
-        const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
-        console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
-
         if (leadsToProceed.length === 0) {
              console.log(`      - Action: No new followers to process.`);
-             return; // Or continue if there was a loop, here it's main body
+             return;
         }
 
-        console.log(`      - Action: Processing followers until target (${TARGET_MESSAGE_COUNT}) is reached (Current: ${processedCount})`);
+        console.log(`      - Action: Processing all ${leadsToProceed.length} new followers`);
 
         for (const follower of leadsToProceed) {
-            // Check Global Limit
-            if (processedCount >= TARGET_MESSAGE_COUNT) {
-                console.log(`   🛑 Target reached (${processedCount}/${TARGET_MESSAGE_COUNT}). Stopping.`);
-                break;
-            }
-
             const username = follower.username;
             console.log(`\n--- Checking: @${username} ---`);
             
@@ -378,7 +369,8 @@ export async function runFollowerWatcher(options = {}) {
                         dmUrl: dmResult.dmUrl,
                         preparedMessage: finalMessage,
                         firstName: aiFirstName,
-                        source: 'follower'
+                        source: 'follower',
+                        accountId: account.id
                      });
                      
                      if (queueResult) {
@@ -392,7 +384,7 @@ export async function runFollowerWatcher(options = {}) {
                              dm_url: dmResult.dmUrl
                          });
                          processedCount++;
-                         console.log(`   ✅ Queued. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+                         console.log(`   ✅ Queued. Total: ${processedCount}`);
                      } else {
                          console.log(`   ⚠️ Already in queue: @${username}`);
                      }
@@ -412,7 +404,7 @@ export async function runFollowerWatcher(options = {}) {
                     });
                     await addMessage(username, 'assistant', finalMessage, 'new_follower', account.id);
                     processedCount++;
-                    console.log(`   ✅ Message prepared. Progress: ${processedCount}/${TARGET_MESSAGE_COUNT}`);
+                    console.log(`   ✅ Message prepared. Total: ${processedCount}`);
                 }
 
             } else {

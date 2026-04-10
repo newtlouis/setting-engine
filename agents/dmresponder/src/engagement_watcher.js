@@ -41,9 +41,11 @@ const CONFIG = {
         'a répondu à votre commentaire',
         'replied to your comment',
         'a aimé votre commentaire',
+        'aimé votre commentaire',
         'liked your comment',
         'sur la publication de',
-        'on the post of'
+        'on the post of',
+        'ont aimé votre commentaire'
     ]
   },
   MAX_POSTS_PER_SESSION: 8,
@@ -199,15 +201,8 @@ export async function runEngagementWatcher(options = {}) {
             console.log(`      (${p.notifTexts[0]}${p.notifTexts.length > 1 ? ` + ${p.notifTexts.length-1} more` : ''})`);
         });
 
-        // 3. Process each post
-        const TARGET_MESSAGE_COUNT = options.targetMessageCount || 10;
-        console.log(`   🎯 Target: Prepare ${TARGET_MESSAGE_COUNT} outreach messages.`);
-        
+        // 3. Process each post (no limit — queue all contactable leads)
         for (const post of engagedPosts.slice(0, CONFIG.MAX_POSTS_PER_SESSION)) {
-            if (preparedCount >= TARGET_MESSAGE_COUNT) {
-                console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}). Stopping post analysis.`);
-                break;
-            }
 
             console.log(`\n🚀 Analyzing Post: ${post.url}`);
             const typeStr = post.types.map(t => t.toUpperCase()).join(' & ');
@@ -259,16 +254,9 @@ export async function runEngagementWatcher(options = {}) {
                  continue;
             }
             
-            console.log(`      - Action: Processing leads until target (${TARGET_MESSAGE_COUNT}) is reached (Current: ${preparedCount})`);
+            console.log(`      - Action: Processing all ${leadsToProceed.length} new leads`);
 
-            // No slicing here - we process until we hit the global target
             for (const lead of leadsToProceed) {
-                // Check Global Target
-                 if (preparedCount >= TARGET_MESSAGE_COUNT) {
-                    console.log(`   🛑 Target reached (${preparedCount}/${TARGET_MESSAGE_COUNT}) during filtering. Stopping.`);
-                    break;
-                }
-
                 const username = lead.username;
                 console.log(`\n   --- Checking: @${username} (${lead.source}) ---`);
                 
@@ -418,7 +406,8 @@ export async function runEngagementWatcher(options = {}) {
                             firstName: aiFirstName,
                             source: 'engagement',
                             resourceFile: resourceToUpload || null,
-                            resourceUrl: ctaMatch?.url || null
+                            resourceUrl: ctaMatch?.url || null,
+                            accountId: account.id
                         });
                         
                         if (queueResult) {
@@ -433,7 +422,7 @@ export async function runEngagementWatcher(options = {}) {
                                 notes: ctaMatch ? `CTA resource queued: ${ctaMatch.file}` : null
                             });
                             preparedCount++;
-                            console.log(`   ✅ Queued. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
+                            console.log(`   ✅ Queued. Total: ${preparedCount}`);
                         } else {
                             console.log(`   ⚠️ Already in queue: @${username}`);
                         }
@@ -467,7 +456,7 @@ export async function runEngagementWatcher(options = {}) {
                         });
                         await addMessage(username, 'assistant', finalMessage, lead.source, account.id);
                         preparedCount++;
-                        console.log(`   ✅ Message prepared. Progress: ${preparedCount}/${TARGET_MESSAGE_COUNT}`);
+                        console.log(`   ✅ Message prepared. Total: ${preparedCount}`);
                     }
 
                 } else if (dmResult.success && dmResult.scrapedMessages.length > 0) {

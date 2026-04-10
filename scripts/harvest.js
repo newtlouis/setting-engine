@@ -105,46 +105,40 @@ async function main() {
   console.log(`📊 Current queue: ${initialCount} pending leads`);
   console.log(`🎯 Will add ${target} NEW leads\n`);
 
-  // Phase 1: Followers
+  // Phase 1: Followers (no limit — queue all contactable new followers)
   console.log('--- PHASE 1: NEW FOLLOWERS ---');
   let countBefore = await getQueueCount();
   try {
-    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--track-week', '--target-message-count', String(target)]);
+    await runScript('npm', ['run', 'followers', '--', '--profile', profile, '--prepare-only', '--track-week']);
   } catch (err) {
     console.error(`⚠️ Followers phase error: ${err.message}`);
   }
   let countAfter = await getQueueCount();
   let phaseAdded = Math.max(0, countAfter - countBefore);
   added += phaseAdded;
-  console.log(`\n📊 Followers added: +${phaseAdded} leads (Total added: ${added}/${target})`);
+  console.log(`\n📊 Followers added: +${phaseAdded} leads (Total added: ${added})`);
 
-  if (added >= target) {
-    console.log(`\n✅ Target reached after Followers phase!`);
-    return finish(added, countAfter);
-  }
-
-  // Phase 2: Engagement
+  // Phase 2: Engagement (no limit — queue all contactable engaged leads)
   console.log('\n--- PHASE 2: ENGAGEMENT ---');
   countBefore = await getQueueCount();
   try {
-    const remaining = target - added;
-    await runScript('npm', ['run', 'engagement', '--', '--profile', profile, '--prepare-only', '--target-message-count', String(remaining)]);
+    await runScript('npm', ['run', 'engagement', '--', '--profile', profile, '--prepare-only']);
   } catch (err) {
     console.error(`⚠️ Engagement phase error: ${err.message}`);
   }
   countAfter = await getQueueCount();
   phaseAdded = Math.max(0, countAfter - countBefore);
   added += phaseAdded;
-  console.log(`\n📊 Engagement added: +${phaseAdded} leads (Total added: ${added}/${target})`);
+  console.log(`\n📊 Engagement added: +${phaseAdded} leads (Total added: ${added})`);
 
+  // Phase 3: Prospector (only if target not yet reached)
   if (added >= target) {
-    console.log(`\n✅ Target reached after Engagement phase!`);
+    console.log(`\n✅ Target already reached (${added}/${target}) — skipping Prospector.`);
     return finish(added, countAfter);
   }
 
-  // Phase 3: Prospector
   const remaining = target - added;
-  console.log(`\n--- PHASE 3: PROSPECTOR (need ${remaining} more) ---`);
+  console.log(`\n--- PHASE 3: PROSPECTOR (need ${remaining} more to reach ${target}) ---`);
   countBefore = await getQueueCount();
   try {
     await runScript('npm', ['run', 'prospect', '--', '--profile', profile, '--total', String(remaining), '--mode', prospectMode, '--variant', variant]);
@@ -154,7 +148,7 @@ async function main() {
   countAfter = await getQueueCount();
   phaseAdded = Math.max(0, countAfter - countBefore);
   added += phaseAdded;
-  console.log(`\n📊 Prospector added: +${phaseAdded} leads (Total added: ${added}/${target})`);
+  console.log(`\n📊 Prospector added: +${phaseAdded} leads (Total added: ${added})`);
 
   return finish(added, countAfter);
 }

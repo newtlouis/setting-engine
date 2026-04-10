@@ -967,7 +967,7 @@ export async function scrapeProfileMetadata(page, username) {
                 const lower = text.toLowerCase();
                 if (/publications|abonnés|suivi|posts|followers|following|views|likes/i.test(lower)) return false;
                 if (/^[\d.,\s]+[kKmM]?$/.test(text.trim())) return false;
-                if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s’abonner|abonné)$/i.test(text.trim())) return false;
+                if (/^(follow|suivre|message|contacter|edit|modifier|friends|amis|s'abonner|abonné)$/i.test(text.trim())) return false;
                 return true;
             }
 
@@ -1010,7 +1010,7 @@ export async function scrapeProfileMetadata(page, username) {
             const following = buttons.some(b => 
                 b.innerText.includes('Following') || 
                 b.innerText.includes('Suivi') || 
-                b.innerText.includes('S’abonner déjà') ||
+                b.innerText.includes("S'abonner d\u00e9j\u00e0") ||
                 b.innerText.includes('Message')
             );
 
@@ -1046,66 +1046,64 @@ export async function scrapePostLikers(page) {
         console.log('   Scraping likers...');
         
         // 1. Find and click the "likes" count button
-        // Strategy: Find the heart icon and look for its nearby count button
         const clicked = await page.evaluate(async () => {
             const findLikersButton = () => {
-                // Helper to check if a string is purely numeric (ignoring spaces/commas)
                 const isNumeric = (val) => {
-                    const cleaned = val.replace(/[\s,.]/g, '');
+                    const cleaned = val.replace(/[\s\u00A0\u202F,.]/g, "");
                     return cleaned.length > 0 && /^\d+$/.test(cleaned);
                 };
+                const isLikeCount = (val) => {
+                    const cleaned = val.replace(/[\s\u00A0\u202F]/g, "").trim();
+                    return /^[\d,.]+[KkMm]?$/.test(cleaned);
+                };
+                const containsNumber = (val) => {
+                    return /\d+/.test(val.replace(/[\s\u00A0\u202F,.]/g, ""));
+                };
 
-                // NEW STRATEGY: Target the specific structure from Instagram's current HTML
-                // The like count appears as: <span class="x1ypdohk x1s688f x2fvf9 xe9ewy2" role="button" tabindex="0">29</span>
-                // This span is positioned after the heart icon
-                
-                // 1. Find all span elements with role="button" that contain only numeric text
-                const candidates = Array.from(document.querySelectorAll('span[role="button"]'));
+                // STRATEGY 1: Find "liked_by" links (posts with many likes)
+                const likedByLink = document.querySelector("a[href*=\"/liked_by/\"]");
+                if (likedByLink) return likedByLink;
+
+                // STRATEGY 2: Find clickables with "J'aime", "likes", or "autres personne" + a number
+                const allClickables = Array.from(document.querySelectorAll("span[role=\"button\"], a[role=\"link\"], [role=\"button\"]"));
+                const likesTextBtn = allClickables.find(el => {
+                    const text = (el.innerText || "").trim().toLowerCase();
+                    return (text.includes("j'aime") || text.includes("like") || text.includes("autres personne")) && containsNumber(text);
+                });
+                if (likesTextBtn) return likesTextBtn;
+
+                // STRATEGY 3: span[role="button"] with numeric or abbreviated count ("29", "2,5 K")
+                const candidates = Array.from(document.querySelectorAll("span[role=\"button\"]"));
                 const numericSpans = candidates.filter(span => {
                     const text = span.innerText.trim();
-                    return isNumeric(text) && text.length > 0;
+                    return text.length > 0 && (isNumeric(text) || isLikeCount(text));
                 });
-                
-                // 2. Find the heart icon (liked or not liked)
-                const heartIcon = document.querySelector('svg[aria-label*="aime" i], svg[aria-label*="like" i]');
-                
+
+                const heartIcon = document.querySelector("svg[aria-label*=\"aime\" i], svg[aria-label*=\"like\" i]");
                 if (heartIcon && numericSpans.length > 0) {
-                    // Try to find the numeric span that's closest to the heart icon
-                    // Usually it's a sibling or within the same parent container
-                    const heartContainer = heartIcon.closest('.x6s0dn4.x78zum5') || heartIcon.closest('div');
-                    
+                    const heartContainer = heartIcon.closest(".x6s0dn4.x78zum5") || heartIcon.closest("div");
                     if (heartContainer) {
-                        // Look for numeric span within the same parent or nearby
                         const parentContainer = heartContainer.parentElement;
                         if (parentContainer) {
                             const nearbyNumeric = numericSpans.find(span => parentContainer.contains(span));
-                            if (nearbyNumeric) {
-                                return nearbyNumeric;
-                            }
+                            if (nearbyNumeric) return nearbyNumeric;
                         }
                     }
                 }
-                
-                // 3. Fallback: Return the first numeric span (likely to be likes count)
-                if (numericSpans.length > 0) {
-                    return numericSpans[0];
-                }
+                if (numericSpans.length > 0) return numericSpans[0];
 
-                // 4. Legacy fallback: Try older button structures
-                const allButtons = Array.from(document.querySelectorAll('[role="button"], [role="link"]'));
+                // STRATEGY 4: Legacy fallback
+                const allButtons = Array.from(document.querySelectorAll("[role=\"button\"], [role=\"link\"]"));
                 const numericButtons = allButtons.filter(b => isNumeric(b.innerText.trim()));
-                
-                if (numericButtons.length > 0) {
-                    return numericButtons[0];
-                }
+                if (numericButtons.length > 0) return numericButtons[0];
 
                 return null;
             };
 
             const btn = findLikersButton();
             if (btn) {
-                btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                await new Promise(r => setTimeout(r, 500)); // Wait for scroll
+                btn.scrollIntoView({ block: "center", behavior: "smooth" });
+                await new Promise(r => setTimeout(r, 500));
                 btn.click();
                 return true;
             }
@@ -1115,19 +1113,19 @@ export async function scrapePostLikers(page) {
         if (clicked) {
             await delay(2500, 3500);
         } else {
-            // Final fallback: Use locator for known patterns or direct numeric button
-            const fallback = await page.locator('a[href*="/liked_by/"], span[role="button"]:has-text("likes"), span[role="button"]:has-text("j’aime")').first();
+            // Playwright fallback
+            const sel = 'a[href*="/liked_by/"], span[role="button"]:has-text("likes"), span[role="button"]:has-text("j\'aime"), a:has-text("autres personnes")';
+            const fallback = await page.locator(sel).first();
             if (await fallback.count() > 0) {
                 await fallback.click();
                 await delay(2500, 3500);
             } else {
-                // Try searching for any span/div with role="button" that has numeric text via Playwright locator
                 const numericFallback = page.locator('[role="button"]').filter({ hasText: /^\d+$/ }).first();
                 if (await numericFallback.count() > 0) {
                     await numericFallback.click();
                     await delay(2500, 3500);
                 } else {
-                    console.log('   ⚠️ Could not find likers button. Maybe 0 likes?');
+                    console.log('   Could not find likers button. Maybe 0 likes?');
                     return [];
                 }
             }

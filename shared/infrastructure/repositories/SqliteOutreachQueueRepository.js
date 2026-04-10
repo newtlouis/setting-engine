@@ -22,10 +22,10 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
         const stmt = db.prepare(`
           INSERT INTO outreach_queue (
             username, profile_url, dm_url, prepared_message,
-            first_name, source, resource_file, resource_url, status
+            first_name, source, resource_file, resource_url, account_id, status
           ) VALUES (
             @username, @profileUrl, @dmUrl, @preparedMessage,
-            @firstName, @source, @resourceFile, @resourceUrl, 'pending'
+            @firstName, @source, @resourceFile, @resourceUrl, @accountId, 'pending'
           )
           ON CONFLICT(username) DO UPDATE SET
             status = 'pending',
@@ -34,6 +34,7 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
             source = @source,
             resource_file = COALESCE(@resourceFile, resource_file),
             resource_url = COALESCE(@resourceUrl, resource_url),
+            account_id = COALESCE(@accountId, account_id),
             error = NULL,
             sent_at = NULL,
             created_at = datetime('now')
@@ -49,7 +50,8 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
           firstName: entry.firstName || null,
           source: entry.source || null,
           resourceFile: entry.resourceFile || null,
-          resourceUrl: entry.resourceUrl || null
+          resourceUrl: entry.resourceUrl || null,
+          accountId: entry.accountId || null
         });
 
         return row || null;

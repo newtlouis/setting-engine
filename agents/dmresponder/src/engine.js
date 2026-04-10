@@ -400,8 +400,23 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
               contextDescription += `- ⚠️ RÈGLE CRITIQUE : Si le prospect PROPOSE un créneau (jour + heure), tu DOIS vérifier qu'il figure dans "TOUS LES CRÉNEAUX DISPONIBLES" ci-dessus. S'il Y FIGURE, confirme-le immédiatement. S'il N'Y EST PAS, ne confirme JAMAIS. Réponds : "Malheureusement je ne suis pas dispo à ce moment-là ! Je peux te proposer [CRENEAU_1] ou [CRENEAU_2], ça te conviendrait ?" en proposant 2 créneaux de la liste sur 2 jours différents.\n`;
               contextDescription += `- Propose d'abord les créneaux CETTE SEMAINE.\n`;
               contextDescription += `- Si le prospect dit ne pas pouvoir cette semaine ou demande la semaine prochaine → propose les créneaux SEMAINE PROCHAINE.\n`;
-              contextDescription += `- Si le lead a validé un créneau DE LA LISTE -> suis le script de l'étape suivante (STEP_6 ou équivalent) pour récupérer ses coordonnées. Ne demande PAS d'email/téléphone de ta propre initiative — utilise EXACTEMENT le message type du script.\n`;
-              contextDescription += `- Si le lead a donné ses coordonnées -> confirmation chaleureuse selon le script.\n`;
+              // Inject STEP_6 and STEP_7 scripts so the LLM knows EXACTLY what to say after booking validation
+              if (accountId) {
+                  try {
+                      const step6 = getDb().prepare("SELECT conversation_script FROM funnel_stages WHERE account_id = ? AND stage_name = 'step6'").get(accountId);
+                      const step7 = getDb().prepare("SELECT conversation_script FROM funnel_stages WHERE account_id = ? AND stage_name = 'step7'").get(accountId);
+                      if (step6?.conversation_script) {
+                          contextDescription += `- ⚠️ RÈGLE CRITIQUE APRÈS VALIDATION D'UN CRÉNEAU : Utilise EXACTEMENT ce script (STEP_6) :\n${step6.conversation_script}\n`;
+                      }
+                      if (step7?.conversation_script) {
+                          contextDescription += `- APRÈS RÉCEPTION DES COORDONNÉES, utilise ce script (STEP_7) :\n${step7.conversation_script}\n`;
+                      }
+                  } catch (e) {
+                      console.error('[Engine] Failed to inject STEP_6/7 scripts:', e.message);
+                  }
+              }
+              contextDescription += `- Si le lead a validé un créneau DE LA LISTE -> utilise EXACTEMENT le script STEP_6 ci-dessus. Ne demande PAS d'email/téléphone de ta propre initiative — envoie le message type tel quel.\n`;
+              contextDescription += `- Si le lead a donné ses coordonnées -> utilise le script STEP_7 ci-dessus.\n`;
           } else {
               contextDescription += `\n\n⚠️ AUCUN CRÉNEAU DISPONIBLE. N'invente PAS de créneaux. Demande simplement au prospect quand il serait disponible dans la semaine et dis-lui que tu reviendras vers lui avec des créneaux précis.\n`;
           }
