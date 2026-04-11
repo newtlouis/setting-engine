@@ -18,7 +18,7 @@ import { CONFIG } from './config.js';
  * @returns {Promise<{qualified: boolean, reason?: string, raw?: string, accompanimentType?: string}>}
  */
 export async function qualifyLead(bio, customPrompt = null, username = 'unknown', options = {}) {
-  const { extractAccompaniment = false } = options;
+  const { extractAccompaniment = false, fullName = null } = options;
 
   // Skip if qualification is disabled or no API key
   if (!CONFIG.QUALIFICATION_ENABLED) {
@@ -49,21 +49,24 @@ export async function qualifyLead(bio, customPrompt = null, username = 'unknown'
     // Language check is ALWAYS prepended, regardless of custom prompt
     const languagePrefix = `ÉTAPE 1 — LANGUE : Si la bio n'est PAS en français (espagnol, anglais, portugais, italien, hongrois, arabe, allemand, ou toute autre langue non-française), réponds UNIQUEMENT "FOREIGN" et ignore tout le reste. Les emojis, noms propres et mots universels (coach, yoga, app, etc.) ne comptent pas — regarde les vrais mots de la bio.\n\nÉTAPE 2 — Si la bio EST en français :\n`;
 
+    const profileContext = fullName ? `Nom du profil: ${fullName}\nBio: ${bio.trim()}` : `Bio: ${bio.trim()}`;
+
     if (extractAccompaniment && !customPrompt) {
-      prompt = `Analyse cette bio Instagram.
+      prompt = `Analyse ce profil Instagram.
 
 ${languagePrefix}
 - Si la personne est un professionnel de l'accompagnement, un coach, un thérapeute, un formateur, ou travaille dans le développement personnel, réponds "NON".
 - Sinon, réponds "OUI" suivi d'un pipe "|" et du type d'accompagnement/service que la personne propose (en quelques mots, ex: yoga, sophrologie, coaching en nutrition, hypnothérapie, naturopathie, bien-être, etc.).
 - Si tu ne peux pas identifier le type d'accompagnement, réponds "OUI|UNKNOWN".
+- IMPORTANT: Analyse à la fois le nom du profil ET la bio pour déterminer le métier de la personne.
 
-Bio: ${bio.trim()}
+${profileContext}
 
 Réponse (FOREIGN ou OUI|type ou NON):`;
       maxTokens = 30;
     } else {
       const basePrompt = customPrompt || CONFIG.QUALIFICATION_PROMPT;
-      const filledPrompt = basePrompt.replace('{bio}', bio.trim()).replace('{username}', username);
+      const filledPrompt = basePrompt.replace('{bio}', profileContext).replace('{username}', username);
       prompt = `${languagePrefix}${filledPrompt}`;
       maxTokens = 30;
     }

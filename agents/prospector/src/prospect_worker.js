@@ -335,7 +335,7 @@ export async function runProspector(options = {}) {
                const qualificationPrompt = outreachConfig.qualificationPrompt;
                // Extract accompaniment type when niche is set (profile-level opt-in)
                const extractAccompaniment = !qualificationPrompt && !!outreachConfig.niche;
-               const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
+               const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment, fullName: profileData.fullName });
 
                if (!qualResult.qualified) {
                  const failReason = qualResult.reason === 'foreign_language' ? 'foreign_language' : 'competitor';
@@ -680,7 +680,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         if (!skipQualification) {
           const qualificationPrompt = outreachConfig.qualificationPrompt;
           const extractAccompaniment = !qualificationPrompt && !!outreachConfig.niche;
-          const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment });
+          const qualResult = await qualifyLead(profileData.bio, qualificationPrompt, username, { extractAccompaniment, fullName: profileData.fullName });
 
         if (!qualResult.qualified) {
           const failReason = qualResult.reason === 'foreign_language' ? 'foreign_language' : 'competitor';
