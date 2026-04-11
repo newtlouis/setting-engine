@@ -109,6 +109,22 @@ async function isRealFirstName(name) {
   }
 }
 
+/**
+ * Checks gender of a name via Genderize.io API.
+ * @param {string} name
+ * @returns {Promise<{gender: string|null, probability: number}>}
+ */
+export async function getNameGender(name) {
+  try {
+    const response = await fetch(`https://api.genderize.io?name=${encodeURIComponent(name)}`);
+    if (!response.ok) return { gender: null, probability: 0 };
+    const data = await response.json();
+    return { gender: data.gender, probability: data.probability || 0 };
+  } catch {
+    return { gender: null, probability: 0 };
+  }
+}
+
 const EXTRACTION_PROMPT = `I will give you an Instagram username and a profile "full name".
 Your goal is to identify the **First Name** of the person to use in a friendly message (e.g. "Hello [Name]").
 

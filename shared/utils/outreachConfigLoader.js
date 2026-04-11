@@ -27,7 +27,7 @@ export function loadOutreachConfig(accountId, profileConfig) {
 
     // 2. Persona data from account_personas
     const persona = db.prepare(
-        'SELECT qualification_prompt, niche, post_booking_message, prospect_mode_hashtag, prospect_mode_profile, prospect_message_a, prospect_message_b, bio_keywords, max_followers FROM account_personas WHERE account_id = ?'
+        'SELECT qualification_prompt, niche, post_booking_message, prospect_mode_hashtag, prospect_mode_profile, prospect_message_a, prospect_message_b, bio_keywords, max_followers, female_only FROM account_personas WHERE account_id = ?'
     ).get(accountId);
 
     // 3. CTA resources
@@ -66,6 +66,7 @@ export function loadOutreachConfig(accountId, profileConfig) {
         prospectMessageA: persona?.prospect_message_a || null,
         prospectMessageB: persona?.prospect_message_b || null,
         bioKeywords: persona?.bio_keywords ? persona.bio_keywords.split(',').map(k => k.trim().toLowerCase()) : null,
-        maxFollowers: persona?.max_followers || null
+        maxFollowers: persona?.max_followers || null,
+        femaleOnly: !!persona?.female_only
     };
 }

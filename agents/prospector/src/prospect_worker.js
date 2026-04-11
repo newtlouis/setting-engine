@@ -24,7 +24,7 @@ import {
   getWorkingPage
 } from '../../outreach/src/dm_sender.js';
 import { qualifyLead } from '../../outreach/src/qualify_lead.js';
-import { extractNameWithAI } from '../../outreach/src/name_extractor.js';
+import { extractNameWithAI, getNameGender } from '../../outreach/src/name_extractor.js';
 import { generateFirstMessage, validateMessage } from '../../outreach/src/templates.js';
 
 // Shared utilities
@@ -361,6 +361,25 @@ export async function runProspector(options = {}) {
                   console.error(`   ⚠️ Name extraction failed: ${e.message}`);
              }
 
+             // Female-only filter (comments mode)
+             if (outreachConfig.femaleOnly) {
+               if (!aiFirstName) {
+                 console.log(`   🚫 @${username}: No first name detected → skipping (female-only mode)`);
+                 saveLeadToDb(username, comment, accountId, 'failed', 'no_name_female_filter', null, null, null, currentSourceRaw);
+                 stats.leadsSkipped++;
+                 await delay(500, 1000);
+                 continue;
+               }
+               const genderInfo = await getNameGender(aiFirstName);
+               if (genderInfo.gender !== 'female' || genderInfo.probability < 0.7) {
+                 console.log(`   🚫 @${username}: "${aiFirstName}" is ${genderInfo.gender || 'unknown'} (${Math.round(genderInfo.probability * 100)}%) → skipping`);
+                 saveLeadToDb(username, comment, accountId, 'failed', 'not_female', null, null, aiFirstName, currentSourceRaw);
+                 stats.leadsSkipped++;
+                 await delay(500, 1000);
+                 continue;
+               }
+             }
+
               // Determine A/B variant for this lead
               let leadVariant;
               if (variantMode === 'random') {
@@ -683,6 +702,24 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         aiFirstName = await extractNameWithAI(username, profileData.fullName);
       } catch (e) {
         console.error(`   ⚠️ Name extraction failed: ${e.message}`);
+      }
+
+      // Filter: female names only (if configured)
+      if (outreachConfig.femaleOnly) {
+        if (!aiFirstName) {
+          console.log(`   🚫 @${username}: No first name detected → skipping (female-only mode)`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsSkipped++;
+          continue;
+        }
+        const genderInfo = await getNameGender(aiFirstName);
+        if (genderInfo.gender !== 'female' || genderInfo.probability < 0.7) {
+          console.log(`   🚫 @${username}: "${aiFirstName}" is ${genderInfo.gender || 'unknown'} (${Math.round(genderInfo.probability * 100)}%) → skipping (female-only mode)`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          stats.leadsSkipped++;
+          continue;
+        }
+        console.log(`   ♀️ @${username}: "${aiFirstName}" confirmed female (${Math.round(genderInfo.probability * 100)}%)`);
       }
 
       let leadVariant;
