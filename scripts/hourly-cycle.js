@@ -43,7 +43,18 @@ function isProcessRunning(pid) {
   }
 }
 
-const FORCE_KILL_AFTER_MINUTES = 60;
+const FORCE_KILL_AFTER_MINUTES = 20;
+
+function isBrowserAlive(profile) {
+  // Check if the actual Chrome browser process is running for this profile
+  try {
+    const browserDir = `browser-data-${profile}-responder`;
+    const result = execSync(`pgrep -f "user-data-dir=.*${browserDir}" 2>/dev/null || true`, { encoding: 'utf8' }).trim();
+    return result.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 function isBrowserSessionOpen(profile) {
   const lockFile = path.join(PROJECT_ROOT, 'browser-data', `browser-data-${profile}-responder`, '.session.pid');
@@ -56,6 +67,19 @@ function isBrowserSessionOpen(profile) {
       return false;
     }
 
+    // If the Node process is alive but Chrome browser is gone, kill the zombie
+    if (!isBrowserAlive(profile)) {
+      console.log(`   ⚠️ Orphan detected: PID ${pid} alive but browser closed — killing`);
+      try { process.kill(pid, 'SIGTERM'); } catch {}
+      const start = Date.now();
+      while (Date.now() - start < 3000 && isProcessRunning(pid)) { /* wait */ }
+      if (isProcessRunning(pid)) {
+        try { process.kill(pid, 'SIGKILL'); } catch {}
+      }
+      try { unlinkSync(lockFile); } catch {}
+      return false;
+    }
+
     // Check how long this process has been running
     const lockStat = statSync(lockFile);
     const lockAgeMinutes = (Date.now() - lockStat.mtimeMs) / 60000;
@@ -63,11 +87,8 @@ function isBrowserSessionOpen(profile) {
     if (lockAgeMinutes >= FORCE_KILL_AFTER_MINUTES) {
       console.log(`   ⚠️ Zombie detected: PID ${pid} running for ${Math.round(lockAgeMinutes)}min — killing`);
       try { process.kill(pid, 'SIGTERM'); } catch {}
-      // Wait 3s then force kill if still alive
       const start = Date.now();
-      while (Date.now() - start < 3000 && isProcessRunning(pid)) {
-        // busy wait
-      }
+      while (Date.now() - start < 3000 && isProcessRunning(pid)) { /* wait */ }
       if (isProcessRunning(pid)) {
         try { process.kill(pid, 'SIGKILL'); } catch {}
       }

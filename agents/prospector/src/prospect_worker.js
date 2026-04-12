@@ -125,16 +125,36 @@ export async function runProspector(options = {}) {
   // so they can run concurrently without lock conflicts
   console.log(`\n🌐 Initializing browser (prospector for ${profile})...`);
   const browserObj = await initBrowser({ profile, purpose: 'prospector' });
-  const workingPage = getWorkingPage();
+  let workingPage = getWorkingPage();
 
   try {
     // ====================================
     // FOLLOWERS MODE — scrape followers of competitor profiles
     // ====================================
     if (mode === 'followers') {
-      return await runFollowersMode({
+      const followersStats = await runFollowersMode({
         workingPage, accountId, profile, totalLimit, skipQualification, variantMode, outreachConfig, stats
       });
+
+      // Fallback to comments mode if followers didn't reach the target
+      if (followersStats.leadsContacted < totalLimit) {
+        const remaining = totalLimit - followersStats.leadsContacted;
+        console.log(`\n🔄 Followers mode got ${followersStats.leadsContacted}/${totalLimit} — falling back to comments mode for ${remaining} more leads`);
+        // Update stats and totalLimit for the comments phase
+        Object.assign(stats, followersStats);
+        totalLimit = remaining;
+        // Re-init browser if closed by followers mode
+        if (!workingPage || workingPage.isClosed()) {
+          await initBrowser({ profile, purpose: 'prospector' });
+          workingPage = getWorkingPage();
+        }
+        // Fall through to comments mode below
+      } else {
+        // Goal reached in followers mode — close and return
+        await closeBrowser().catch(() => {});
+        dbFunctions.closeDatabase();
+        return followersStats;
+      }
     }
 
     // ====================================
@@ -799,9 +819,8 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
   console.log('');
   console.log(`✨ Queued ${stats.leadsContacted} leads for later sending.`);
   console.log(`   Total pending in queue: ${dbFunctions.getQueueCount()}`);
-  await closeBrowser().catch(() => {});
-  dbFunctions.closeDatabase();
 
+  // Don't close browser/db here — caller handles it (may fallback to comments mode)
   return stats;
 }
 
