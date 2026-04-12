@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 // Import from Collector agent
 import { discoverFromHashtags, discoverFromProfiles, extractPostAuthor } from '../../collector/src/discover.js';
 import { scrapePostComments } from '../../collector/src/scrape_post.js';
+import { scrapePostLikers } from '../../dmresponder/src/scraper.js';
 
 // Import from Outreach agent
 import {
@@ -262,29 +263,60 @@ export async function runProspector(options = {}) {
               console.log('   ⚠️ Could not extract post author.');
             }
           } else {
-            // COMMENTS MODE (default): scrape comments, leads = commenters
+            // COMMENTS + LIKERS MODE: scrape both likers and commenters
+            const uniqueUsernames = new Set();
+
+            // 1. Scrape likers first
+            console.log('   Scraping likers...');
+            try {
+              const likers = await scrapePostLikers(workingPage);
+              if (likers && likers.length > 0) {
+                console.log(`   ❤️ Found ${likers.length} likers`);
+                for (const likerUsername of likers) {
+                  if (!likerUsername) continue;
+                  if (likerUsername.toLowerCase() === 'reels') continue;
+                  if (uniqueUsernames.has(likerUsername)) continue;
+                  uniqueUsernames.add(likerUsername);
+                  candidates.push({
+                    username: likerUsername,
+                    comment: { username: likerUsername, comment_text: null, post_url: postUrl }
+                  });
+                }
+              } else {
+                console.log('   No likers found (or could not open likers popup).');
+              }
+            } catch (e) {
+              console.log(`   ⚠️ Likers scraping failed: ${e.message}`);
+            }
+
+            // 2. Then scrape commenters
             console.log('   Scraping comments...');
             const comments = await scrapePostComments(workingPage, postUrl, 500);
 
-            if (!comments || comments.length === 0) {
+            if (comments && comments.length > 0) {
+              console.log(`   💬 Found ${comments.length} comments`);
+              stats.commentsFound += comments.length;
+
+              for (const comment of comments) {
+                const username = comment.username;
+                if (!username) continue;
+                if (username.toLowerCase() === 'reels') continue;
+                if (uniqueUsernames.has(username)) continue;
+                uniqueUsernames.add(username);
+                candidates.push({ username, comment });
+              }
+            } else {
               console.log('   No comments found on this post.');
+            }
+
+            if (candidates.length === 0) {
+              console.log('   No candidates (likers or commenters) found on this post.');
               dbFunctions.upsertPost(post);
               dbFunctions.markPostScraped(postUrl);
               continue;
             }
 
-            console.log(`   Found ${comments.length} comments`);
-            stats.commentsFound += comments.length;
-
-            const uniqueUsernames = new Set();
-            for (const comment of comments) {
-              const username = comment.username;
-              if (!username) continue;
-              if (username.toLowerCase() === 'reels') continue;
-              if (uniqueUsernames.has(username)) continue;
-              uniqueUsernames.add(username);
-              candidates.push({ username, comment });
-            }
+            console.log(`   📊 Total unique candidates: ${candidates.length} (likers + commenters)`);
           }
 
           // STEP 3: Process each candidate lead
