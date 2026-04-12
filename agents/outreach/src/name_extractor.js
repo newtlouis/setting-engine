@@ -101,11 +101,19 @@ function isUsernameFragment(result, username) {
 async function isRealFirstName(name) {
   try {
     const response = await fetch(`https://api.genderize.io?name=${encodeURIComponent(name)}`);
-    if (!response.ok) return false;
+    if (!response.ok) {
+      console.warn(`   ⚠️  Genderize API error (${response.status}) — accepting name "${name}" as fallback`);
+      return true; // Don't reject names when API is unavailable
+    }
     const data = await response.json();
+    if (data.error) {
+      console.warn(`   ⚠️  Genderize API: ${data.error} — accepting name "${name}" as fallback`);
+      return true; // Rate limited or other API error — accept the name
+    }
     return data.count >= 100;
   } catch {
-    return false;
+    console.warn(`   ⚠️  Genderize API unreachable — accepting name "${name}" as fallback`);
+    return true; // Network error — accept the name
   }
 }
 
@@ -117,11 +125,19 @@ async function isRealFirstName(name) {
 export async function getNameGender(name) {
   try {
     const response = await fetch(`https://api.genderize.io?name=${encodeURIComponent(name)}`);
-    if (!response.ok) return { gender: null, probability: 0 };
+    if (!response.ok) {
+      console.warn(`   ⚠️  Genderize API error (${response.status}) — bypassing gender check for "${name}"`);
+      return { gender: 'female', probability: 1, fallback: true }; // Accept when API unavailable
+    }
     const data = await response.json();
+    if (data.error) {
+      console.warn(`   ⚠️  Genderize API: ${data.error} — bypassing gender check for "${name}"`);
+      return { gender: 'female', probability: 1, fallback: true }; // Rate limited — accept
+    }
     return { gender: data.gender, probability: data.probability || 0 };
   } catch {
-    return { gender: null, probability: 0 };
+    console.warn(`   ⚠️  Genderize API unreachable — bypassing gender check for "${name}"`);
+    return { gender: 'female', probability: 1, fallback: true }; // Network error — accept
   }
 }
 

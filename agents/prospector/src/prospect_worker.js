@@ -127,6 +127,7 @@ export async function runProspector(options = {}) {
   console.log(`\n🌐 Initializing browser (prospector for ${profile})...`);
   const browserObj = await initBrowser({ profile, purpose: 'prospector' });
   let workingPage = getWorkingPage();
+  let effectiveLimit = totalLimit;
 
   try {
     // ====================================
@@ -141,9 +142,9 @@ export async function runProspector(options = {}) {
       if (followersStats.leadsContacted < totalLimit) {
         const remaining = totalLimit - followersStats.leadsContacted;
         console.log(`\n🔄 Followers mode got ${followersStats.leadsContacted}/${totalLimit} — falling back to comments mode for ${remaining} more leads`);
-        // Update stats and totalLimit for the comments phase
+        // Update stats for the comments phase
         Object.assign(stats, followersStats);
-        totalLimit = remaining;
+        effectiveLimit = remaining;
         // Re-init browser if closed by followers mode
         if (!workingPage || workingPage.isClosed()) {
           await initBrowser({ profile, purpose: 'prospector' });
@@ -163,7 +164,7 @@ export async function runProspector(options = {}) {
     // ====================================
 
     // STEP 1: Main Loop - Continue until goal reached
-  console.log(`\n🎯 GOAL: Contact ${totalLimit} new leads`);
+  console.log(`\n🎯 GOAL: Contact ${effectiveLimit} new leads`);
   const apiKey = process.env.OPENAI_API_KEY;
   console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
   
@@ -196,12 +197,12 @@ export async function runProspector(options = {}) {
   let sourceIndex = 0;
   let exhaustionCount = 0; // Track how many sources in a row were exhausted
 
-  while (stats.leadsContacted < totalLimit && exhaustionCount < sourceList.length) {
+  while (stats.leadsContacted < effectiveLimit && exhaustionCount < sourceList.length) {
     const currentSourceRaw = sourceList[sourceIndex % sourceList.length];
     const currentSource = parseSource(currentSourceRaw);
-    
+
     console.log(`\n🔄 [Source ${sourceIndex % sourceList.length + 1}/${sourceList.length}] Checking ${currentSourceRaw}...`);
-    console.log(`   Current Progress: ${stats.leadsContacted}/${totalLimit}`);
+    console.log(`   Current Progress: ${stats.leadsContacted}/${effectiveLimit}`);
     
     let posts = [];
     
@@ -231,7 +232,7 @@ export async function runProspector(options = {}) {
 
     // STEP 2: Process each post in the batch
     for (let postIdx = 0; postIdx < posts.length; postIdx++) {
-      if (stats.leadsContacted >= totalLimit) break;
+      if (stats.leadsContacted >= effectiveLimit) break;
         const post = posts[postIdx];
         const postUrl = post.url || post.post_url;
 
@@ -321,7 +322,7 @@ export async function runProspector(options = {}) {
 
           // STEP 3: Process each candidate lead
           for (const { username, comment } of candidates) {
-             if (stats.leadsContacted >= totalLimit) break;
+             if (stats.leadsContacted >= effectiveLimit) break;
 
              // Skip if already in database in active or completed stage
              const existingLead = dbFunctions.getLeadByUsername(username, accountId);
@@ -333,7 +334,7 @@ export async function runProspector(options = {}) {
                continue;
              }
 
-             console.log(`\n   --- Processing @${username} (${stats.leadsContacted + 1}/${totalLimit}) ---`);
+             console.log(`\n   --- Processing @${username} (${stats.leadsContacted + 1}/${effectiveLimit}) ---`);
              stats.leadsProcessed++;
 
              // STEP 3a: Open profile and check contactability
@@ -363,7 +364,7 @@ export async function runProspector(options = {}) {
 
              // STEP 3c: Scrape profile data
              const profileData = await scrapeProfileData(workingPage);
-             console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+             console.log(`   📋 Bio: ${profileData.bio || '(none)'}`);
 
              // STEP 3c.1: Filter by max followers (if configured)
              if (!withinFollowersLimit(profileData.followersCount, outreachConfig.maxFollowers)) {
@@ -413,22 +414,20 @@ export async function runProspector(options = {}) {
                   console.error(`   ⚠️ Name extraction failed: ${e.message}`);
              }
 
-             // Female-only filter (comments mode)
-             if (outreachConfig.femaleOnly) {
-               if (!aiFirstName) {
-                 console.log(`   🚫 @${username}: No first name detected → skipping (female-only mode)`);
-                 saveLeadToDb(username, comment, accountId, 'failed', 'no_name_female_filter', null, null, null, currentSourceRaw);
-                 stats.leadsSkipped++;
-                 await delay(500, 1000);
-                 continue;
-               }
+             // Female-only filter (comments mode) — only block confirmed males
+             if (outreachConfig.femaleOnly && aiFirstName) {
                const genderInfo = await getNameGender(aiFirstName);
-               if (genderInfo.gender !== 'female' || genderInfo.probability < 0.7) {
-                 console.log(`   🚫 @${username}: "${aiFirstName}" is ${genderInfo.gender || 'unknown'} (${Math.round(genderInfo.probability * 100)}%) → skipping`);
+               if (genderInfo.gender === 'male' && genderInfo.probability >= 0.7) {
+                 console.log(`   🚫 @${username}: "${aiFirstName}" is male (${Math.round(genderInfo.probability * 100)}%) → skipping`);
                  saveLeadToDb(username, comment, accountId, 'failed', 'not_female', null, null, aiFirstName, currentSourceRaw);
                  stats.leadsSkipped++;
                  await delay(500, 1000);
                  continue;
+               }
+               if (!genderInfo.gender || genderInfo.fallback) {
+                 console.log(`   ℹ️  @${username}: "${aiFirstName}" gender unknown — accepting`);
+               } else {
+                 console.log(`   ♀️ @${username}: "${aiFirstName}" confirmed ${genderInfo.gender} (${Math.round(genderInfo.probability * 100)}%)`);
                }
              }
 
@@ -486,7 +485,7 @@ export async function runProspector(options = {}) {
                   console.log(`   📦 Queued @${username} for later sending.`);
                   saveLeadToDb(username, comment, accountId, 'queued', null, profileData, null, aiFirstName, currentSourceRaw, leadVariant, accompanimentType);
                   stats.leadsContacted++;
-                  console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
+                  console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${effectiveLimit}`);
               } else {
                   console.log(`   ⚠️ Already in queue: @${username}`);
               }
@@ -505,7 +504,7 @@ export async function runProspector(options = {}) {
       } // End post loop
       
       // Delay between batches
-      if (stats.leadsContacted < totalLimit) {
+      if (stats.leadsContacted < effectiveLimit) {
           console.log('   ⏳ Waiting before finding next batch...');
           await delay(5000, 10000);
       }
@@ -678,7 +677,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         const existingLead = dbFunctions.getLeadByUsername(username, accountId);
         const skipStatuses = ['contacted', 'queued', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
         if (existingLead && skipStatuses.includes(existingLead.status)) {
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('already_in_db:' + existingLead.status, accountId, username);
           continue;
         }
 
@@ -689,7 +688,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         const profileResult = await goToProfile(workingPage, username);
         if (!profileResult.success) {
           console.log(`   ❌ Could not open profile: ${profileResult.error}`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('profile_error:' + profileResult.error, accountId, username);
           stats.leadsFailed++;
           continue;
         }
@@ -702,19 +701,19 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         const contactCheck = await checkCanContact(workingPage);
         if (!contactCheck.canContact) {
           console.log(`   🔒 @${username}: No Contact button`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = 'no_contact_button' WHERE account_id = ? AND username = ?").run(accountId, username);
           stats.leadsSkipped++;
           continue;
         }
 
         // Scrape profile data (bio, fullName, followersCount)
         const profileData = await scrapeProfileData(workingPage);
-        console.log(`   📋 Bio: ${profileData.bio ? profileData.bio.substring(0, 50) + '...' : '(none)'}`);
+        console.log(`   📋 Bio: ${profileData.bio || '(none)'}`);
 
         // Filter: max followers
         if (!withinFollowersLimit(profileData.followersCount, outreachConfig.maxFollowers)) {
           console.log(`   👥 @${username}: Too many followers (${profileData.followersCount} > ${outreachConfig.maxFollowers})`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('too_many_followers:' + profileData.followersCount, accountId, username);
           stats.leadsSkipped++;
           continue;
         }
@@ -722,7 +721,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         // Filter: reject présentiel businesses (massage, etc.)
         if (bioContainsRejectWord(profileData.bio, profileData.fullName)) {
           console.log(`   🚫 @${username}: Rejected (présentiel business)`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = 'reject_word' WHERE account_id = ? AND username = ?").run(accountId, username);
           stats.leadsSkipped++;
           continue;
         }
@@ -738,7 +737,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
           const failReason = qualResult.reason === 'foreign_language' ? 'foreign_language' : 'competitor';
           const icon = failReason === 'foreign_language' ? '🌍' : '🚫';
           console.log(`   ${icon} @${username}: REJECTED (${qualResult.reason})`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('llm:' + qualResult.reason, accountId, username);
           stats.leadsSkipped++;
           await delay(1000, 2000);
           continue;
@@ -756,22 +755,20 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         console.error(`   ⚠️ Name extraction failed: ${e.message}`);
       }
 
-      // Filter: female names only (if configured)
-      if (outreachConfig.femaleOnly) {
-        if (!aiFirstName) {
-          console.log(`   🚫 @${username}: No first name detected → skipping (female-only mode)`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
-          stats.leadsSkipped++;
-          continue;
-        }
+      // Filter: female names only (if configured) — only block confirmed males
+      if (outreachConfig.femaleOnly && aiFirstName) {
         const genderInfo = await getNameGender(aiFirstName);
-        if (genderInfo.gender !== 'female' || genderInfo.probability < 0.7) {
-          console.log(`   🚫 @${username}: "${aiFirstName}" is ${genderInfo.gender || 'unknown'} (${Math.round(genderInfo.probability * 100)}%) → skipping (female-only mode)`);
-          pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+        if (genderInfo.gender === 'male' && genderInfo.probability >= 0.7) {
+          console.log(`   🚫 @${username}: "${aiFirstName}" is male (${Math.round(genderInfo.probability * 100)}%) → skipping`);
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('male:' + aiFirstName, accountId, username);
           stats.leadsSkipped++;
           continue;
         }
-        console.log(`   ♀️ @${username}: "${aiFirstName}" confirmed female (${Math.round(genderInfo.probability * 100)}%)`);
+        if (!genderInfo.gender || genderInfo.fallback) {
+          console.log(`   ℹ️  @${username}: "${aiFirstName}" gender unknown — accepting`);
+        } else {
+          console.log(`   ♀️ @${username}: "${aiFirstName}" confirmed ${genderInfo.gender} (${Math.round(genderInfo.probability * 100)}%)`);
+        }
       }
 
       let leadVariant;
@@ -832,7 +829,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         console.log(`   ✅ Queued. Progress: ${stats.leadsContacted}/${totalLimit}`);
       } else {
         console.log(`   ⚠️ Already in queue: @${username}`);
-        pdb.prepare("UPDATE prospect_followers SET status = 'rejected' WHERE account_id = ? AND username = ?").run(accountId, username);
+        pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = 'already_in_queue' WHERE account_id = ? AND username = ?").run(accountId, username);
       }
 
       await delay(2000, 4000);
