@@ -22,7 +22,7 @@ import { extractFirstName } from './templates.js';
 import { getBrowserDataDir } from '../../../shared/paths.js';
 import { applyStealthToPage } from '../../../shared/stealth.js';
 import { verifyProfilePage, checkForChallenge } from '../../../shared/pageVerification.js';
-import { BrowserService, delay, typeHumanLike, gotoWithRetry } from '../../../shared/browser/index.js';
+import { BrowserService, delay, typeHumanLike, typeFast, gotoWithRetry } from '../../../shared/browser/index.js';
 
 // Store reference to browser context for tab management
 let browserContext = null;
@@ -410,7 +410,7 @@ export async function scrapeProfileData(page) {
           const candidates = allSpans
               .map(s => s.textContent.trim())
               .filter(text => isValidName(text))
-              .filter(text => !text.includes('@')); // Ignore handles
+              .filter(text => !text.startsWith('@')); // Ignore handles (but keep bios mentioning @accounts)
               
           if (candidates.length > 0) {
               // The "Name" is usually the first short valid candidate
@@ -596,12 +596,12 @@ export async function sendMessage(page, message, dryRun = true) {
     // Click to focus the contenteditable div
     await input.click();
     await delay(300, 500);
-    
-    // Type message with human-like delays
-    await typeHumanLike(page, message);
-    
+
+    // Paste message instantly
+    await typeFast(page, message);
+
     await delay(500, 1000);
-    
+
     if (dryRun) {
       console.log('      [DRY RUN] Message typed but not sent');
       // Clear the message using Cmd+A then Backspace
@@ -883,12 +883,12 @@ async function typeMessageOnly(page, message) {
     // Click to focus the contenteditable div
     await input.click();
     await delay(300, 500);
-    
-    // Type message with human-like delays
-    await typeHumanLike(page, message);
-    
+
+    // Paste message instantly
+    await typeFast(page, message);
+
     await delay(300, 500);
-    
+
     // DON'T send, DON'T clear - leave message in input
     return { success: true, typed: true };
     

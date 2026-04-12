@@ -62,20 +62,20 @@ export async function typeHumanLike(page, text, options = {}) {
   // Use for...of to correctly iterate over Unicode code points (preserving emojis)
   for (const char of text) {
     // Base delay: faster for common letters, slower for symbols
-    let charDelay = 30 + Math.random() * 50;
+    let charDelay = 15 + Math.random() * 25;
 
     // Longer pauses for punctuation
     if (['.', '!', '?', '\n'].includes(char)) {
-      charDelay += Math.random() * 400 + 200;
-    } else if ([',', ';', ':'].includes(char)) {
       charDelay += Math.random() * 200 + 100;
+    } else if ([',', ';', ':'].includes(char)) {
+      charDelay += Math.random() * 100 + 50;
     } else if (char === ' ') {
-      charDelay += Math.random() * 50 + 20;
+      charDelay += Math.random() * 25 + 10;
     }
 
     // Occasional "thinking" pause (1% chance)
     if (Math.random() < 0.01) {
-      charDelay += Math.random() * 1000 + 500;
+      charDelay += Math.random() * 500 + 250;
     }
 
     await page.keyboard.type(char);
