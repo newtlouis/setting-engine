@@ -121,11 +121,11 @@ export async function runProspector(options = {}) {
     leadsFailed: 0
   };
 
-  // Initialize browser with per-profile isolation but shared prospector credentials
-  // Each profile gets its own browser data dir (katessence-prospector, melanie-prospector)
-  // so they can run concurrently without lock conflicts
-  console.log(`\n🌐 Initializing browser (prospector for ${profile})...`);
-  const browserObj = await initBrowser({ profile, purpose: 'prospector' });
+  // Prospector ALWAYS uses the Hercule scout account for browser/credentials,
+  // to avoid burning the target account's reach. `profile` only controls
+  // DB/account association (where leads are queued).
+  console.log(`\n🌐 Initializing browser (prospector via Hercule → leads for ${profile})...`);
+  const browserObj = await initBrowser({ profile: 'hercule', purpose: 'prospector' });
   let workingPage = getWorkingPage();
   let effectiveLimit = totalLimit;
 
@@ -145,9 +145,9 @@ export async function runProspector(options = {}) {
         // Update stats for the comments phase
         Object.assign(stats, followersStats);
         effectiveLimit = remaining;
-        // Re-init browser if closed by followers mode
+        // Re-init browser if closed by followers mode (still via Hercule scout)
         if (!workingPage || workingPage.isClosed()) {
-          await initBrowser({ profile, purpose: 'prospector' });
+          await initBrowser({ profile: 'hercule', purpose: 'prospector' });
           workingPage = getWorkingPage();
         }
         // Fall through to comments mode below
@@ -330,6 +330,16 @@ export async function runProspector(options = {}) {
 
              if (existingLead && skipStatuses.includes(existingLead.status)) {
                console.log(`   ⏭️  @${username}: Already in DB (status: ${existingLead.status})`);
+               stats.leadsSkipped++;
+               continue;
+             }
+
+             // Skip if already in outreach_queue (pending or sent) — avoids re-processing silently deduped leads
+             const queuedRow = db.prepare(
+               "SELECT status FROM outreach_queue WHERE username = ? AND status IN ('pending','sent')"
+             ).get(username);
+             if (queuedRow) {
+               console.log(`   ⏭️  @${username}: Already in outreach_queue (${queuedRow.status})`);
                stats.leadsSkipped++;
                continue;
              }
@@ -678,6 +688,15 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         const skipStatuses = ['contacted', 'queued', 'outreach', 'conversation', 'already_known', 'disqualified', 'not_interested', 'uncontactable'];
         if (existingLead && skipStatuses.includes(existingLead.status)) {
           pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('already_in_db:' + existingLead.status, accountId, username);
+          continue;
+        }
+
+        // Skip if already in outreach_queue (pending or sent) — avoids silent dedup by ON CONFLICT
+        const queuedRow = pdb.prepare(
+          "SELECT status FROM outreach_queue WHERE username = ? AND status IN ('pending','sent')"
+        ).get(username);
+        if (queuedRow) {
+          pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('already_in_queue:' + queuedRow.status, accountId, username);
           continue;
         }
 
