@@ -95,6 +95,29 @@ export function createSqliteOutreachQueueRepository({ getDb }) {
       }));
     },
 
+    async findByUsername(username) {
+      const db = getDb();
+      const row = db.prepare(`SELECT * FROM outreach_queue WHERE username = ?`).get(username);
+      if (!row) return null;
+      return {
+        id: row.id,
+        username: row.username,
+        profileUrl: row.profile_url,
+        dmUrl: row.dm_url,
+        preparedMessage: row.prepared_message,
+        firstName: row.first_name,
+        source: row.source,
+        status: row.status,
+        resourceFile: row.resource_file,
+        resourceUrl: row.resource_url,
+        accountId: row.account_id,
+        variant: row.variant || 'A',
+        createdAt: row.created_at,
+        sentAt: row.sent_at,
+        error: row.error
+      };
+    },
+
     async markSent(username) {
       const db = getDb();
       const result = db.prepare(`

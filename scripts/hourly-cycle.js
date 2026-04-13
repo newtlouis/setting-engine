@@ -21,7 +21,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { profile: null, limit: 5 };
+  const result = { profile: null, limit: 5, skipSend: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--profile' && args[i + 1]) {
       result.profile = args[i + 1];
@@ -29,6 +29,8 @@ function parseArgs() {
     } else if (args[i] === '--limit' && args[i + 1]) {
       result.limit = parseInt(args[i + 1], 10);
       i++;
+    } else if (args[i] === '--skip-send') {
+      result.skipSend = true;
     }
   }
   return result;
@@ -144,16 +146,20 @@ function timestamp() {
 }
 
 async function main() {
-  const { profile, limit } = parseArgs();
+  const { profile, limit, skipSend } = parseArgs();
   if (!profile) {
-    console.error('Usage: node scripts/hourly-cycle.js --profile <name> [--limit N]');
+    console.error('Usage: node scripts/hourly-cycle.js --profile <name> [--limit N] [--skip-send]');
     process.exit(1);
   }
 
-  console.log(`🔄 [${timestamp()}] Hourly cycle — profile: ${profile}, limit: ${limit}`);
+  console.log(`🔄 [${timestamp()}] Hourly cycle — profile: ${profile}, limit: ${limit}${skipSend ? ' (send paused)' : ''}`);
 
-  // Step 1: send queued messages (synchronous)
-  runSendQueued(profile, limit);
+  // Step 1: send queued messages (synchronous) — skipped when --skip-send is set
+  if (skipSend) {
+    console.log(`⏸️  [${timestamp()}] send-queued skipped (--skip-send)`);
+  } else {
+    runSendQueued(profile, limit);
+  }
 
   // Step 2: respond:inbox — run 1/3
   const run1 = spawnRespondInbox(profile);

@@ -354,12 +354,14 @@ export async function runInboxScanner(options = {}) {
 
     // Load outreach config from DB (niche, post_booking_message, etc.)
     let outreachConfig = null;
+    let currentAccountId = null;
     try {
       const { getDb } = await import('../../../agents/collector/src/db/core.js');
       const db = getDb();
       if (db) {
         const acc = db.prepare('SELECT id FROM accounts WHERE name = ?').get(profile);
         if (acc) {
+          currentAccountId = acc.id;
           outreachConfig = loadOutreachConfig(acc.id, profileConfig);
         }
       }
@@ -425,8 +427,10 @@ export async function runInboxScanner(options = {}) {
           }
           console.log(`   👤 Username: @${username}`);
           
-          // 3. Database Check
-          const leadContext = await getLeadWithContext(username);
+          // 3. Database Check — scope to the current account to avoid picking up
+          // a duplicate lead row from another profile (e.g. same username also
+          // exists in melanie's DB with status=failed)
+          const leadContext = await getLeadWithContext(username, currentAccountId);
           if (!leadContext) {
             console.log(`   ⏭️ Not in DB, skipping.`);
             skippedCount++;

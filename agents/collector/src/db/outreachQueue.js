@@ -34,7 +34,7 @@ export function addToOutreachQueue(lead) {
         error = NULL,
         sent_at = NULL,
         created_at = datetime('now')
-      WHERE status = 'failed'
+      WHERE status = 'failed' AND (error IS NULL OR error != 'manually_rejected')
     `);
     const info = stmt.run({
       username: lead.username,

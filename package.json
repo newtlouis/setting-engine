@@ -48,7 +48,9 @@
         "broadcast": "cd agents/dmresponder && npm run broadcast --",
         "scrape-followers": "cd agents/dmresponder && npm run scrape-followers --",
         "kpi-daily": "node scripts/kpi-daily.js",
-        "hourly-cycle": "node scripts/hourly-cycle.js"
+        "hourly-cycle": "node scripts/hourly-cycle.js",
+        "export-outreach-sheet": "node scripts/export_outreach_sheet.js",
+        "import-outreach-sheet": "node scripts/import_outreach_sheet.js"
     },
     "author": "Louis",
     "license": "ISC",

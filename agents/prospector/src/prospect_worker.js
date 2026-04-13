@@ -37,6 +37,14 @@ import { delay } from '../../../shared/browser/index.js';
 // Follower scraping (from dmresponder — reused for "followers" mode)
 import { scrapeFollowers as scrapeFollowersList } from '../../dmresponder/src/follower_scraper.js';
 
+// ============================================================================
+// HARD INVARIANT: the prospector NEVER uses a target account's browser/session.
+// All scraping + outreach runs through the Hercule scout account to avoid
+// burning the reach of katessence/melanie/etc. Do not change this constant,
+// do not accept it as a CLI arg, do not read it from config.
+// ============================================================================
+const SCOUT_PROFILE = 'hercule';
+
 // Database
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,8 +132,11 @@ export async function runProspector(options = {}) {
   // Prospector ALWAYS uses the Hercule scout account for browser/credentials,
   // to avoid burning the target account's reach. `profile` only controls
   // DB/account association (where leads are queued).
-  console.log(`\n🌐 Initializing browser (prospector via Hercule → leads for ${profile})...`);
-  const browserObj = await initBrowser({ profile: 'hercule', purpose: 'prospector' });
+  if (profile === SCOUT_PROFILE) {
+    throw new Error(`Prospector target profile cannot be "${SCOUT_PROFILE}" — that is the scout account. Pass --profile katessence / melanie / etc.`);
+  }
+  console.log(`\n🌐 Initializing browser (prospector via ${SCOUT_PROFILE} → leads for ${profile})...`);
+  const browserObj = await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
   let workingPage = getWorkingPage();
   let effectiveLimit = totalLimit;
 
@@ -147,7 +158,7 @@ export async function runProspector(options = {}) {
         effectiveLimit = remaining;
         // Re-init browser if closed by followers mode (still via Hercule scout)
         if (!workingPage || workingPage.isClosed()) {
-          await initBrowser({ profile: 'hercule', purpose: 'prospector' });
+          await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
           workingPage = getWorkingPage();
         }
         // Fall through to comments mode below

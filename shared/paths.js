@@ -45,8 +45,10 @@ export function cleanupBrowserLocks(profile) {
     'ShaderCache',
     'GraphiteDawnCache',
     'BrowserMetrics',
-    'OriginTrials',
-    'Local State'
+    'OriginTrials'
+    // NOTE: do NOT delete 'Local State' — with --use-mock-keychain it stores
+    // the cookie encryption key. Deleting it destroys the sessionid and forces
+    // re-login on every browser restart.
   ];
   
   // console.log(`🧹 Aggressive cleanup for profile: ${profile}`);
