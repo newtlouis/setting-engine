@@ -45,6 +45,31 @@ import { scrapeFollowers as scrapeFollowersList } from '../../dmresponder/src/fo
 // ============================================================================
 const SCOUT_PROFILE = 'hercule';
 
+/**
+ * Check if an error indicates the browser/page has been closed.
+ */
+function isBrowserDead(err) {
+  const msg = err?.message || '';
+  return msg.includes('Target page, context or browser has been closed')
+    || msg.includes('browser has been closed')
+    || msg.includes('Target closed')
+    || msg.includes('Protocol error');
+}
+
+/**
+ * Attempt to recover from a dead browser by relaunching it.
+ * Returns the new working page, or throws if recovery fails.
+ */
+async function recoverBrowser() {
+  console.log('   🔄 Browser died — attempting recovery...');
+  try { await closeBrowser().catch(() => {}); } catch {}
+  await delay(3000, 5000);
+  await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
+  const page = getWorkingPage();
+  console.log('   ✅ Browser recovered');
+  return page;
+}
+
 // Database
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,8 +178,12 @@ export async function runProspector(options = {}) {
       if (followersStats.leadsContacted < totalLimit) {
         const remaining = totalLimit - followersStats.leadsContacted;
         console.log(`\n🔄 Followers mode got ${followersStats.leadsContacted}/${totalLimit} — falling back to comments mode for ${remaining} more leads`);
-        // Update stats for the comments phase
+        // Update stats for the comments phase — reset leadsContacted so
+        // the while-loop condition (leadsContacted < effectiveLimit) works
+        const followersContacted = followersStats.leadsContacted;
         Object.assign(stats, followersStats);
+        stats.leadsContacted = 0;
+        stats._followersContacted = followersContacted;
         effectiveLimit = remaining;
         // Re-init browser if closed by followers mode (still via Hercule scout)
         if (!workingPage || workingPage.isClosed()) {
@@ -207,6 +236,8 @@ export async function runProspector(options = {}) {
   const DISCOVERY_BATCH_SIZE = maxPosts;
   let sourceIndex = 0;
   let exhaustionCount = 0; // Track how many sources in a row were exhausted
+  let browserRecoveryCount = 0;
+  const MAX_BROWSER_RECOVERIES = 3;
 
   while (stats.leadsContacted < effectiveLimit && exhaustionCount < sourceList.length) {
     const currentSourceRaw = sourceList[sourceIndex % sourceList.length];
@@ -214,9 +245,9 @@ export async function runProspector(options = {}) {
 
     console.log(`\n🔄 [Source ${sourceIndex % sourceList.length + 1}/${sourceList.length}] Checking ${currentSourceRaw}...`);
     console.log(`   Current Progress: ${stats.leadsContacted}/${effectiveLimit}`);
-    
+
     let posts = [];
-    
+
     // Discover a batch of posts from current source
     try {
         if (currentSource.type === 'hashtag') {
@@ -225,6 +256,16 @@ export async function runProspector(options = {}) {
           posts = await discoverFromProfiles(workingPage, [currentSource.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
         }
     } catch (discoveryErr) {
+        if (isBrowserDead(discoveryErr) && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+          browserRecoveryCount++;
+          try {
+            workingPage = await recoverBrowser();
+            continue; // Retry the same source with the new browser
+          } catch (recErr) {
+            console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
+            break;
+          }
+        }
         console.error(`   ⚠️ Discovery error on ${currentSourceRaw}: ${discoveryErr.message}`);
         posts = [];
     }
@@ -521,6 +562,15 @@ export async function runProspector(options = {}) {
 
         } catch (err) {
             console.error(`   ⚠️ Error processing post ${postUrl}: ${err.message}`);
+            if (isBrowserDead(err) && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+              browserRecoveryCount++;
+              try {
+                workingPage = await recoverBrowser();
+              } catch (recErr) {
+                console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
+                break;
+              }
+            }
         }
       } // End post loop
       
@@ -538,17 +588,18 @@ export async function runProspector(options = {}) {
   }
 
   // FINAL: Print stats and close
+  const totalQueued = stats.leadsContacted + (stats._followersContacted || 0);
   console.log(`\n🎯 PROSPECTING COMPLETE`);
   console.log('========================');
   console.log(`   Posts scraped: ${stats.postsScraped}`);
   console.log(`   Comments found: ${stats.commentsFound}`);
   console.log(`   Leads processed: ${stats.leadsProcessed}`);
   console.log(`   Leads qualified: ${stats.leadsQualified}`);
-  console.log(`   Queued: ${stats.leadsContacted}`);
+  console.log(`   Queued: ${totalQueued}${stats._followersContacted ? ` (${stats._followersContacted} followers + ${stats.leadsContacted} comments)` : ''}`);
   console.log(`   Skipped: ${stats.leadsSkipped}`);
   console.log(`   Failed: ${stats.leadsFailed}`);
   console.log('');
-  console.log(`✨ Queued ${stats.leadsContacted} leads for later sending.`);
+  console.log(`✨ Queued ${totalQueued} leads for later sending.`);
   console.log(`   Total pending in queue: ${dbFunctions.getQueueCount()}`);
   await closeBrowser().catch(() => {});
   dbFunctions.closeDatabase();
@@ -599,6 +650,8 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
   const { getDb } = await import('../../../agents/collector/src/db/core.js');
   const pdb = getDb();
 
+  let browserRecoveryCount = 0;
+  const MAX_BROWSER_RECOVERIES = 3;
   const BATCH_SIZE = 200; // Scrape 200 followers at a time per competitor
 
   console.log(`\n🎯 FOLLOWERS MODE — Contact ${totalLimit} new leads from competitor followers`);
@@ -715,7 +768,25 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
         stats.leadsProcessed++;
 
         // Visit profile
-        const profileResult = await goToProfile(workingPage, username);
+        let profileResult;
+        try {
+          profileResult = await goToProfile(workingPage, username);
+        } catch (navErr) {
+          if (isBrowserDead(navErr) && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+            browserRecoveryCount++;
+            try {
+              workingPage = await recoverBrowser();
+              profileResult = await goToProfile(workingPage, username);
+            } catch (recErr) {
+              console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
+              pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('profile_error:browser_dead', accountId, username);
+              stats.leadsFailed++;
+              break;
+            }
+          } else {
+            throw navErr;
+          }
+        }
         if (!profileResult.success) {
           console.log(`   ❌ Could not open profile: ${profileResult.error}`);
           pdb.prepare("UPDATE prospect_followers SET status = 'rejected', reject_reason = ? WHERE account_id = ? AND username = ?").run('profile_error:' + profileResult.error, accountId, username);

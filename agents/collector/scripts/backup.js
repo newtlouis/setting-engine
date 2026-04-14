@@ -35,7 +35,7 @@ const CONFIG = {
   // Default backup location
   localBackupDir: path.resolve(ROOT_DIR, '../../backups'),
   // Number of backups to keep (rotation)
-  keepBackups: 7,
+  keepBackups: 3,
   // rclone remote name (configure with: rclone config)
   rcloneRemote: 'gdrive',
   // Remote folder path on Google Drive
