@@ -271,10 +271,22 @@ export async function runProspector(options = {}) {
     }
 
     if (posts.length === 0) {
+      // Check if the browser is dead (discovery may have swallowed the error)
+      const pageOk = await workingPage.evaluate(() => true).catch(() => false);
+      if (!pageOk && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+        browserRecoveryCount++;
+        try {
+          workingPage = await recoverBrowser();
+          continue; // Retry same source with new browser
+        } catch (recErr) {
+          console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
+          break;
+        }
+      }
       console.log(`   ⏭️ No new posts found for ${currentSourceRaw}. Moving to next source.`);
       sourceIndex++;
       exhaustionCount++;
-      continue; 
+      continue;
     }
 
     // Reset exhaustion count if we found posts
