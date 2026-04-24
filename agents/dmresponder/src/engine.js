@@ -83,13 +83,16 @@ function isForeignLanguageMessage(message) {
   const hasFrenchAccents = /[éèêëàâçùûôîïœæ]/i.test(message);
   if (hasFrenchAccents) return false;
 
-  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü']/g, ''));
+  // Split on apostrophes to handle French contractions (c'est → c, est / j'ai → j, ai / l'objectif → l, objectif)
+  const cleanWords = words.map(w => w.toLowerCase().replace(/[^a-zàâçéèêëîïôùûü']/g, '')).flatMap(w => w.split("'"));
   const substantiveWords = cleanWords.filter(w => w.length > 1 && !UNIVERSAL_WORDS.has(w));
 
   // Not enough non-universal words to judge
   if (substantiveWords.length < 3) return false;
 
-  const frenchCount = substantiveWords.filter(w => FRENCH_WORDS.has(w)).length;
+  // French morphology: suffixes that are exclusively/predominantly French (not shared with English)
+  const FRENCH_SUFFIXES = /(?:euse|euses|eur|eurs|eure|eures|eux|oise|oises|aise|aises|ienne|iennes|ette|ettes|aine|aines|oire|oires|ment|ments)$/;
+  const frenchCount = substantiveWords.filter(w => FRENCH_WORDS.has(w) || FRENCH_SUFFIXES.test(w)).length;
   const frenchRatio = frenchCount / substantiveWords.length;
 
   // Less than 10% French words → likely foreign language
@@ -332,7 +335,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
   const lastAssistantMsg = conversationHistory.filter(m => m.role === 'assistant').pop()?.text?.toLowerCase() || '';
   const lastUserMsg = conversationHistory.filter(m => m.role === 'user').pop()?.text?.toLowerCase() || '';
   const callProposedByUs = lastAssistantMsg.includes('30 min') || lastAssistantMsg.includes('appel') || lastAssistantMsg.includes('se call') || lastAssistantMsg.includes('on prenne') || lastAssistantMsg.includes('créneau') || lastAssistantMsg.includes('creneau') || lastAssistantMsg.includes('on se cale');
-  const callProposedByProspect = lastUserMsg.includes('visio') || lastUserMsg.includes('appel') || lastUserMsg.includes('rdv') || lastUserMsg.includes('rendez-vous') || lastUserMsg.includes('créneau') || lastUserMsg.includes('creneau') || lastUserMsg.includes('disponibilité') || lastUserMsg.includes('disponibilite') || lastUserMsg.includes('s\'appeler') || lastUserMsg.includes('on se call') || lastUserMsg.includes('09h') || lastUserMsg.includes('10h') || lastUserMsg.includes('11h') || lastUserMsg.includes('14h') || lastUserMsg.includes('15h') || lastUserMsg.includes('16h') || lastUserMsg.includes('17h') || lastUserMsg.includes('18h');
+  const callProposedByProspect = lastUserMsg.includes('visio') || lastUserMsg.includes('appel') || lastUserMsg.includes('rdv') || lastUserMsg.includes('rendez-vous') || lastUserMsg.includes('créneau') || lastUserMsg.includes('creneau') || lastUserMsg.includes('disponibilité') || lastUserMsg.includes('disponibilite') || lastUserMsg.includes('s\'appeler') || lastUserMsg.includes('on se call') || lastUserMsg.includes('on se voit') || lastUserMsg.includes('call') || lastUserMsg.includes('on en discute') || lastUserMsg.includes('on en parle') || lastUserMsg.includes('organiser un') || lastUserMsg.includes('09h') || lastUserMsg.includes('10h') || lastUserMsg.includes('11h') || lastUserMsg.includes('14h') || lastUserMsg.includes('15h') || lastUserMsg.includes('16h') || lastUserMsg.includes('17h') || lastUserMsg.includes('18h');
   const needsSlots = currentStep >= 4 || callProposedByUs || callProposedByProspect;
   console.log(`[Engine] Booking check: step=${currentStep}, callProposedByUs=${callProposedByUs}, callProposedByProspect=${callProposedByProspect}, needsSlots=${needsSlots}`);
   if (needsSlots) {
@@ -356,7 +359,18 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
 
           const formatSlot = (s) => {
               const d = new Date(s.start_time);
-              const readable = d.toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+              const now = new Date();
+              const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+              const dayNum = d.toLocaleDateString('fr-FR', { day: 'numeric', timeZone: 'Europe/Paris' });
+              const monthName = d.toLocaleDateString('fr-FR', { month: 'long', timeZone: 'Europe/Paris' });
+              const h = d.toLocaleTimeString('fr-FR', { hour: 'numeric', minute: '2-digit', timeZone: 'Europe/Paris' });
+              // "16:00" → "16h", "16:30" → "16h30"
+              const cleanHour = h.replace(':00', 'h').replace(':', 'h');
+              // ≤ 7 jours → "lundi prochain à 16h" / > 7 jours → "lundi 28 avril à 16h"
+              const diffDays = (d - now) / (1000 * 60 * 60 * 24);
+              const readable = diffDays <= 7
+                  ? `${dayName} prochain à ${cleanHour}`
+                  : `${dayName} ${dayNum} ${monthName} à ${cleanHour}`;
               return `${readable} [ISO:${s.start_time}]`;
           };
 
@@ -463,7 +477,7 @@ async function getLlmResponse(conversationHistory, leadContext, profileConfig = 
       }
   }
   "step_used" correspond au numéro de l'étape du script que tu viens d'utiliser (1, 2, 3, 4, 5, 6, 7, 8 ou 9).
-  "booking_intent" ne doit être rempli QUE si tu as TOUTES les informations (créneau choisi, email, téléphone) pour valider le RDV. Sinon, mets null.
+  "booking_intent" ne doit être rempli QUE si tu as au minimum le créneau choisi + le téléphone du prospect. L'email est optionnel. Sinon, mets null.
   ⚠️ Pour le champ "slot" : copie EXACTEMENT la valeur ISO entre crochets [ISO:...] du créneau choisi. N'essaie JAMAIS de construire l'ISO toi-même.
   `;
 

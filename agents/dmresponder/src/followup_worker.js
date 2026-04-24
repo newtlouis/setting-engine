@@ -76,6 +76,7 @@ export async function runFollowupWatcher(options = {}) {
     const account = await getOrCreateAccount(profile);
     const accountId = account.id;
 
+
     // Load funnel stages from database
     const stages = await funnelRepo.getStagesForAccount(accountId);
     if (stages.length === 0) {

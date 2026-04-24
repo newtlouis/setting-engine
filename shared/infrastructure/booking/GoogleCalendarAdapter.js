@@ -144,18 +144,27 @@ function pickPrimaryAndBackup(slots) {
 
   const sortedDays = Object.keys(slotsByDay).sort();
 
+  // Pick best slot per day: prefer 16h+ (latest afternoon), fallback to latest available
+  function pickBestSlot(daySlots) {
+    const sorted = daySlots.sort((a, b) => b.start_time.localeCompare(a.start_time));
+    // Prefer slots at 16h or later (14:00 UTC = 16h Paris in summer)
+    const afternoon = sorted.find(s => {
+      const hour = new Date(s.start_time).toLocaleTimeString('fr-FR', { hour: 'numeric', timeZone: 'Europe/Paris' });
+      return parseInt(hour) >= 16;
+    });
+    return afternoon || sorted[0]; // Fallback to latest available
+  }
+
   const primary = [];
   for (let i = 0; i < Math.min(2, sortedDays.length); i++) {
-    const day = sortedDays[i];
-    const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
-    primary.push(sortedTimes[0]);
+    primary.push(pickBestSlot(slotsByDay[sortedDays[i]]));
   }
 
   const backup = [];
   const usedIds = new Set(primary.map(s => s.start_time));
   for (const day of sortedDays) {
-    const sortedTimes = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
-    for (const slot of sortedTimes) {
+    const sorted = slotsByDay[day].sort((a, b) => b.start_time.localeCompare(a.start_time));
+    for (const slot of sorted) {
       if (!usedIds.has(slot.start_time) && backup.length < 3) {
         backup.push(slot);
         usedIds.add(slot.start_time);
@@ -252,7 +261,7 @@ export function createGoogleCalendarAdapter(bookingConfig = {}) {
       const description = buildEventDescription({ profileUrl, phone, briefing, conversationHints });
 
       const event = {
-        summary: `R1 ${name}`,
+        summary: `R1 : ${name}`,
         description,
         start: {
           dateTime: startDate.toISOString(),

@@ -45,8 +45,6 @@ function isProcessRunning(pid) {
   }
 }
 
-const FORCE_KILL_AFTER_MINUTES = 20;
-
 function isBrowserAlive(profile) {
   // Check if the actual Chrome browser process is running for this profile
   try {
@@ -69,7 +67,7 @@ function isBrowserSessionOpen(profile) {
       return false;
     }
 
-    // If the Node process is alive but Chrome browser is gone, kill the zombie
+    // If the Node process is alive but Chrome browser is gone, kill the orphan
     if (!isBrowserAlive(profile)) {
       console.log(`   ⚠️ Orphan detected: PID ${pid} alive but browser closed — killing`);
       try { process.kill(pid, 'SIGTERM'); } catch {}
@@ -82,22 +80,10 @@ function isBrowserSessionOpen(profile) {
       return false;
     }
 
-    // Check how long this process has been running
+    // Browser is alive → NEVER kill. Just skip this run.
     const lockStat = statSync(lockFile);
     const lockAgeMinutes = (Date.now() - lockStat.mtimeMs) / 60000;
-
-    if (lockAgeMinutes >= FORCE_KILL_AFTER_MINUTES) {
-      console.log(`   ⚠️ Zombie detected: PID ${pid} running for ${Math.round(lockAgeMinutes)}min — killing`);
-      try { process.kill(pid, 'SIGTERM'); } catch {}
-      const start = Date.now();
-      while (Date.now() - start < 3000 && isProcessRunning(pid)) { /* wait */ }
-      if (isProcessRunning(pid)) {
-        try { process.kill(pid, 'SIGKILL'); } catch {}
-      }
-      try { unlinkSync(lockFile); } catch {}
-      return false;
-    }
-
+    console.log(`   🟢 Session active (PID ${pid}, ${Math.round(lockAgeMinutes)}min) — browser alive, skipping`);
     return true;
   } catch {
     return false;

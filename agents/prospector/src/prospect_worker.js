@@ -633,7 +633,7 @@ function matchesBioKeywords(bio, keywords) {
 }
 
 // Reject words — if bio or name contains any of these, skip the lead
-const REJECT_WORDS = ['massage', 'massages', 'masseuse', 'masseur', 'esthétique', 'esthéticienne', 'onglerie', 'manucure', 'pédicure', 'tatouage', 'coiffure', 'coiffeuse', 'setter', 'setting', 'closer', 'closing'];
+const REJECT_WORDS = ['massage', 'massages', 'masseuse', 'masseur', 'esthétique', 'esthéticienne', 'onglerie', 'manucure', 'pédicure', 'tatouage', 'coiffure', 'coiffeuse', 'setter', 'setting', 'closer', 'closing', 'école', 'ecole', 'center', 'centre de', 'agence', 'institut', 'organisme', 'academy', 'language', 'immobilier', 'restaurant', 'boutique', 'salon de'];
 
 /**
  * Check if bio/name contains words indicating a local/présentiel business to reject

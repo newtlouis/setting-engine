@@ -11,7 +11,10 @@ dotenv.config({ path: './agents/dmresponder/.env' });
 // Support both positional arg and --profile flag (for dashboard compatibility)
 const profileFlagIndex = process.argv.indexOf('--profile');
 const profile = profileFlagIndex !== -1 ? process.argv[profileFlagIndex + 1] : (process.argv[2] || 'default');
-const userDataDir = getBrowserDataDir(profile);
+const purposeFlagIndex = process.argv.indexOf('--purpose');
+const purpose = purposeFlagIndex !== -1 ? process.argv[purposeFlagIndex + 1] : null;
+const dataProfile = purpose ? `${profile}-${purpose}` : profile;
+const userDataDir = getBrowserDataDir(dataProfile);
 
 console.log(`Opening Instagram for profile: ${profile}`);
 console.log(`User data directory: ${userDataDir}`);

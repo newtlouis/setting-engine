@@ -192,6 +192,13 @@ class BrowserSession {
       return;
     }
 
+    // Write pending-review marker so zombie killer knows not to kill this process
+    if (this._lockFile) {
+      const pendingFile = this._lockFile.replace('.session.pid', '.pending-review');
+      try { writeFileSync(pendingFile, `${tabs.length} tabs\n${new Date().toISOString()}`); } catch {}
+      this._pendingReviewFile = pendingFile;
+    }
+
     console.log('\n' + '='.repeat(50));
     console.log(`   📨 ${tabs.length} message(s) ready for review`);
     console.log('='.repeat(50));
@@ -210,6 +217,11 @@ class BrowserSession {
       const cleanup = () => {
         if (resolved) return;
         resolved = true;
+        // Remove pending-review marker
+        if (this._pendingReviewFile) {
+          try { unlinkSync(this._pendingReviewFile); } catch {}
+          this._pendingReviewFile = null;
+        }
         process.stdin.removeListener('data', onData);
         process.stdin.pause(); // Stop stdin from keeping event loop active
         process.removeListener('SIGINT', onSigInt);
@@ -235,6 +247,34 @@ class BrowserSession {
 
       if (this.context) {
         this.context.on('close', onBrowserClose);
+
+        // Also listen on the browser instance (handles manual window close)
+        try {
+          const browser = this.context.browser?.();
+          if (browser) {
+            browser.on('disconnected', () => {
+              console.log('\n   Browser disconnected. Finishing up...');
+              cleanup();
+            });
+          }
+        } catch {}
+
+        // Fallback: poll for closed pages every 10s (catches manual close not detected by events)
+        const pollInterval = setInterval(() => {
+          if (resolved) { clearInterval(pollInterval); return; }
+          try {
+            const pages = this.context?.pages() || [];
+            if (pages.length === 0) {
+              console.log('\n   All browser pages closed. Finishing up...');
+              clearInterval(pollInterval);
+              cleanup();
+            }
+          } catch {
+            // Context destroyed
+            clearInterval(pollInterval);
+            cleanup();
+          }
+        }, 10000);
       } else {
         cleanup();
       }
@@ -308,6 +348,11 @@ class BrowserSession {
    * Close the browser session and release PID lock
    */
   async close() {
+    // Release pending-review marker
+    if (this._pendingReviewFile) {
+      try { unlinkSync(this._pendingReviewFile); } catch {}
+      this._pendingReviewFile = null;
+    }
     // Release PID lock
     if (this._lockFile) {
       try { unlinkSync(this._lockFile); } catch {}
@@ -469,6 +514,7 @@ const BrowserService = {
     // Clean up PID lock on process exit (safety net)
     process.on('exit', () => {
       try { unlinkSync(lockFile); } catch {}
+      try { unlinkSync(lockFile.replace('.session.pid', '.pending-review')); } catch {}
     });
 
     // Register graceful shutdown to prevent profile corruption

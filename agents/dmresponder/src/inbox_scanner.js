@@ -397,6 +397,10 @@ export async function runInboxScanner(options = {}) {
           // Exact match or the sidebar name starts with the username (name + title/bio appended)
           if (nameAsUsername === uname || nameAsUsername.startsWith(uname + '_')) return true;
         }
+        // Reverse match: sidebar shows truncated name (e.g. "Kris") but DB has full name ("Kris | Alchimiste...")
+        for (const displayName of knownLeads.displayNames) {
+          if (displayName.startsWith(nameLower) && nameLower.length >= 3) return true;
+        }
         return false;
       });
       
@@ -613,19 +617,24 @@ export async function runInboxScanner(options = {}) {
 
           // --- BOOKING STATE MACHINE ---
           // If we have a complete booking_intent from LLM, attempt booking via adapter
-          if (response.booking_intent && response.booking_intent.slot && response.booking_intent.email) {
+          // Trigger on slot + phone OR slot + email (phone alone is enough for WhatsApp-based flow)
+          const hasSlot = response.booking_intent?.slot;
+          const hasPhone = response.booking_intent?.phone;
+          const hasEmail = response.booking_intent?.email;
+          if (response.booking_intent && hasSlot && (hasPhone || hasEmail)) {
               bookingIntent = response.booking_intent;
               bookingStatus = 'pending';
               bookingAttempts++;
 
               console.log(`   📅 BOOKING INTENT DETECTED (attempt ${bookingAttempts}):`, bookingIntent);
 
-              // Validate email format
+              // Validate email format if provided
               const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-              if (!emailRegex.test(bookingIntent.email)) {
-                  console.log(`   ⚠️ Invalid email format: "${bookingIntent.email}" — skipping booking`);
-                  bookingStatus = 'pending'; // Keep pending, need valid email
-              } else {
+              if (hasEmail && !emailRegex.test(bookingIntent.email)) {
+                  console.log(`   ⚠️ Invalid email format: "${bookingIntent.email}" — ignoring email`);
+                  bookingIntent.email = null;
+              }
+              {
                   try {
                       // Resolve the right booking adapter for this account
                       const { resolveBookingAdapter } = await import('../../../shared/infrastructure/booking/BookingAdapterFactory.js');
@@ -678,8 +687,14 @@ export async function runInboxScanner(options = {}) {
 
                           // Format the slot for the confirmation message
                           const slotDate = new Date(bookingIntent.slot);
-                          const day = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-                          const hour = slotDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                          const slotNow = new Date();
+                          const slotDiffDays = (slotDate - slotNow) / (1000 * 60 * 60 * 24);
+                          const slotDayName = slotDate.toLocaleDateString('fr-FR', { weekday: 'long', timeZone: 'Europe/Paris' });
+                          const day = slotDiffDays <= 7
+                              ? `${slotDayName} prochain`
+                              : slotDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
+                          const rawHour = slotDate.toLocaleTimeString('fr-FR', { hour: 'numeric', minute: '2-digit', timeZone: 'Europe/Paris' });
+                          const hour = rawHour.replace(':00', 'h').replace(':', 'h');
 
                           const template = outreachConfig?.postBookingMessage || profileConfig?.post_booking_message || "je te confirme notre rdv du {{day}} à {{hour}} !";
                           finalMessage = template
