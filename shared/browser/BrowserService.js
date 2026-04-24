@@ -423,7 +423,11 @@ const BrowserService = {
     const lockFile = path.join(userDataDir, '.session.pid');
     if (existsSync(lockFile)) {
       const existingPid = parseInt(readFileSync(lockFile, 'utf8'), 10);
-      if (existingPid && isProcessRunning(existingPid)) {
+      // If the lock is from our own process (e.g. browser recovery), allow re-opening
+      if (existingPid === process.pid) {
+        console.log(`   🔄 Lock file is from our own process (PID ${existingPid}) — allowing re-open`);
+        try { unlinkSync(lockFile); } catch {}
+      } else if (existingPid && isProcessRunning(existingPid)) {
         // Check if the process has been running too long (zombie detection)
         if (forceAfterMinutes > 0) {
           const lockStat = statSync(lockFile);
