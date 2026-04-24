@@ -42,9 +42,11 @@ async function getStaleThreads(db, accountId) {
         SELECT l.*,
                lm.sent_at as last_msg_at,
                lm.role as last_role,
-               l.funnel_step as effective_step
+               l.funnel_step as effective_step,
+               lm2.role as second_last_role
         FROM leads l
         JOIN LastMessages lm ON l.id = lm.lead_id AND lm.rn = 1
+        LEFT JOIN LastMessages lm2 ON l.id = lm2.lead_id AND lm2.rn = 2
         WHERE l.account_id = ?
           AND l.status IN ('contacted', 'replied', 'qualified', 'conversation', 'outreach')
           AND l.funnel_step >= 2
@@ -52,6 +54,8 @@ async function getStaleThreads(db, accountId) {
           AND l.is_ignored = 0
           AND lm.role = 'assistant'
           AND lm.sent_at < ?
+          -- Never send 2 follow-ups in a row: skip if last 2 messages are both assistant
+          AND (lm2.role IS NULL OR lm2.role != 'assistant')
         ORDER BY lm.sent_at ASC
         LIMIT 500
     `;
