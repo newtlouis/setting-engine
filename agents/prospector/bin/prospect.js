@@ -41,7 +41,12 @@ program
   .option('--total <number>', 'Maximum total leads to contact in this session', '60')
   .option('--skip-qualification', 'Skip bio qualification check', false)
   .option('--variant <mode>', 'A/B variant mode: "A" (variant A only), "B" (variant B only), "random" (50/50)', 'random')
+  .option('--scouts <list>', 'Comma-separated scout accounts (default: loulou,hercule)', 'loulou,hercule')
+  .option('--scout-hours <hours>', 'Max hours per scout account before rotating', '2')
   .action(async (options) => {
+    const scoutProfiles = options.scouts.split(',').map(s => s.trim());
+    const scoutHours = parseFloat(options.scoutHours);
+
     console.log('\n🚀 UNIFIED PROSPECTING PIPELINE');
     console.log('================================');
     console.log(`   Profile: ${options.profile}`);
@@ -50,6 +55,7 @@ program
     console.log(`   Batch size: ${options.posts} posts`);
     console.log(`   Total limit: ${options.total}`);
     console.log(`   Variant: ${options.variant}`);
+    console.log(`   Scouts: ${scoutProfiles.join(', ')} (${scoutHours}h each)`);
     console.log('');
 
     try {
@@ -61,7 +67,9 @@ program
         maxPosts: parseInt(options.posts, 10),
         totalLimit: parseInt(options.total, 10),
         skipQualification: options.skipQualification,
-        variantMode: options.variant
+        variantMode: options.variant,
+        scoutProfiles,
+        scoutHours
       });
       process.exit(0);
     } catch (error) {

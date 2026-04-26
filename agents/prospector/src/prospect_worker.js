@@ -39,11 +39,14 @@ import { scrapeFollowers as scrapeFollowersList } from '../../dmresponder/src/fo
 
 // ============================================================================
 // HARD INVARIANT: the prospector NEVER uses a target account's browser/session.
-// All scraping + outreach runs through the Hercule scout account to avoid
-// burning the reach of katessence/melanie/etc. Do not change this constant,
-// do not accept it as a CLI arg, do not read it from config.
+// All scraping + outreach runs through scout accounts (loulou, hercule, etc.)
+// to avoid burning the reach of katessence/melanie/etc.
 // ============================================================================
-const SCOUT_PROFILE = 'hercule';
+const DEFAULT_SCOUT_PROFILES = ['loulou', 'hercule'];
+const DEFAULT_SCOUT_HOURS = 2;
+
+// Active scout state — managed by the rotation logic
+let activeScout = null;
 
 /**
  * Check if an error indicates the browser/page has been closed.
@@ -57,6 +60,14 @@ function isBrowserDead(err) {
 }
 
 /**
+ * Check if an error is an HTTP response failure (Instagram rate limit / soft ban)
+ */
+function isHttpError(err) {
+  const msg = err?.message || '';
+  return msg.includes('ERR_HTTP_RESPONSE_CODE_FAILURE');
+}
+
+/**
  * Attempt to recover from a dead browser by relaunching it.
  * Returns the new working page, or throws if recovery fails.
  */
@@ -64,9 +75,25 @@ async function recoverBrowser() {
   console.log('   🔄 Browser died — attempting recovery...');
   try { await closeBrowser().catch(() => {}); } catch {}
   await delay(3000, 5000);
-  await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
+  await initBrowser({ profile: activeScout, purpose: 'prospector' });
   const page = getWorkingPage();
   console.log('   ✅ Browser recovered');
+  return page;
+}
+
+/**
+ * Switch to the next scout account. Closes current browser, opens new one.
+ * @param {string} nextScout - Profile name of the next scout
+ * @returns {Promise<Page>} The new working page
+ */
+async function switchScout(nextScout) {
+  console.log(`\n🔄 SWITCHING SCOUT: ${activeScout} → ${nextScout}`);
+  try { await closeBrowser().catch(() => {}); } catch {}
+  await delay(3000, 5000);
+  activeScout = nextScout;
+  await initBrowser({ profile: activeScout, purpose: 'prospector' });
+  const page = getWorkingPage();
+  console.log(`   ✅ Now using scout: ${activeScout}`);
   return page;
 }
 
@@ -121,7 +148,9 @@ export async function runProspector(options = {}) {
     maxPosts = 3,
     totalLimit = 60,
     skipQualification = false,
-    variantMode = 'A'
+    variantMode = 'A',
+    scoutProfiles = DEFAULT_SCOUT_PROFILES,
+    scoutHours = DEFAULT_SCOUT_HOURS
   } = options;
 
   if (!profile) throw new Error('Profile is required');
@@ -154,14 +183,26 @@ export async function runProspector(options = {}) {
     leadsFailed: 0
   };
 
-  // Prospector ALWAYS uses the Hercule scout account for browser/credentials,
-  // to avoid burning the target account's reach. `profile` only controls
-  // DB/account association (where leads are queued).
-  if (profile === SCOUT_PROFILE) {
-    throw new Error(`Prospector target profile cannot be "${SCOUT_PROFILE}" — that is the scout account. Pass --profile katessence / melanie / etc.`);
+  // Prospector uses scout accounts — never the target profile's account
+  if (scoutProfiles.includes(profile)) {
+    throw new Error(`Prospector target profile cannot be a scout account ("${profile}"). Pass --profile katessence / melanie / etc.`);
   }
-  console.log(`\n🌐 Initializing browser (prospector via ${SCOUT_PROFILE} → leads for ${profile})...`);
-  const browserObj = await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
+
+  const SCOUT_ROUND_MS = scoutHours * 60 * 60 * 1000;
+  const MAX_RUNTIME_MS = SCOUT_ROUND_MS * scoutProfiles.length; // Total = rounds × scout count
+  const runStartTime = Date.now();
+
+  console.log(`🕵️ Scout accounts: ${scoutProfiles.join(', ')} (${scoutHours}h per scout, ${scoutProfiles.length * scoutHours}h max total)`);
+
+  // Start with first scout
+  let scoutIndex = 0;
+  activeScout = scoutProfiles[scoutIndex];
+  let scoutStartTime = Date.now();
+  let scoutHttpErrors = 0;
+  const MAX_SCOUT_HTTP_ERRORS = 2;
+
+  console.log(`\n🌐 Initializing browser (prospector via ${activeScout} → leads for ${profile})...`);
+  await initBrowser({ profile: activeScout, purpose: 'prospector' });
   let workingPage = getWorkingPage();
   let effectiveLimit = totalLimit;
 
@@ -171,7 +212,7 @@ export async function runProspector(options = {}) {
     // ====================================
     if (mode === 'followers') {
       const followersStats = await runFollowersMode({
-        workingPage, accountId, profile, totalLimit, skipQualification, variantMode, outreachConfig, stats
+        workingPage, accountId, profile, totalLimit, skipQualification, variantMode, outreachConfig, stats, runStartTime, MAX_RUNTIME_MS
       });
 
       // Fallback to comments mode if followers didn't reach the target
@@ -185,9 +226,9 @@ export async function runProspector(options = {}) {
         stats.leadsContacted = 0;
         stats._followersContacted = followersContacted;
         effectiveLimit = remaining;
-        // Re-init browser if closed by followers mode (still via Hercule scout)
+        // Re-init browser if closed by followers mode
         if (!workingPage || workingPage.isClosed()) {
-          await initBrowser({ profile: SCOUT_PROFILE, purpose: 'prospector' });
+          await initBrowser({ profile: activeScout, purpose: 'prospector' });
           workingPage = getWorkingPage();
         }
         // Fall through to comments mode below
@@ -204,7 +245,7 @@ export async function runProspector(options = {}) {
     // ====================================
 
     // STEP 1: Main Loop - Continue until goal reached
-  console.log(`\n🎯 GOAL: Contact ${effectiveLimit} new leads`);
+  console.log(`\n🎯 GOAL: Contact ${effectiveLimit} new leads (timeout: 4h)`);
   const apiKey = process.env.OPENAI_API_KEY;
   console.log(`🔑 OpenAI API: ${apiKey ? `Présente (...${apiKey.substring(apiKey.length - 8)})` : 'MANQUANTE'}`);
   
@@ -238,8 +279,39 @@ export async function runProspector(options = {}) {
   let exhaustionCount = 0; // Track how many sources in a row were exhausted
   let browserRecoveryCount = 0;
   const MAX_BROWSER_RECOVERIES = 3;
+  const MAX_SOURCE_FAILURES = 2;
+  let sourceFailures = {}; // { sourceRaw: count }
 
   while (stats.leadsContacted < effectiveLimit && exhaustionCount < sourceList.length) {
+    // Global timeout check
+    if (Date.now() - runStartTime > MAX_RUNTIME_MS) {
+      console.log(`\n⏰ TIMEOUT: ${scoutProfiles.length * scoutHours}h total runtime exceeded. Stopping gracefully.`);
+      break;
+    }
+
+    // Scout rotation: switch when time limit reached
+    if (Date.now() - scoutStartTime > SCOUT_ROUND_MS) {
+      const nextIdx = scoutIndex + 1;
+      if (nextIdx < scoutProfiles.length) {
+        console.log(`\n⏰ Scout ${activeScout}: ${scoutHours}h round complete.`);
+        scoutIndex = nextIdx;
+        scoutHttpErrors = 0;
+        browserRecoveryCount = 0;
+        sourceFailures = {};
+        exhaustionCount = 0;
+        scoutStartTime = Date.now();
+        try {
+          workingPage = await switchScout(scoutProfiles[scoutIndex]);
+        } catch (err) {
+          console.error(`   ❌ Failed to switch to ${scoutProfiles[scoutIndex]}: ${err.message}`);
+          break;
+        }
+      } else {
+        console.log(`\n⏰ All scouts have completed their rounds. Stopping.`);
+        break;
+      }
+    }
+
     const currentSourceRaw = sourceList[sourceIndex % sourceList.length];
     const currentSource = parseSource(currentSourceRaw);
 
@@ -256,32 +328,89 @@ export async function runProspector(options = {}) {
           posts = await discoverFromProfiles(workingPage, [currentSource.value], DISCOVERY_BATCH_SIZE, alreadyScraped);
         }
     } catch (discoveryErr) {
-        if (isBrowserDead(discoveryErr) && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+        // HTTP error = Instagram rate limit → count toward scout switch
+        if (isHttpError(discoveryErr)) {
+          scoutHttpErrors++;
+          console.log(`   ⚠️ HTTP error on ${activeScout} (${scoutHttpErrors}/${MAX_SCOUT_HTTP_ERRORS})`);
+          if (scoutHttpErrors >= MAX_SCOUT_HTTP_ERRORS) {
+            const nextIdx = scoutIndex + 1;
+            if (nextIdx < scoutProfiles.length) {
+              console.log(`   🔄 Scout ${activeScout} rate-limited. Switching...`);
+              scoutIndex = nextIdx;
+              scoutHttpErrors = 0;
+              browserRecoveryCount = 0;
+              sourceFailures = {};
+              exhaustionCount = 0;
+              scoutStartTime = Date.now();
+              try { workingPage = await switchScout(scoutProfiles[scoutIndex]); } catch (e) { break; }
+              continue;
+            } else {
+              console.error(`   ❌ All scouts rate-limited. Stopping.`);
+              break;
+            }
+          }
+        }
+        if (isBrowserDead(discoveryErr)) {
+          if (browserRecoveryCount >= MAX_BROWSER_RECOVERIES) {
+            // Try next scout instead of stopping
+            const nextIdx = scoutIndex + 1;
+            if (nextIdx < scoutProfiles.length) {
+              console.log(`   🔄 Scout ${activeScout}: max crashes. Switching...`);
+              scoutIndex = nextIdx;
+              scoutHttpErrors = 0;
+              browserRecoveryCount = 0;
+              sourceFailures = {};
+              exhaustionCount = 0;
+              scoutStartTime = Date.now();
+              try { workingPage = await switchScout(scoutProfiles[scoutIndex]); } catch (e) { break; }
+              continue;
+            }
+            console.error(`   ❌ Max browser crashes reached and no more scouts. Stopping.`);
+            break;
+          }
           browserRecoveryCount++;
           try {
             workingPage = await recoverBrowser();
-            continue; // Retry the same source with the new browser
           } catch (recErr) {
             console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
             break;
           }
         }
-        console.error(`   ⚠️ Discovery error on ${currentSourceRaw}: ${discoveryErr.message}`);
+        // Count as a source failure regardless of cause
+        sourceFailures[currentSourceRaw] = (sourceFailures[currentSourceRaw] || 0) + 1;
+        if (sourceFailures[currentSourceRaw] >= MAX_SOURCE_FAILURES) {
+          console.log(`   ⏭️ ${currentSourceRaw}: ${MAX_SOURCE_FAILURES} failures — skipping to next source.`);
+          sourceIndex++;
+          exhaustionCount++;
+          continue;
+        }
+        console.error(`   ⚠️ Discovery error on ${currentSourceRaw} (${sourceFailures[currentSourceRaw]}/${MAX_SOURCE_FAILURES}): ${discoveryErr.message}`);
         posts = [];
     }
 
     if (posts.length === 0) {
       // Check if the browser is dead (discovery may have swallowed the error)
       const pageOk = await workingPage.evaluate(() => true).catch(() => false);
-      if (!pageOk && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+      if (!pageOk) {
+        sourceFailures[currentSourceRaw] = (sourceFailures[currentSourceRaw] || 0) + 1;
+        if (browserRecoveryCount >= MAX_BROWSER_RECOVERIES) {
+          console.error(`   ❌ Max browser crashes reached (${MAX_BROWSER_RECOVERIES}). Stopping.`);
+          break;
+        }
         browserRecoveryCount++;
         try {
           workingPage = await recoverBrowser();
-          continue; // Retry same source with new browser
         } catch (recErr) {
           console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
           break;
         }
+        if (sourceFailures[currentSourceRaw] >= MAX_SOURCE_FAILURES) {
+          console.log(`   ⏭️ ${currentSourceRaw}: ${MAX_SOURCE_FAILURES} failures — skipping to next source.`);
+          sourceIndex++;
+          exhaustionCount++;
+          continue;
+        }
+        continue; // Retry same source once more
       }
       console.log(`   ⏭️ No new posts found for ${currentSourceRaw}. Moving to next source.`);
       sourceIndex++;
@@ -297,6 +426,7 @@ export async function runProspector(options = {}) {
     // STEP 2: Process each post in the batch
     for (let postIdx = 0; postIdx < posts.length; postIdx++) {
       if (stats.leadsContacted >= effectiveLimit) break;
+      if (Date.now() - runStartTime > MAX_RUNTIME_MS) { console.log(`\n⏰ TIMEOUT: 4h runtime exceeded.`); break; }
         const post = posts[postIdx];
         const postUrl = post.url || post.post_url;
 
@@ -574,12 +704,55 @@ export async function runProspector(options = {}) {
 
         } catch (err) {
             console.error(`   ⚠️ Error processing post ${postUrl}: ${err.message}`);
-            if (isBrowserDead(err) && browserRecoveryCount < MAX_BROWSER_RECOVERIES) {
+            // HTTP error = Instagram rate limit → count toward scout switch
+            if (isHttpError(err)) {
+              scoutHttpErrors++;
+              console.log(`   ⚠️ HTTP error on ${activeScout} (${scoutHttpErrors}/${MAX_SCOUT_HTTP_ERRORS})`);
+              if (scoutHttpErrors >= MAX_SCOUT_HTTP_ERRORS) {
+                const nextIdx = scoutIndex + 1;
+                if (nextIdx < scoutProfiles.length) {
+                  console.log(`   🔄 Scout ${activeScout} rate-limited. Switching...`);
+                  scoutIndex = nextIdx;
+                  scoutHttpErrors = 0;
+                  browserRecoveryCount = 0;
+                  sourceFailures = {};
+                  exhaustionCount = 0;
+                  scoutStartTime = Date.now();
+                  try { workingPage = await switchScout(scoutProfiles[scoutIndex]); } catch (e) { break; }
+                  break; // Break post loop, retry sources with new scout
+                } else {
+                  console.error(`   ❌ All scouts rate-limited. Stopping.`);
+                  break;
+                }
+              }
+            }
+            if (isBrowserDead(err)) {
+              sourceFailures[currentSourceRaw] = (sourceFailures[currentSourceRaw] || 0) + 1;
+              if (browserRecoveryCount >= MAX_BROWSER_RECOVERIES) {
+                const nextIdx = scoutIndex + 1;
+                if (nextIdx < scoutProfiles.length) {
+                  console.log(`   🔄 Scout ${activeScout}: max crashes. Switching...`);
+                  scoutIndex = nextIdx;
+                  scoutHttpErrors = 0;
+                  browserRecoveryCount = 0;
+                  sourceFailures = {};
+                  exhaustionCount = 0;
+                  scoutStartTime = Date.now();
+                  try { workingPage = await switchScout(scoutProfiles[scoutIndex]); } catch (e) { break; }
+                  break;
+                }
+                console.error(`   ❌ Max browser crashes and no more scouts. Stopping.`);
+                break;
+              }
               browserRecoveryCount++;
               try {
                 workingPage = await recoverBrowser();
               } catch (recErr) {
                 console.error(`   ❌ Browser recovery failed: ${recErr.message}`);
+                break;
+              }
+              if (sourceFailures[currentSourceRaw] >= MAX_SOURCE_FAILURES) {
+                console.log(`   ⏭️ ${currentSourceRaw}: ${MAX_SOURCE_FAILURES} failures — skipping to next source.`);
                 break;
               }
             }
@@ -658,7 +831,7 @@ function withinFollowersLimit(followersCount, maxFollowers) {
 /**
  * Followers mode — scrape followers of competitor profiles and prospect them
  */
-async function runFollowersMode({ workingPage, accountId, profile, totalLimit, skipQualification, variantMode, outreachConfig, stats }) {
+async function runFollowersMode({ workingPage, accountId, profile, totalLimit, skipQualification, variantMode, outreachConfig, stats, runStartTime, MAX_RUNTIME_MS }) {
   const { getDb } = await import('../../../agents/collector/src/db/core.js');
   const pdb = getDb();
 
@@ -695,6 +868,10 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
     let allFollowersExhausted = false;
 
     while (stats.leadsContacted < totalLimit && !allFollowersExhausted) {
+      if (Date.now() - runStartTime > MAX_RUNTIME_MS) {
+        console.log(`\n⏰ TIMEOUT: 4h runtime exceeded. Stopping followers mode.`);
+        return stats;
+      }
       batchRound++;
 
       // Check how many pending followers we have for this source before scraping more
