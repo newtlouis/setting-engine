@@ -50,14 +50,17 @@ $needNode = $true
 if (Test-Command node) {
     $nodeVer = (node --version).TrimStart("v")
     $major = [int]($nodeVer.Split(".")[0])
-    if ($major -eq 22) {
-        Write-Ok "Node $nodeVer detecte"
+    # Lignes LTS (paires) connues comme compatibles avec better-sqlite3 : 20, 22, 24
+    if ($major -in 20, 22, 24) {
+        Write-Ok "Node $nodeVer detecte (LTS compatible)"
         $needNode = $false
-    } elseif ($major -gt 22) {
-        Write-Warn2 "Node $nodeVer est TROP RECENT. better-sqlite3 ne compile pas au-dela de la v22 LTS."
-        Write-Warn2 "Installez Node 22 LTS (winget install OpenJS.NodeJS.LTS) puis relancez ce script."
+    } elseif ($major -lt 20) {
+        Write-Warn2 "Node $nodeVer est trop ancien. Installez une LTS (20/22/24)."
     } else {
-        Write-Warn2 "Node $nodeVer est trop ancien. Installez Node 22 LTS."
+        # Versions impaires / 'Current' (23, 25, 26...) : souvent pas de binaire
+        # precompile pour better-sqlite3 -> on tente quand meme, npm install tranchera.
+        Write-Warn2 "Node $nodeVer n'est pas une LTS. On tente quand meme ; si 'npm install' echoue, installez Node 22 ou 24 LTS."
+        $needNode = $false
     }
 }
 if ($needNode) {
