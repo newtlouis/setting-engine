@@ -108,11 +108,35 @@ const runningProcesses = new Map();
 
 // API Routes
 
-// POST /api/open-db - Open database in DB Browser for SQLite
+// POST /api/open-db - Open database in DB Browser for SQLite (cross-platform)
 app.post('/api/open-db', (req, res) => {
     const dbPath = path.join(__dirname, '..', 'collector', 'permanent-data', 'leads.db');
-    spawn('open', ['-a', 'DB Browser for SQLite', dbPath], { stdio: 'ignore', detached: true }).unref();
-    res.json({ success: true });
+
+    // Choose the right launch command per OS:
+    //  - macOS : open with the "DB Browser for SQLite" app
+    //  - Windows: let the shell open the .db with its associated program
+    //             (DB Browser for SQLite registers itself on install)
+    //  - Linux : xdg-open
+    let cmd, args;
+    if (process.platform === 'darwin') {
+        cmd = 'open';
+        args = ['-a', 'DB Browser for SQLite', dbPath];
+    } else if (process.platform === 'win32') {
+        cmd = 'cmd';
+        args = ['/c', 'start', '', dbPath];
+    } else {
+        cmd = 'xdg-open';
+        args = [dbPath];
+    }
+
+    try {
+        const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+        child.on('error', (err) => console.error(`⚠️  open-db failed: ${err.message}`));
+        child.unref();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // POST /api/open-instagram - Open Instagram profile in browser with account session

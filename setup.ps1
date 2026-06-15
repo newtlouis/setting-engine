@@ -90,6 +90,37 @@ if ($WithTauri) {
 }
 
 # ---------------------------------------------------------------------------
+# 3bis. DB Browser for SQLite (bouton "DB" du dashboard)
+# ---------------------------------------------------------------------------
+Write-Step "Verification de DB Browser for SQLite (bouton DB du dashboard)"
+if ((Test-Command sqlitebrowser) -or (Test-Path "$env:ProgramFiles\DB Browser for SQLite\DB Browser for SQLite.exe")) {
+    Write-Ok "DB Browser for SQLite detecte"
+} elseif ($hasWinget) {
+    Write-Host "  Installation de DB Browser for SQLite..." -ForegroundColor Gray
+    winget install --id DBBrowserForSQLite.DBBrowserForSQLite -e --accept-source-agreements --accept-package-agreements
+} else {
+    Write-Warn2 "DB Browser for SQLite absent. Installez-le depuis https://sqlitebrowser.org/ pour le bouton 'DB'."
+}
+
+# ---------------------------------------------------------------------------
+# 3ter. rclone (sauvegardes auto vers Google Drive)
+# ---------------------------------------------------------------------------
+# Les hooks post-execution (postscrape, postprospect, ...) lancent
+# "backup:remote --upload" qui FAIT process.exit(1) si rclone est absent.
+# Sans rclone, les commandes echouent en fin d'execution (et aucune
+# sauvegarde n'est faite, meme locale).
+Write-Step "Verification de rclone (sauvegardes Google Drive)"
+if (Test-Command rclone) {
+    Write-Ok "rclone detecte : $((rclone version) | Select-Object -First 1)"
+} elseif ($hasWinget) {
+    Write-Host "  Installation de rclone..." -ForegroundColor Gray
+    winget install --id Rclone.Rclone -e --accept-source-agreements --accept-package-agreements
+    Write-Warn2 "rclone installe : configurez un remote 'gdrive' avec  rclone config  (sinon les sauvegardes echoueront)."
+} else {
+    Write-Warn2 "rclone absent. Installez-le (https://rclone.org/install/) et faites 'rclone config' (remote 'gdrive')."
+}
+
+# ---------------------------------------------------------------------------
 # 4. Dependances npm
 # ---------------------------------------------------------------------------
 Write-Step "Installation des dependances npm (compile better-sqlite3)"

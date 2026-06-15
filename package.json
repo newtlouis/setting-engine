@@ -11,6 +11,7 @@
         "agents/prospector"
     ],
     "scripts": {
+        "test": "node --test tests/*.test.js",
         "ui": "npx tauri dev",
         "ui:web": "cd agents/collector && npm run ui --",
         "scrape": "cd agents/collector && npm run scrape --",

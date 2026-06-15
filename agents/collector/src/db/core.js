@@ -617,9 +617,10 @@ function runMigrations() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_prospect_followers_account ON prospect_followers(account_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_prospect_followers_status ON prospect_followers(account_id, status)`);
 
-    // Migration: add bio_keywords and max_followers to account_personas
+    // Migration: add bio_keywords, max_followers and female_only to account_personas
     try { db.exec(`ALTER TABLE account_personas ADD COLUMN bio_keywords TEXT DEFAULT NULL`); } catch (e) { /* already exists */ }
     try { db.exec(`ALTER TABLE account_personas ADD COLUMN max_followers INTEGER DEFAULT NULL`); } catch (e) { /* already exists */ }
+    try { db.exec(`ALTER TABLE account_personas ADD COLUMN female_only INTEGER DEFAULT 0`); } catch (e) { /* already exists */ }
 
     console.log('🔍 Prospect followers tables ready');
 
