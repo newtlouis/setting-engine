@@ -137,14 +137,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "Dependances installees"
 
 # ---------------------------------------------------------------------------
-# 5. Navigateur Playwright
-# ---------------------------------------------------------------------------
-Write-Step "Installation du navigateur Playwright (Chromium)"
-npx playwright install chromium
-if ($LASTEXITCODE -eq 0) { Write-Ok "Chromium installe" } else { Write-Warn2 "Echec de l'installation Playwright (a refaire : npx playwright install chromium)" }
-
-# ---------------------------------------------------------------------------
-# 6. Fichiers .env
+# 5. Fichiers .env  (fait AVANT Playwright : etape rapide et essentielle,
+#    pour ne rien perdre si le telechargement Playwright est interrompu)
 # ---------------------------------------------------------------------------
 Write-Step "Creation des fichiers .env"
 $example = Join-Path $PSScriptRoot ".env.example"
@@ -169,6 +163,16 @@ if (-not (Test-Path $example)) {
     }
     Write-Warn2 "EDITEZ ces .env : renseignez OPENAI_API_KEY (et vos identifiants si souhaite)."
 }
+
+# ---------------------------------------------------------------------------
+# 6. Navigateur Playwright (DERNIERE etape : peut etre long / interrompable)
+# ---------------------------------------------------------------------------
+Write-Step "Installation du navigateur Playwright (Chromium)"
+Write-Host "  (Telechargement ~250 Mo : Chromium + headless shell. Peut prendre" -ForegroundColor Gray
+Write-Host "   plusieurs minutes. Si besoin, Ctrl+C est sans risque : le Chromium" -ForegroundColor Gray
+Write-Host "   complet suffit pour l'app — relancez 'npx playwright install chromium' plus tard.)" -ForegroundColor Gray
+npx playwright install chromium
+if ($LASTEXITCODE -eq 0) { Write-Ok "Chromium installe" } else { Write-Warn2 "Echec/interruption Playwright (a refaire : npx playwright install chromium)" }
 
 # ---------------------------------------------------------------------------
 # Fin
