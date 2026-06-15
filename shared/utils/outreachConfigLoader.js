@@ -65,6 +65,7 @@ export function loadOutreachConfig(accountId, profileConfig) {
         prospectModeProfile: persona?.prospect_mode_profile || 'comments',
         prospectMessageA: persona?.prospect_message_a || null,
         prospectMessageB: persona?.prospect_message_b || null,
+        prospectGreetingNoName: profileConfig?.prospector?.greeting_no_name || null,
         bioKeywords: persona?.bio_keywords ? persona.bio_keywords.split(',').map(k => k.trim().toLowerCase()) : null,
         maxFollowers: persona?.max_followers || null,
         femaleOnly: !!persona?.female_only

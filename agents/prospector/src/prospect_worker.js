@@ -659,7 +659,7 @@ export async function runProspector(options = {}) {
               } else if (aiFirstName) {
                 finalMessage = `${aiFirstName} ?`;
               } else {
-                finalMessage = 'Hello !';
+                finalMessage = outreachConfig.prospectGreetingNoName || 'Hello !';
               }
               // Clean up spacing when name is missing
               finalMessage = finalMessage.replace(/\s+,/g, ',').replace(/\s+!/g, ' !').trim();
@@ -1083,7 +1083,7 @@ async function runFollowersMode({ workingPage, accountId, profile, totalLimit, s
       } else if (aiFirstName) {
         finalMessage = `${aiFirstName} ?`;
       } else {
-        finalMessage = 'Hello !';
+        finalMessage = outreachConfig.prospectGreetingNoName || 'Hello !';
       }
       // Clean up spacing when name is missing: "Coucou , " → "Coucou, "
       finalMessage = finalMessage.replace(/\s+,/g, ',').replace(/\s+!/g, ' !').trim();
