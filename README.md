@@ -1,234 +1,102 @@
-# Instagram Lead Engine
+# Setting Engine
 
-**A complete multi-agent system for ethical Instagram lead generation and relationship building.**
+**Trois agents autonomes coordonnés par une base partagée.** Node.js · SQLite · Playwright.
 
-## 🎯 Overview
-
-The Instagram Lead Engine is a production-ready, modular system of independent agents designed to help coaches, consultants, and service providers find and connect with qualified prospects on Instagram.
-
-It uses a **shared SQLite database** to track leads through the entire lifecycle: from discovery to initial outreach to conversation handling.
-
-## 🏗️ Architecture
-
-This system contains **3 core agents**:
-
-### 1. **Collector Agent** (Data Collection)
-Discovers posts and scrapes comments from hashtags and competitor profiles.
-- ✅ Hashtag & profile discovery
-- ✅ Comment scraping with metadata
-- ✅ Engagement scoring & qualification
-- ✅ **Output**: Saves qualified leads to SQLite database
-
-### 2. **Outreach Agent** (First Contact)
-Identifies top prospects and sends personalized first messages.
-- ✅ Filters leads by engagement score
-- ✅ Generates personalized messages based on context
-- ✅ Handles manual/automated sending flow (preview mode available)
-- ✅ **Output**: Updates lead status, logs sent messages
-
-### 3. **DM Responder Agent** (Conversation AI)
-Generates contextual follow-up messages for ongoing conversations and handles new follower outreach.
-- ✅ Analyzes conversation history
-- ✅ **New Follower Outreach**: Scans notifications to welcome new followers
-- ✅ **Follow-up System**: Re-engages leads who stopped responding (> 2 days)
-- ✅ Suggests empathetic, qualified responses
-- ✅ Handles objections and value propositions
-- ✅ **Output**: Suggests replies, tracks conversation state
+Un système de suivi de prospection commerciale sur les réseaux sociaux, de la découverte
+d'un contact jusqu'à la conversation. Projet personnel, conçu et développé seul, en service
+depuis 2025.
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+## Le problème
 
-### 1. Install & Setup
+Un cycle de prospection a trois temps qui n'ont ni le même rythme ni les mêmes contraintes :
+découvrir des contacts pertinents, engager un premier échange, puis suivre les conversations
+en cours. En faire un seul programme séquentiel ne marche pas — chaque étape doit pouvoir
+tourner seule, à sa fréquence, sans bloquer les autres ni perdre l'état de ce qui a déjà
+été fait.
 
-```bash
-# Install dependencies for all agents
-cd agents/collector && npm install
-cd ../outreach && npm install
-cd ../dmresponder && npm install
+## L'architecture
 
-# Install browser (required for Collector/Outreach)
-npx playwright install chromium
+**La base de données est le seul point de rendez-vous.** Il n'y a pas de file de messages,
+pas d'appel direct d'un agent à un autre, pas d'ordonnanceur central : chaque agent lit
+l'état dont il a besoin, agit, et écrit le nouvel état. Un agent peut tomber, être relancé
+ou rester à l'arrêt une semaine sans que les autres s'en aperçoivent.
+
+```
+                    ┌──────────────────┐
+     découverte ───▶│                  │◀─── tableau de bord (lecture)
+                    │   base SQLite    │
+   premier contact ▶│  (état partagé)  │
+                    │                  │
+    conversations ─▶└──────────────────┘
 ```
 
-### 2. Connect Your Account
+| Agent | Responsabilité | Transition d'état |
+|---|---|---|
+| **Collector** | Découvre les contacts pertinents, les qualifie par un score d'engagement | → `new` |
+| **Outreach** | Sélectionne les meilleurs profils, prépare un premier message contextualisé | `new` → `outreach` |
+| **DM Responder** | Analyse l'historique d'un échange, propose une réponse, relance les contacts restés sans réponse | `outreach` → `conversation` |
+| **Dashboard** | Vue en lecture seule sur l'état courant, sélection de compte | — |
 
-The system uses a **real browser** (Playwright) to interact with Instagram safely.
-On the first run (for each profile), you will need to log in manually. The session will be saved for future runs.
+### Les décisions qui structurent le projet
 
-### 3. Multi-Account Support
+1. **La base comme unique contrat.** Le coût : aucune réaction en temps réel, tout est en
+   différé. Le bénéfice : des agents réellement indépendants, testables isolément, et un
+   état inspectable à tout moment avec un simple client SQLite. C'est le bon compromis ici
+   parce que rien dans ce domaine n'est urgent à la seconde.
+2. **Rien ne part sans revue humaine.** Chaque message est prévisualisé avant envoi, et la
+   connexion au compte est manuelle. Un système qui agit à votre place doit rester sous
+   contrôle — c'est une contrainte de conception, pas une option de configuration.
+3. **Un navigateur réel authentifié** (Playwright, en mode visible) plutôt qu'une API
+   détournée : ce qui est automatisé reste ce qu'un utilisateur peut faire lui-même.
+4. **Une séparation domaine / application assumée**, avec conteneur d'injection de
+   dépendances, cas d'usage et dépôts — et une liste explicite de **ce qui n'est
+   volontairement pas implémenté**, pour éviter la sur-ingénierie. Le détail est dans
+   [`ARCHITECTURE.md`](ARCHITECTURE.md).
+5. **Le cloisonnement multi-comptes dès le départ** : toutes les requêtes sont filtrées par
+   `account_id`. Rétrofitter un cloisonnement sur un modèle qui ne l'a pas prévu coûte
+   beaucoup plus cher que de le poser au début.
 
-You can manage multiple Instagram accounts independently. Data is isolated by `account_id` in the database, and browser sessions are kept in separate folders.
+## Ce que ce projet démontre
 
-Always use the `--profile` flag to specify which account you are using:
+- concevoir un système multi-agents complet et le mener jusqu'à un état réellement utilisable ;
+- choisir une coordination par état partagé plutôt qu'une orchestration, et savoir dire
+  pourquoi — et ce que ça coûte ;
+- automatiser un navigateur de façon fiable sur une interface qui change ;
+- **évaluer la qualité des réponses générées par un LLM par des tests automatisés**
+  (`agents/dmresponder/tests/e2e-llm-evaluation.test.js`), plutôt que de juger à l'œil.
 
-```bash
-# Collect leads for 'fitness_coach'
-npm run scrape -- --profile fitness_coach -t gym
+## Cadre d'usage
 
-# Run outreach for 'fitness_coach'
-npm run outreach -- --profile fitness_coach --simple
+Ce système assiste une démarche commerciale, il ne la remplace pas :
 
-# Répondre aux NOUVELLES réponses (Mode rapide)
-npm run respond:inbox -- --profile fitness_coach
+- la connexion au compte est **manuelle**, les identifiants restent locaux (`.env`) ;
+- **aucun envoi automatique sans prévisualisation** ni validation ;
+- il n'est pas conçu pour l'envoi de masse, et ne doit pas en servir ;
+- les données collectées restent sur la machine de l'utilisateur, dans une base locale.
 
-# Répondre à toutes les conversations actives (Mode URL)
-npm run reply -- --profile fitness_coach
-
-# Welcome new followers (Follower Outreach)
-npm run respond:followers -- --profile fitness_coach
-
-# Re-engage leads who stopped responding (Follow-ups)
-npm run reply:followup -- --profile fitness_coach
-
-# --- LEAD QUEUE SYSTEM (Recommended for daily routine) ---
-# 1. Harvest leads (Phase 1)
-npm run harvest -- --target 30 --profile fitness_coach
-
-# 2. Send messages from queue (Phase 2)
-npm run send-queued -- --limit 5 --profile fitness_coach
-
-# 💡 Pro-tip: Use manual mode to review before sending
-npm run send-queued -- --limit 5 --manual
-
-# Ouvrir une session manuelle pour se connecter
-npm run open:session fitness_coach
-```
-
-### 4. Run Your First Scrape (Collector)
-
-```bash
-npm run scrape -- --hashtags fitness --target-prospects 20
-```
-*This will find posts, scrape comments, score prospects, and save them to the database.*
-
-### 4. Send Initial DMs (Outreach)
+## Démarrer
 
 ```bash
-cd ../outreach
-# Preview messages first
-node bin/run.js --mode preview --limit 5
-
-# Send messages (opens browser for manual confirmation by default)
-node bin/run.js --mode send --limit 5
+npm install
+npx playwright install chromium   # nécessaire pour Collector et Outreach
+node open_session.js              # ouvrir une session et se connecter manuellement
 ```
 
-### 5. Respond to Replies (DM Responder)
+Les commandes de chaque agent sont documentées dans [`COMMANDS.md`](COMMANDS.md).
 
-```bash
-cd ../dmresponder
-# Interactive mode to generate replies
-node bin/run.js --interactive
-```
+## Documentation
 
-### 6. Tools & Monitoring
-
-#### 📊 Lead Dashboard
-Monitor leads, track conversions, and switch between accounts in real-time.
-
-```bash
-npm run ui
-```
-- **Access**: http://localhost:3000
-- **Features**: Interactive stats, **Account Selector**, bulk actions, and live logs.
-
-#### 🗄️ Database Admin
-Explore the SQLite database directly with a web interface.
-
-```bash
-npm run db:admin
-```
-- **Access**: http://localhost:8081
-
-#### 💾 Sauvegarde & Restauration
-
-Le système est configuré pour être **ultra-sécurisé** : une sauvegarde (locale + Google Drive) est lancée **automatiquement** après chaque exécution réussie des agents.
-
-```bash
-# Sauvegarder manuellement (Cloud)
-npm run backup:remote
-
-# Restaurer (Interface interactive)
-npm run restore         # Depuis local
-npm run restore:remote  # Depuis Google Drive
-
-# Réinitialiser la base de données (SUPPRIME TOUT)
-rm agents/collector/permanent-data/leads.db*
-```
-
-**Configuration Google Drive (via rclone) :**
-```bash
-brew install rclone
-rclone config  # Créer un remote nommé "gdrive"
-```
+| Fichier | Contenu |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Couches, principes SOLID appliqués, injection de dépendances, et ce qui n'est pas implémenté |
+| [`AGENTS.md`](AGENTS.md) | Rôle détaillé de chaque agent |
+| [`COMMANDS.md`](COMMANDS.md) | Toutes les commandes disponibles |
+| [`CHANGELOG.md`](CHANGELOG.md) | Historique des évolutions |
 
 ---
 
-## 📊 Data Flow (SQLite)
-
-The system is built around a shared **SQLite database** located in `agents/collector/data/instagram.db` (by default).
-
-```mermaid
-graph TD
-    A[Instagram] -->|Collector Agent| B[(SQLite DB)]
-    B -->|Filter: account_id| C[Outreach Agent]
-    C -->|Send DM| A
-    A -->|Reply| D[DM Responder Agent]
-    D -->|Filter: account_id| B
-    D -->|Suggestion| E[User Review]
-    E -->|Send| A
-    F[Dashboard] -->|Account Selector| B
-```
-
-1.  **Collector**: Ingests raw data -> `leads` table (status: `new`).
-2.  **Outreach**: Reads `new` leads -> updates to `outreach`.
-3.  **DM Responder**: Detects prospect reply -> updates to `conversation` -> suggests next move.
-
----
-
-## 🔒 Safety & Compliance
-
-### Manual Login Required
-- All scraping/sending requires manual Instagram login via the headful browser.
-- Credentials are stored locally in `.env` only.
-
-### Anti-Detection
-- Headful browser (not headless)
-- Randomized delays (3-7 seconds)
-- Stops on challenge detection
-- Human-like scrolling behavior
-
-### Ethical Use
-- ❌ **NEVER** spam or send unsolicited mass DMs.
-- ❌ **NEVER** automate outreach without human review.
-- ✅ **ALWAYS** personalize messages and provide value.
-
----
-
-## 📁 Project Structure
-
-```
-instagram-lead-engine/
-├── agents/
-│   ├── collector/           # Discovery & Scoring (holds the DB)
-│   ├── outreach/            # First Message & Sending
-│   └── dmresponder/         # Conversation AI
-├── shared/                  # Shared utilities (DB connection, validators)
-├── AGENTS.md                # Detailed agent documentation
-└── README.md                # This file
-```
-
-## 📚 Documentation
-
-- **[AGENTS.md](./AGENTS.md)**: Detailed technical documentation for all agents.
-- **[Collector README](./agents/collector/README.md)**
-- **[Outreach README](./agents/outreach/README.md)**
-- **[DM Responder README](./agents/dmresponder/README.md)**
-
----
-
-## ⚖️ Disclaimer
-
-This system is provided for **educational purposes only**. Users are responsible for complying with Instagram's Terms of Service and applicable laws. The authors assume no liability for misuse, account restrictions, or damages.
-
-**Built with ❤️ for ethical lead generation**
+Développé par **Louis Michel** — développeur freelance Symfony / PHP.
+[Malt](https://www.malt.fr/profile/louismichel2) ·
+[LinkedIn](https://www.linkedin.com/in/louis-michel-080827bb/)

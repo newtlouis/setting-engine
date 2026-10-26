@@ -77,3 +77,8 @@ backups/
 
 # PMAD session artifacts
 .pmad/
+
+# Profils de comptes réels (positionnement et messages) — seul l'exemple est versionné
+config/profiles/*.config.js
+!config/profiles/exemple.config.js
+config/profiles/*/
